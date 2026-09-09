@@ -1,0 +1,32 @@
+@page "/admin/users"
+@attribute [Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+
+<PageTitle>User Management | SBLSS System</PageTitle>
+
+<div class="admin-page users-admin-page">
+    <header class="page-heading"><div><p class="section-label">Administration</p><h1>User Management</h1><p class="page-subtitle">Manage authorised Staff and Administrator accounts stored in Microsoft SQL Server.</p></div><button class="primary-action admin-primary" type="button" @onclick="OpenDialog">+ Add User</button></header>
+    <section class="admin-summary"><div><small>Total users</small><strong>@Users.Count</strong></div><div><small>Administrators</small><strong>@Users.Count(x => x.Role == "Administrator")</strong></div><div><small>Staff</small><strong>@Users.Count(x => x.Role != "Administrator")</strong></div></section>
+    @if (!string.IsNullOrWhiteSpace(SuccessMessage)) { <div class="admin-alert success">@SuccessMessage</div> }
+    <section class="admin-toolbar"><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search name, username, email or role..." @bind="SearchTerm" @bind:event="oninput" /></label><span class="database-source-badge"><i></i> Live from MS SQL</span></section>
+    <section class="table-panel admin-panel"><div class="admin-table-heading"><div><p class="section-label">Authorised accounts</p><h2>System users</h2></div><span>@FilteredUsers.Count user(s)</span></div>
+        <div class="user-admin-table"><div class="user-admin-row admin-table-header"><span>User</span><span>Username</span><span>Email</span><span>Phone</span><span>Role</span><span>Status</span></div>
+            @foreach (var user in FilteredUsers)
+            {
+                <div class="user-admin-row"><div class="admin-entity"><span>@GetInitials(user.DisplayName)</span><div><strong>@user.DisplayName</strong><small>Identity ID: @user.Id[..8]</small></div></div><code>@user.UserName</code><span>@user.Email</span><span>@(string.IsNullOrWhiteSpace(user.PhoneNumber) ? "Not set" : user.PhoneNumber)</span><span class="admin-role role-@user.Role.ToLowerInvariant()">@GetRoleLabel(user.Role)</span><span class="status-pill @(user.IsLocked ? "status-failed" : "status-successful")">@(user.IsLocked ? "Locked" : "Active")</span></div>
+            }
+        </div>
+    </section>
+
+    @if (IsDialogOpen)
+    {
+        <div class="admin-overlay"><section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="user-form-title"><div class="admin-dialog-header"><div><p class="section-label">New authorised account</p><h2 id="user-form-title">Add system user</h2></div><button class="profile-close" type="button" @onclick="CloseDialog">&#215;</button></div>
+            <form @onsubmit="SaveUserAsync" @onsubmit:preventDefault>
+                @if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }
+                <div class="admin-form-grid"><label><span>Full name</span><input required @bind="NewDisplayName" /></label><label><span>Username</span><input required autocomplete="off" @bind="NewUserName" /></label><label><span>Email</span><input type="email" required @bind="NewEmail" /></label><label><span>Phone number</span><input type="tel" @bind="NewPhone" /></label><label><span>Role</span><select @bind="NewRole"><option value="Reviewer">Staff</option><option value="Administrator">Administrator</option></select></label><label><span>Temporary password</span><input type="password" required minlength="12" autocomplete="new-password" @bind="NewPassword" /></label></div>
+                <p class="password-policy">Minimum 12 characters with uppercase, lowercase, number and special character.</p>
+                <div class="profile-actions"><button class="profile-cancel" type="button" @onclick="CloseDialog">Cancel</button><button class="primary-action admin-primary" type="submit" disabled="@IsSaving">@(IsSaving ? "Creating..." : "Create User")</button></div>
+            </form>
+        </section></div>
+    }
+</div>

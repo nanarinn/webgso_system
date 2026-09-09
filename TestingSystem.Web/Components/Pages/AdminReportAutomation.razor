@@ -1,0 +1,148 @@
+@page "/admin/report-automation"
+@attribute [Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+
+<PageTitle>Report Automation | SBLSS System</PageTitle>
+
+<div class="admin-page report-automation-page">
+    <header class="page-heading">
+        <div>
+            <p class="section-label">Administration</p>
+            <h1>Report Automation</h1>
+            <p class="page-subtitle">Manage report schedules, email distribution lists and delivery results.</p>
+        </div>
+        @if (ActiveTab == "Schedules")
+        {
+            <button class="primary-action admin-primary" type="button" @onclick="OpenAddSchedule">+ New Schedule</button>
+        }
+        else if (ActiveTab == "EmailLists")
+        {
+            <button class="primary-action admin-primary" type="button" @onclick="OpenAddEmailList">+ New Email List</button>
+        }
+    </header>
+
+    <section class="automation-summary">
+        <div><small>Report schedules</small><strong>@Schedules.Count</strong></div>
+        <div><small>Active schedules</small><strong>@Schedules.Count(x => x.IsActive)</strong></div>
+        <div><small>Distribution lists</small><strong>@EmailLists.Count</strong></div>
+        <div><small>Delivery issues</small><strong>@Deliveries.Count(x => x.OverallStatus != "Delivered")</strong></div>
+    </section>
+
+    <nav class="automation-tabs" aria-label="Report automation sections">
+        <button class="@(ActiveTab == "Schedules" ? "active" : null)" type="button" @onclick="ShowSchedules"><span>01</span> Report Schedules</button>
+        <button class="@(ActiveTab == "EmailLists" ? "active" : null)" type="button" @onclick="ShowEmailLists"><span>02</span> Email Distribution Lists</button>
+        <button class="@(ActiveTab == "Delivery" ? "active" : null)" type="button" @onclick="ShowDelivery"><span>03</span> Delivery Monitor</button>
+    </nav>
+
+    @if (ActiveTab == "Schedules")
+    {
+        <section class="table-panel automation-panel">
+            <div class="automation-heading"><div><p class="section-label">Scheduled reporting</p><h2>Report schedules</h2></div><span>Fixed templates · Asia/Kuala_Lumpur</span></div>
+            <div class="report-schedule-table">
+                <div class="report-schedule-row automation-table-header"><span>Schedule</span><span>Template</span><span>LSS plants</span><span>Period</span><span>Frequency &amp; time</span><span>Email list</span><span>Status</span><span>Actions</span></div>
+                @foreach (var schedule in Schedules)
+                {
+                    <div class="report-schedule-row">
+                        <div class="automation-name"><span>RS</span><div><strong>@schedule.Name</strong><small>@schedule.Id</small></div></div>
+                        <span>@schedule.Template</span>
+                        <span>@GetPlantSummary(schedule.Plants)</span>
+                        <span>@schedule.ReportingPeriod</span>
+                        <div><strong>@schedule.Frequency</strong><small>@schedule.ExecutionTime</small></div>
+                        <span>@GetEmailListName(schedule.DistributionListId)</span>
+                        <span class="status-pill @(schedule.IsActive ? "status-successful" : "status-failed")">@(schedule.IsActive ? "Active" : "Inactive")</span>
+                        <div class="automation-actions"><button type="button" @onclick="() => OpenEditSchedule(schedule)">Edit</button><button type="button" @onclick="() => ToggleSchedule(schedule)">@(schedule.IsActive ? "Deactivate" : "Activate")</button></div>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+    else if (ActiveTab == "EmailLists")
+    {
+        <section class="table-panel automation-panel email-list-panel">
+            <div class="automation-heading"><div><p class="section-label">Scheduled delivery</p><h2>Email distribution lists</h2></div><span>Used by report schedules</span></div>
+            <div class="distribution-table">
+                <div class="distribution-row automation-table-header"><span>List name</span><span>Recipients</span><span>Email addresses</span><span>Used by</span><span>Status</span><span>Actions</span></div>
+                @foreach (var list in EmailLists)
+                {
+                    <div class="distribution-row">
+                        <div class="automation-name"><span>DL</span><div><strong>@list.Name</strong><small>@list.Id</small></div></div>
+                        <strong>@list.Emails.Count</strong>
+                        <span class="email-preview">@string.Join("; ", list.Emails)</span>
+                        <span>@Schedules.Count(x => x.DistributionListId == list.Id) schedule(s)</span>
+                        <span class="status-pill @(list.IsActive ? "status-successful" : "status-failed")">@(list.IsActive ? "Active" : "Inactive")</span>
+                        <div class="automation-actions"><button type="button" @onclick="() => OpenEditEmailList(list)">Edit</button><button type="button" @onclick="() => ToggleEmailList(list)">@(list.IsActive ? "Deactivate" : "Activate")</button></div>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="table-panel automation-panel delivery-panel">
+            <div class="automation-heading"><div><p class="section-label">Scheduled report delivery</p><h2>Main &amp; anomaly report status</h2></div><span>Latest delivery attempts shown first</span></div>
+            <div class="delivery-table">
+                <div class="delivery-row automation-table-header"><span>Report delivery</span><span>Generated</span><span>Anomalies</span><span>Main report</span><span>Main email</span><span>Anomaly report</span><span>Anomaly email</span><span>Overall</span><span>View</span></div>
+                @foreach (var delivery in Deliveries)
+                {
+                    <div class="delivery-row">
+                        <div class="automation-name"><span>@delivery.Source</span><div><strong>@delivery.ScheduleName</strong><small>@delivery.Id · @delivery.DistributionListName</small></div></div>
+                        <time>@delivery.GeneratedAt.ToString("dd MMM yyyy")<small>@delivery.GeneratedAt.ToString("HH:mm:ss")</small></time>
+                        <span class="anomaly-count @(delivery.AnomalyCount > 0 ? "found" : null)">@delivery.AnomalyCount</span>
+                        <span class="delivery-state state-@GetCssValue(delivery.MainReportStatus)">@delivery.MainReportStatus</span>
+                        <span class="delivery-state state-@GetCssValue(delivery.MainEmailStatus)">@delivery.MainEmailStatus</span>
+                        <span class="delivery-state state-@GetCssValue(delivery.AnomalyReportStatus)">@delivery.AnomalyReportStatus</span>
+                        <span class="delivery-state state-@GetCssValue(delivery.AnomalyEmailStatus)">@delivery.AnomalyEmailStatus</span>
+                        <span class="status-pill delivery-overall-@delivery.OverallStatus.ToLowerInvariant()">@delivery.OverallStatus</span>
+                        <button class="table-action automation-view" type="button" @onclick="() => ViewDelivery(delivery)">View</button>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+
+    @if (IsScheduleDialogOpen)
+    {
+        <div class="admin-overlay"><section class="admin-dialog automation-dialog" role="dialog" aria-modal="true" aria-labelledby="report-schedule-form-title">
+            <div class="admin-dialog-header"><div><p class="section-label">Report schedule</p><h2 id="report-schedule-form-title">@(EditingScheduleId is null ? "Create schedule" : "Update schedule")</h2></div><button class="profile-close" type="button" @onclick="CloseScheduleDialog">&#215;</button></div>
+            <form @onsubmit="SaveSchedule" @onsubmit:preventDefault>
+                @if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }
+                <div class="admin-form-grid">
+                    <label class="wide"><span>Schedule name</span><input required @bind="ScheduleName" /></label>
+                    <label><span>Fixed system template</span><select @bind="ScheduleTemplate">@foreach (var template in Templates) { <option>@template</option> }</select></label>
+                    <label><span>Reporting period</span><select @bind="ReportingPeriod">@foreach (var period in ReportingPeriods) { <option>@period</option> }</select></label>
+                    <label><span>Execution frequency</span><select @bind="Frequency">@foreach (var frequency in Frequencies) { <option>@frequency</option> }</select></label>
+                    <label><span>Execution time (HH:mm)</span><input required pattern="([01][0-9]|2[0-3]):[0-5][0-9]" @bind="ExecutionTime" /></label>
+                    <label class="wide"><span>Email distribution list</span><select @bind="SelectedDistributionListId">@foreach (var list in EmailLists.Where(x => x.IsActive)) { <option value="@list.Id">@list.Name (@list.Emails.Count recipients)</option> }</select></label>
+                </div>
+                <fieldset class="plant-picker"><legend>LSS plants</legend><div>@foreach (var plant in PlantNames) { <label><input type="checkbox" checked="@SelectedPlants.Contains(plant)" @onchange="() => TogglePlantSelection(plant)" /><span>@plant</span></label> }</div></fieldset>
+                <div class="profile-actions"><button class="profile-cancel" type="button" @onclick="CloseScheduleDialog">Cancel</button><button class="primary-action admin-primary" type="submit">Save Schedule</button></div>
+            </form>
+        </section></div>
+    }
+
+    @if (IsEmailDialogOpen)
+    {
+        <div class="admin-overlay"><section class="admin-dialog automation-dialog" role="dialog" aria-modal="true" aria-labelledby="email-list-form-title">
+            <div class="admin-dialog-header"><div><p class="section-label">Delivery recipients</p><h2 id="email-list-form-title">@(EditingEmailListId is null ? "Create email list" : "Update email list")</h2></div><button class="profile-close" type="button" @onclick="CloseEmailDialog">&#215;</button></div>
+            <form @onsubmit="SaveEmailList" @onsubmit:preventDefault>
+                @if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }
+                <div class="admin-form-grid"><label class="wide"><span>Distribution list name</span><input required @bind="EmailListName" /></label><label class="wide"><span>Email addresses</span><textarea required rows="6" placeholder="operations@example.com; reviewer@example.com" @bind="EmailAddresses"></textarea><small>Separate addresses using commas, semicolons or new lines.</small></label></div>
+                <div class="profile-actions"><button class="profile-cancel" type="button" @onclick="CloseEmailDialog">Cancel</button><button class="primary-action admin-primary" type="submit">Save Distribution List</button></div>
+            </form>
+        </section></div>
+    }
+
+    @if (SelectedDelivery is not null)
+    {
+        <div class="admin-overlay"><section class="admin-dialog delivery-dialog" role="dialog" aria-modal="true" aria-labelledby="delivery-detail-title">
+            <div class="admin-dialog-header"><div><p class="section-label">Delivery result</p><h2 id="delivery-detail-title">@SelectedDelivery.Id</h2></div><button class="profile-close" type="button" @onclick="CloseDelivery">&#215;</button></div>
+            <div class="delivery-dialog-body">
+                <div class="delivery-detail-head"><span>@SelectedDelivery.Source</span><div><strong>@SelectedDelivery.ScheduleName</strong><small>@SelectedDelivery.GeneratedAt.ToString("dd MMM yyyy, HH:mm:ss")</small></div><span class="status-pill delivery-overall-@SelectedDelivery.OverallStatus.ToLowerInvariant()">@SelectedDelivery.OverallStatus</span></div>
+                <dl class="delivery-detail-grid"><div><dt>Distribution list</dt><dd>@SelectedDelivery.DistributionListName</dd></div><div><dt>Anomalies detected</dt><dd>@SelectedDelivery.AnomalyCount</dd></div><div class="wide"><dt>Assigned recipients</dt><dd>@string.Join("; ", SelectedDelivery.Recipients)</dd></div></dl>
+                <div class="delivery-file-list"><article><span>MAIN</span><div><strong>Main report</strong><small>Generation: @SelectedDelivery.MainReportStatus · Email: @SelectedDelivery.MainEmailStatus</small></div></article><article><span>ANM</span><div><strong>Separate anomaly report</strong><small>Generation: @SelectedDelivery.AnomalyReportStatus · Email: @SelectedDelivery.AnomalyEmailStatus</small></div></article></div>
+                <section class="delivery-message"><strong>Delivery message</strong><p>@SelectedDelivery.Message</p></section>
+                <div class="profile-actions"><button class="profile-cancel" type="button" @onclick="CloseDelivery">Close</button></div>
+            </div>
+        </section></div>
+    }
+</div>

@@ -1,0 +1,66 @@
+@page "/admin/lss-plants"
+@attribute [Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+
+<PageTitle>LSS Plant Configuration | SBLSS System</PageTitle>
+
+<div class="admin-page">
+    <header class="page-heading">
+        <div><p class="section-label">Administration</p><h1>LSS Plant Configuration</h1><p class="page-subtitle">Manage configured plants and their DDQ/MMF integration endpoints.</p></div>
+        <div class="admin-header-actions">
+            <button class="test-api-action" type="button" @onclick="OpenApiTestDialog">Test API</button>
+            <button class="primary-action admin-primary" type="button" @onclick="OpenAddDialog">+ Add Plant</button>
+        </div>
+    </header>
+
+    <section class="admin-summary"><div><small>Configured plants</small><strong>@Plants.Count</strong></div><div><small>Active</small><strong>@Plants.Count(x => x.IsActive)</strong></div><div><small>Total capacity</small><strong>@Plants.Sum(x => x.CapacityMw) MW</strong></div></section>
+    <section class="admin-toolbar"><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search plant, state or Plant ID..." @bind="SearchTerm" @bind:event="oninput" /></label><span class="result-count">@FilteredPlants.Count plant(s)</span></section>
+    <section class="table-panel admin-panel"><div class="admin-table-heading"><div><p class="section-label">Plant registry</p><h2>Configured LSS plants</h2></div><span>API settings are restricted to administrators</span></div>
+        <div class="plant-admin-table"><div class="plant-admin-row admin-table-header"><span>Plant</span><span>State</span><span>Capacity</span><span>DDQ API</span><span>MMF API</span><span>API Test</span><span>Status</span><span>Action</span></div>
+            @foreach (var plant in FilteredPlants)
+            {
+                <div class="plant-admin-row"><div class="admin-entity"><span>@GetCode(plant.Name)</span><div><strong>@plant.Name</strong><small>@plant.PlantId</small></div></div><span>@plant.State</span><strong>@plant.CapacityMw.ToString("N0") MW</strong><code>@plant.DdqApiEndpoint</code><code>@plant.MmfApiEndpoint</code><div class="api-test-state"><span class="api-test-pill api-@GetApiStatusClass(plant.ApiConnectionStatus)">@plant.ApiConnectionStatus</span><small>@GetLastTestLabel(plant)</small></div><span class="status-pill @(plant.IsActive ? "status-successful" : "status-failed")">@(plant.IsActive ? "Active" : "Inactive")</span><button class="admin-edit-action" type="button" @onclick="() => OpenEditDialog(plant)">Edit</button></div>
+            }
+        </div>
+    </section>
+
+    @if (IsDialogOpen)
+    {
+        <div class="admin-overlay"><section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="plant-form-title"><div class="admin-dialog-header"><div><p class="section-label">@(EditingPlantId.HasValue ? "Update configuration" : "New configuration")</p><h2 id="plant-form-title">@(EditingPlantId.HasValue ? "Edit LSS plant" : "Add LSS plant")</h2></div><button class="profile-close" type="button" @onclick="CloseDialog">&#215;</button></div>
+            <form @onsubmit="SavePlantAsync" @onsubmit:preventDefault>@if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }<div class="admin-form-grid"><label><span>Plant name</span><input required @bind="NewName" /></label><label><span>Plant ID</span><input required @bind="NewPlantId" /></label><label><span>State</span><select @bind="NewState">@foreach (var state in States){<option>@state</option>}</select></label><label><span>Capacity (MW)</span><input type="number" min="1" required @bind="NewCapacity" /></label><label class="wide"><span>DDQ API endpoint</span><input type="url" required @bind="NewDdqApi" /></label><label class="wide"><span>MMF API endpoint</span><input type="url" required @bind="NewMmfApi" /></label></div><div class="profile-actions"><button class="profile-cancel" type="button" @onclick="CloseDialog">Cancel</button><button class="primary-action admin-primary" type="submit">@(EditingPlantId.HasValue ? "Save Changes" : "Save Plant to MS SQL")</button></div></form>
+        </section></div>
+    }
+
+    @if (IsApiTestDialogOpen)
+    {
+        <div class="admin-overlay">
+            <section class="admin-dialog api-test-dialog" role="dialog" aria-modal="true" aria-labelledby="api-test-title">
+                <div class="admin-dialog-header">
+                    <div><p class="section-label">Connection verification</p><h2 id="api-test-title">Test Plant API</h2></div>
+                    <button class="profile-close" type="button" @onclick="CloseApiTestDialog">&#215;</button>
+                </div>
+                <div class="api-test-form">
+                    <p>Select a registered plant and endpoint. The latest URL and test result will be saved to MS SQL.</p>
+                    <div class="admin-form-grid">
+                        <label><span>LSS plant</span><select @bind="TestPlantId" @bind:after="LoadSelectedEndpoint">@foreach (var plant in Plants) { <option value="@plant.Id">@plant.Name</option> }</select></label>
+                        <label><span>API type</span><select @bind="TestApiSource" @bind:after="LoadSelectedEndpoint"><option>DDQ</option><option>MMF</option></select></label>
+                        <label class="wide"><span>API link</span><input type="url" required @bind="TestApiEndpoint" /></label>
+                    </div>
+
+                    @if (LastTestResult is not null)
+                    {
+                        <section class="api-test-result @(LastTestResult.IsConnected ? "connected" : "failed")">
+                            <span>@(LastTestResult.IsConnected ? "OK" : "!")</span>
+                            <div><strong>@(LastTestResult.IsConnected ? "API Connected" : "API Test Failed")</strong><p>@LastTestResult.Message</p><small>Response time: @LastTestResult.ElapsedMilliseconds ms</small></div>
+                        </section>
+                    }
+
+                    <div class="profile-actions">
+                        <button class="profile-cancel" type="button" @onclick="CloseApiTestDialog">@(LastTestResult is null ? "Cancel" : "Close")</button>
+                        <button class="primary-action admin-primary" type="button" disabled="@IsTestingApi" @onclick="TestApiAsync">@(IsTestingApi ? "Testing connection..." : "Test Connection")</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    }
+</div>

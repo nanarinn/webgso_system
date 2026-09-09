@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Single Buyer LSS Repository",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "Build Single Buyer LSS Repository",
+      "program": "${workspaceFolder}/TestingSystem.Web/bin/Debug/net8.0/TestingSystem.Web.dll",
+      "cwd": "${workspaceFolder}/TestingSystem.Web",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  ]
+}

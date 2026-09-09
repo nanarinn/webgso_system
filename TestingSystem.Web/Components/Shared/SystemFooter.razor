@@ -1,0 +1,30 @@
+<footer class="system-footer @(LoginVariant ? "system-footer-login" : SidebarVariant ? "system-footer-sidebar" : null)"
+        aria-label="System information">
+    <div class="footer-brand">
+        <img src="sae-green-logo.png" alt="SAE Green Sdn. Bhd." />
+        <span>
+            <strong>SAE Green Sdn. Bhd.</strong>
+            <small>Technology &amp; delivery partner</small>
+        </span>
+    </div>
+
+    <div class="footer-system">
+        <div class="footer-version">
+            <span>Version @VersionNumber</span>
+            <span>Git · main</span>
+            <span class="github-pending"><i></i> GitHub remote pending</span>
+        </div>
+        <small>© @DateTime.Now.Year SAE Green Sdn. Bhd. All rights reserved.</small>
+    </div>
+</footer>
+
+@code {
+    [Parameter]
+    public bool LoginVariant { get; set; }
+
+    [Parameter]
+    public bool SidebarVariant { get; set; }
+
+    private static string VersionNumber =>
+        typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+}

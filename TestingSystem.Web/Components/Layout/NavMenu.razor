@@ -1,0 +1,90 @@
+<div class="brand-lockup sidebar-brand">
+    <img class="brand-logo" src="single-buyer-logo.png" alt="Single Buyer" />
+    <span>
+        <small>LSS Repository</small>
+    </span>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="nav-toggle" />
+
+<div class="nav-body" onclick="document.querySelector('.nav-toggle').click()">
+    <p class="nav-section-title">Workspace</p>
+    <AuthorizeView>
+        <Authorized>
+            <nav>
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <span class="nav-symbol">OV</span>
+                    Overview
+                </NavLink>
+                <NavLink class="nav-link" href="ddq-analytics">
+                    <span class="nav-symbol">DQ</span>
+                    DDQ Analytics
+                </NavLink>
+                <NavLink class="nav-link" href="mmf-analytics">
+                    <span class="nav-symbol">MF</span>
+                    MMF Analytics
+                </NavLink>
+                <NavLink class="nav-link" href="on-demand-analysis">
+                    <span class="nav-symbol">OD</span>
+                    On-Demand Analysis
+                </NavLink>
+                <NavLink class="nav-link" href="collection-management">
+                    <span class="nav-symbol">CM</span>
+                    Collection Management
+                </NavLink>
+                <NavLink class="nav-link" href="reports">
+                    <span class="nav-symbol">RP</span>
+                    Reports
+                </NavLink>
+                <NavLink class="nav-link" href="audit-logs">
+                    <span class="nav-symbol">AL</span>
+                    Audit Logs
+                </NavLink>
+            </nav>
+        </Authorized>
+    </AuthorizeView>
+
+    <AuthorizeView Roles="Administrator">
+        <Authorized>
+            <div class="admin-navigation">
+                <p class="nav-section-title">Administration</p>
+                <nav>
+                    <NavLink class="nav-link admin-nav-link" href="admin/lss-plants">
+                        <span class="nav-symbol">LP</span>
+                        LSS Plant Config
+                    </NavLink>
+                    <NavLink class="nav-link admin-nav-link" href="admin/collection-schedules">
+                        <span class="nav-symbol">CS</span>
+                        Collection Schedules
+                    </NavLink>
+                    <NavLink class="nav-link admin-nav-link" href="admin/report-automation">
+                        <span class="nav-symbol">RA</span>
+                        Report Automation
+                    </NavLink>
+                    <NavLink class="nav-link admin-nav-link" href="admin/users">
+                        <span class="nav-symbol">UM</span>
+                        User Management
+                    </NavLink>
+                </nav>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+
+    <div class="nav-spacer"></div>
+
+    <div class="sidebar-status">
+        <span class="status-light"></span>
+        <span><strong>MS SQL connected</strong><small>Docker network active</small></span>
+    </div>
+
+    <AuthorizeView>
+        <Authorized>
+            <form method="post" action="/account/logout" class="logout-form">
+                <AntiforgeryToken />
+                <button type="submit"><span>←</span> Sign out</button>
+            </form>
+        </Authorized>
+    </AuthorizeView>
+
+    <SystemFooter SidebarVariant="true" />
+</div>

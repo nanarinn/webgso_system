@@ -1,0 +1,56 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: single-buyer-lss-web
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__DefaultConnection: Server=mssql,1433;Database=${MSSQL_DATABASE};User Id=${MSSQL_USER};Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;
+      Database__Server: mssql
+      Database__Port: 1433
+      Database__Name: ${MSSQL_DATABASE}
+      Database__User: ${MSSQL_USER}
+      SeedUsers__0__UserName: ${SB_ADMIN_USERNAME}
+      SeedUsers__0__Password: ${SB_ADMIN_PASSWORD}
+      SeedUsers__0__DisplayName: LSS Administrator
+      SeedUsers__0__Email: admin@sblss.local
+      SeedUsers__0__Role: Administrator
+      SeedUsers__1__UserName: ${SB_REVIEWER_USERNAME}
+      SeedUsers__1__Password: ${SB_REVIEWER_PASSWORD}
+      SeedUsers__1__DisplayName: LSS Reviewer
+      SeedUsers__1__Email: reviewer@sblss.local
+      SeedUsers__1__Role: Reviewer
+    ports:
+      - "${APP_PORT:-8088}:8080"
+    depends_on:
+      mssql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: single-buyer-lss-mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    ports:
+      - "${MSSQL_PORT}:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+      - ./database:/workspace/database:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P $$MSSQL_SA_PASSWORD -Q 'SELECT 1' || exit 1"
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  mssql_data:

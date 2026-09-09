@@ -1,0 +1,186 @@
+@page "/on-demand-analysis"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>On-Demand Analysis | SBLSS System</PageTitle>
+
+<div class="on-demand-page">
+    <header class="page-heading">
+        <div>
+            <p class="section-label">Flexible analysis</p>
+            <h1>On-Demand Analysis</h1>
+            <p class="page-subtitle">Generate DDQ or MMF analysis packages and manage the resulting files.</p>
+        </div>
+        <button class="primary-action generate-action" type="button" @onclick="OpenGenerateDialog">
+            <span class="generate-plus">+</span> Generate
+        </button>
+    </header>
+
+    <section class="generation-summary">
+        <button type="button" class="summary-stat" @onclick="OpenAllSummary">
+            <small>Total generated</small>
+            <strong>@Results.Count</strong>
+            <span>View list</span>
+        </button>
+        <button type="button" class="summary-stat" @onclick="OpenSuccessfulSummary">
+            <small>Successful</small>
+            <strong>@Results.Count(result => result.Status == "Successful")</strong>
+            <span>View list</span>
+        </button>
+        <button type="button" class="summary-stat" @onclick="OpenFailedSummary">
+            <small>Failed</small>
+            <strong>@Results.Count(result => result.Status == "Failed")</strong>
+            <span>View list</span>
+        </button>
+        <p>Choose <b>Generate</b> to create a new analysis request.</p>
+    </section>
+
+    <section class="table-panel on-demand-panel">
+        <div class="on-demand-heading">
+            <div>
+                <p class="section-label">Generated files</p>
+                <h2>Analysis list</h2>
+            </div>
+            <span class="result-count">@Results.Count record(s)</span>
+        </div>
+
+        <div class="on-demand-table" role="table" aria-label="Generated on-demand analyses">
+            <div class="on-demand-row on-demand-header" role="row">
+                <span>Name</span>
+                <span>Date &amp; timestamp generated</span>
+                <span>Description</span>
+                <span>Status</span>
+                <span>View</span>
+                <span>Export</span>
+            </div>
+            @foreach (var result in Results)
+            {
+                <div class="on-demand-row" role="row">
+                    <div class="analysis-name">
+                        <span class="analysis-type analysis-type-@result.Type.ToLowerInvariant()">@result.Type</span>
+                        <strong>@result.Name</strong>
+                    </div>
+                    <time datetime="@result.GeneratedAt.ToString("O")">@result.GeneratedAt.ToString("dd MMM yyyy, HH:mm:ss")</time>
+                    <span class="analysis-description">@result.Description</span>
+                    <span><span class="status-pill status-@result.Status.ToLowerInvariant()">@result.Status</span></span>
+                    <button class="table-action view-action" type="button" @onclick="() => ViewResult(result)">View</button>
+                    <a class="table-action export-action"
+                       href="@GetCsvDataUri(result)"
+                       download="@GetCsvFileName(result)">Export CSV</a>
+                </div>
+            }
+        </div>
+    </section>
+
+    @if (IsSummaryDialogOpen)
+    {
+        <div class="summary-list-overlay" role="presentation">
+            <section class="summary-list-dialog" role="dialog" aria-modal="true" aria-labelledby="analysis-summary-title">
+                <div class="summary-list-header">
+                    <div>
+                        <p class="section-label">On-demand requests</p>
+                        <h2 id="analysis-summary-title">@SummaryDialogTitle</h2>
+                    </div>
+                    <button class="profile-close" type="button" @onclick="CloseSummaryDialog" aria-label="Close request list">&#215;</button>
+                </div>
+                <div class="summary-list-body">
+                    <p class="summary-list-count">@SummaryResults.Count request(s)</p>
+                    @foreach (var result in SummaryResults)
+                    {
+                        <article class="summary-list-item">
+                            <span class="analysis-type analysis-type-@result.Type.ToLowerInvariant()">@result.Type</span>
+                            <div class="summary-item-copy">
+                                <strong>@result.Name</strong>
+                                <p>@result.Description</p>
+                                <small>@result.Reference · @result.GeneratedAt.ToString("dd MMM yyyy, HH:mm:ss")</small>
+                            </div>
+                            <span class="status-pill status-@result.Status.ToLowerInvariant()">@result.Status</span>
+                        </article>
+                    }
+                </div>
+                <div class="summary-list-footer">
+                    <button class="profile-cancel" type="button" @onclick="CloseSummaryDialog">Close</button>
+                </div>
+            </section>
+        </div>
+    }
+
+    @if (IsGenerateDialogOpen)
+    {
+        <div class="on-demand-overlay" role="presentation">
+            <section class="on-demand-dialog" role="dialog" aria-modal="true" aria-labelledby="generate-title">
+                <div class="on-demand-dialog-header">
+                    <div>
+                        <p class="section-label">New request</p>
+                        <h2 id="generate-title">Generate analysis</h2>
+                    </div>
+                    <button class="profile-close" type="button" @onclick="CloseGenerateDialog" aria-label="Close generate form">×</button>
+                </div>
+
+                <form @onsubmit="GenerateAnalysis" @onsubmit:preventDefault>
+                    <p>Select the analysis source and submission date. The generated result will be added to the list.</p>
+                    <InputRadioGroup @bind-Value="SelectedType" Name="analysisType" class="generation-choice">
+                        <label class="analysis-choice @(SelectedType == "DDQ" ? "selected" : null)">
+                            <InputRadio Value="@("DDQ")" />
+                            <span>DDQ</span>
+                            <small>Data quality and power interval analysis</small>
+                        </label>
+                        <label class="analysis-choice @(SelectedType == "MMF" ? "selected" : null)">
+                            <InputRadio Value="@("MMF")" />
+                            <span>MMF</span>
+                            <small>Forecast, actual output and variance analysis</small>
+                        </label>
+                    </InputRadioGroup>
+
+                    <label class="filter-field submission-field">
+                        <span>Submission date</span>
+                        <input type="date" @bind="SelectedSubmissionDate" @bind:format="yyyy-MM-dd" required />
+                    </label>
+
+                    <div class="profile-actions">
+                        <button class="profile-cancel" type="button" @onclick="CloseGenerateDialog">Cancel</button>
+                        <button class="primary-action generate-action" type="submit">
+                            Generate Analysis <span>→</span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+        </div>
+    }
+
+    @if (SelectedResult is not null)
+    {
+        <div class="on-demand-overlay" role="presentation">
+            <section class="on-demand-dialog result-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title">
+                <div class="on-demand-dialog-header">
+                    <div>
+                        <p class="section-label">Analysis details</p>
+                        <h2 id="result-title">@SelectedResult.Name</h2>
+                    </div>
+                    <button class="profile-close" type="button" @onclick="CloseResult" aria-label="Close analysis details">×</button>
+                </div>
+
+                <div class="result-dialog-body">
+                    <div class="result-status-banner status-banner-@SelectedResult.Status.ToLowerInvariant()">
+                        <span class="analysis-type analysis-type-@SelectedResult.Type.ToLowerInvariant()">@SelectedResult.Type</span>
+                        <div>
+                            <strong>@SelectedResult.Status</strong>
+                            <small>Generation reference @SelectedResult.Reference</small>
+                        </div>
+                    </div>
+                    <dl class="result-details">
+                        <div><dt>Submission date</dt><dd>@SelectedResult.SubmissionDate.ToString("dd MMM yyyy")</dd></div>
+                        <div><dt>Generated at</dt><dd>@SelectedResult.GeneratedAt.ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
+                        <div class="result-description-row"><dt>Description</dt><dd>@SelectedResult.Description</dd></div>
+                    </dl>
+                    <div class="profile-actions">
+                        <button class="profile-cancel" type="button" @onclick="CloseResult">Close</button>
+                        <a class="primary-action generate-action"
+                           href="@GetCsvDataUri(SelectedResult)"
+                           download="@GetCsvFileName(SelectedResult)">Export CSV <span>↓</span></a>
+                    </div>
+                </div>
+            </section>
+        </div>
+    }
+</div>

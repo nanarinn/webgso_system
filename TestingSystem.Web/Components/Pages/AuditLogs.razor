@@ -1,0 +1,107 @@
+@page "/audit-logs"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Monitor Collection Jobs | SBLSS System</PageTitle>
+
+<div class="job-monitor-page">
+    <header class="page-heading">
+        <div>
+            <p class="section-label">Operations audit</p>
+            <h1>Monitor Collection Jobs</h1>
+            <p class="page-subtitle">Track scheduled, manual and retry DDQ or MMF collection jobs across configured LSS plants.</p>
+        </div>
+        <div class="monitor-live-badge"><i></i><span><strong>Live monitoring</strong><small>Staff &amp; Administrator</small></span></div>
+    </header>
+
+    <section class="job-summary" aria-label="Collection job summary">
+        <button type="button" class="job-summary-card" @onclick="ShowAllJobs"><small>Total jobs</small><strong>@Jobs.Count</strong><span>View all</span></button>
+        <button type="button" class="job-summary-card" @onclick="ShowRunningJobs"><small>In progress</small><strong>@Jobs.Count(job => job.Status == "Running")</strong><span>Monitor</span></button>
+        <button type="button" class="job-summary-card" @onclick="ShowWarningJobs"><small>Warnings</small><strong>@Jobs.Count(job => job.Status == "Warning")</strong><span>Review</span></button>
+        <button type="button" class="job-summary-card" @onclick="ShowFailedJobs"><small>Failed</small><strong>@Jobs.Count(job => job.Status == "Failed")</strong><span>Investigate</span></button>
+    </section>
+
+    <section class="monitor-toolbar">
+        <label class="monitor-search">
+            <span aria-hidden="true">&#8981;</span>
+            <input type="search" placeholder="Search job ID, plant, source or message..." @bind="SearchTerm" @bind:event="oninput" />
+        </label>
+        <label class="monitor-filter"><span>Data source</span><select @bind="SourceFilter"><option value="All">DDQ &amp; MMF</option><option value="DDQ">DDQ</option><option value="MMF">MMF</option></select></label>
+        <label class="monitor-filter"><span>Trigger</span><select @bind="ModeFilter"><option value="All">All triggers</option><option value="Scheduled">Scheduled</option><option value="Manual">Manual</option><option value="Retry">Retry</option></select></label>
+        <label class="monitor-filter"><span>Status</span><select @bind="StatusFilter"><option value="All">All statuses</option><option value="Completed">Completed</option><option value="Running">Running</option><option value="Warning">Warning</option><option value="Failed">Failed</option></select></label>
+    </section>
+
+    <section class="table-panel monitor-panel">
+        <div class="monitor-table-heading">
+            <div><p class="section-label">Collection activity</p><h2>Job execution history</h2></div>
+            <span>@FilteredJobs.Count job(s) · Updated @DateTime.Now.ToString("HH:mm:ss")</span>
+        </div>
+        <div class="monitor-table" role="table" aria-label="DDQ and MMF collection jobs">
+            <div class="monitor-row monitor-header" role="row">
+                <span>Job &amp; plant</span><span>Source</span><span>Trigger</span><span>Started</span><span>Progress</span><span>Status</span><span>View</span>
+            </div>
+            @if (FilteredJobs.Count == 0)
+            {
+                <div class="monitor-empty"><strong>No collection job found</strong><span>Change the search or filters to view another job group.</span></div>
+            }
+            else
+            {
+                @foreach (var job in FilteredJobs)
+                {
+                    <div class="monitor-row" role="row">
+                        <div class="monitor-job-name"><span>@GetPlantCode(job.PlantName)</span><div><strong>@job.PlantName</strong><small>@job.JobId · @job.State</small></div></div>
+                        <span><span class="monitor-source source-@job.Source.ToLowerInvariant()">@job.Source</span></span>
+                        <span><span class="monitor-mode mode-@job.Mode.ToLowerInvariant()">@job.Mode</span></span>
+                        <time datetime="@job.StartedAt.ToString("O")">@job.StartedAt.ToString("dd MMM yyyy")<small>@job.StartedAt.ToString("HH:mm:ss")</small></time>
+                        <div class="job-progress"><div><span style="width: @job.Progress%"></span></div><small>@job.Progress%</small></div>
+                        <span><span class="status-pill monitor-status-@job.Status.ToLowerInvariant()">@job.Status</span></span>
+                        <button class="table-action monitor-view" type="button" @onclick="() => ViewJob(job)">View</button>
+                    </div>
+                }
+            }
+        </div>
+    </section>
+
+    @if (SelectedJob is not null)
+    {
+        <div class="monitor-overlay" role="presentation">
+            <section class="monitor-dialog" role="dialog" aria-modal="true" aria-labelledby="job-details-title">
+                <div class="monitor-dialog-header">
+                    <div><p class="section-label">Collection job details</p><h2 id="job-details-title">@SelectedJob.JobId</h2></div>
+                    <button class="profile-close" type="button" @onclick="CloseJob" aria-label="Close job details">&#215;</button>
+                </div>
+                <div class="monitor-dialog-body">
+                    <div class="job-detail-banner status-banner-@SelectedJob.Status.ToLowerInvariant()">
+                        <span class="monitor-source source-@SelectedJob.Source.ToLowerInvariant()">@SelectedJob.Source</span>
+                        <div><strong>@SelectedJob.PlantName</strong><small>@SelectedJob.Mode collection · @SelectedJob.Status</small></div>
+                        <strong>@SelectedJob.Progress%</strong>
+                    </div>
+
+                    <dl class="job-detail-grid">
+                        <div><dt>Plant state</dt><dd>@SelectedJob.State</dd></div>
+                        <div><dt>Started at</dt><dd>@SelectedJob.StartedAt.ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
+                        <div><dt>Duration</dt><dd>@SelectedJob.Duration</dd></div>
+                        <div><dt>Records received</dt><dd>@SelectedJob.RecordsReceived.ToString("N0")</dd></div>
+                        <div><dt>Requested by</dt><dd>@SelectedJob.RequestedBy</dd></div>
+                        <div><dt>Attempt</dt><dd>@SelectedJob.Attempt</dd></div>
+                    </dl>
+
+                    <section class="job-message message-@SelectedJob.Status.ToLowerInvariant()">
+                        <span>@GetMessageLabel(SelectedJob.Status)</span>
+                        <div><strong>@GetResultTitle(SelectedJob.Status)</strong><p>@SelectedJob.Message</p></div>
+                    </section>
+
+                    <section class="job-audit-trail">
+                        <h3>Execution trail</h3>
+                        @foreach (var step in GetExecutionTrail(SelectedJob))
+                        {
+                            <div class="audit-step @(step.IsCurrent ? "current" : null)"><i></i><div><strong>@step.Title</strong><small>@step.Description</small></div><time>@step.Time</time></div>
+                        }
+                    </section>
+
+                    <div class="profile-actions"><button class="profile-cancel" type="button" @onclick="CloseJob">Close</button></div>
+                </div>
+            </section>
+        </div>
+    }
+</div>

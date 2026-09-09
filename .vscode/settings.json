@@ -1,0 +1,22 @@
+{
+  "files.exclude": {
+    "**/.git": false
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "docker.composeBuild": false,
+  "mssql.connections": [
+    {
+      "profileName": "SBLSS Local SQL",
+      "server": "localhost",
+      "port": 1433,
+      "database": "SingleBuyerLssRepository",
+      "user": "sa",
+      "password": "",
+      "authenticationType": "SqlLogin",
+      "encrypt": "Mandatory",
+      "trustServerCertificate": true,
+      "savePassword": false,
+      "emptyPasswordInput": false
+    }
+  ]
+}

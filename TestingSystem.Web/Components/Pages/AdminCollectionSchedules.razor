@@ -1,0 +1,82 @@
+@page "/admin/collection-schedules"
+@attribute [Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+
+<PageTitle>Collection Schedules | SBLSS System</PageTitle>
+
+<div class="admin-page schedules-page">
+    <header class="page-heading">
+        <div>
+            <p class="section-label">Administration</p>
+            <h1>Collection Schedules</h1>
+            <p class="page-subtitle">Configure automated DDQ and MMF collection windows and retry rules.</p>
+        </div>
+        <button class="primary-action admin-primary" type="button" @onclick="OpenDialog">+ New Schedule</button>
+    </header>
+
+    <section class="admin-summary">
+        <div><small>Total schedules</small><strong>@Schedules.Count</strong></div>
+        <div><small>Active</small><strong>@Schedules.Count(x => x.IsActive)</strong></div>
+        <div><small>Next run</small><strong>@DateTime.Now.AddMinutes(15).ToString("HH:mm")</strong></div>
+    </section>
+
+    <section class="admin-toolbar">
+        <label class="admin-search">
+            <span>&#8981;</span>
+            <input type="search" placeholder="Search schedule, plant or source..." @bind="SearchTerm" @bind:event="oninput" />
+        </label>
+        <span class="result-count">@FilteredSchedules.Count schedule(s)</span>
+    </section>
+
+    <section class="table-panel admin-panel">
+        <div class="admin-table-heading">
+            <div><p class="section-label">Automation rules</p><h2>DDQ &amp; MMF schedules</h2></div>
+            <span>Timezone: Asia/Kuala_Lumpur</span>
+        </div>
+        <div class="schedule-admin-table">
+            <div class="schedule-admin-row admin-table-header">
+                <span>Schedule</span><span>Plant</span><span>Source</span><span>Interval</span>
+                <span>Run time</span><span>Retry</span><span>Status</span><span>Action</span>
+            </div>
+            @foreach (var schedule in FilteredSchedules)
+            {
+                <div class="schedule-admin-row">
+                    <div class="admin-entity"><span>SC</span><div><strong>@schedule.Name</strong><small>@schedule.ScheduleId</small></div></div>
+                    <span>@schedule.Plant</span>
+                    <span class="monitor-source source-@schedule.Source.ToLowerInvariant()">@schedule.Source</span>
+                    <span>@schedule.Interval</span>
+                    <strong>@schedule.RunTime</strong>
+                    <span>@schedule.RetryCount attempt(s)</span>
+                    <span class="status-pill @(schedule.IsActive ? "status-successful" : "status-failed")">@(schedule.IsActive ? "Active" : "Paused")</span>
+                    <button class="admin-toggle" type="button" @onclick="() => ToggleSchedule(schedule)">@(schedule.IsActive ? "Pause" : "Activate")</button>
+                </div>
+            }
+        </div>
+    </section>
+
+    @if (IsDialogOpen)
+    {
+        <div class="admin-overlay">
+            <section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="schedule-form-title">
+                <div class="admin-dialog-header">
+                    <div><p class="section-label">Automation configuration</p><h2 id="schedule-form-title">New collection schedule</h2></div>
+                    <button class="profile-close" type="button" @onclick="CloseDialog">&#215;</button>
+                </div>
+                <form @onsubmit="SaveSchedule" @onsubmit:preventDefault>
+                    <div class="admin-form-grid">
+                        <label class="wide"><span>Schedule name</span><input required @bind="NewName" /></label>
+                        <label><span>Plant</span><select @bind="NewPlant">@foreach (var plant in PlantNames) { <option>@plant</option> }</select></label>
+                        <label><span>Data source</span><select @bind="NewSource"><option>DDQ</option><option>MMF</option></select></label>
+                        <label><span>Interval</span><select @bind="NewInterval"><option>15 minutes</option><option>30 minutes</option><option>1 hour</option><option>Daily</option></select></label>
+                        <label><span>Run time (HH:mm)</span><input type="text" required pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="00:15" @bind="NewRunTime" /></label>
+                        <label><span>Retry attempts</span><input type="number" min="0" max="5" @bind="NewRetryCount" /></label>
+                    </div>
+                    <div class="profile-actions">
+                        <button class="profile-cancel" type="button" @onclick="CloseDialog">Cancel</button>
+                        <button class="primary-action admin-primary" type="submit">Save Schedule</button>
+                    </div>
+                </form>
+            </section>
+        </div>
+    }
+</div>

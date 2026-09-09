@@ -1,0 +1,538 @@
+@page "/ddq-analytics"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject IDbContextFactory<ApplicationDbContext> ContextFactory
+@using TestingSystem.Web.Services
+
+<PageTitle>DDQ Analytics | SBLSS System</PageTitle>
+
+<div class="ddq-page">
+<header class="page-heading ddq-heading">
+    <div>
+        <p class="section-label">Data quality</p>
+        <h1>DDQ Analytics</h1>
+        <p class="page-subtitle">Filter submissions, select a dataset, then review its time-series power values.</p>
+    </div>
+    <span class="admin-badge"><span></span> Dynamic analysis</span>
+</header>
+
+<section class="filter-panel" aria-labelledby="filter-heading">
+    <div class="filter-panel-heading">
+        <div>
+            <p class="section-label">Step 1 · Query controls</p>
+            <h2 id="filter-heading">Filter</h2>
+        </div>
+        <button class="filter-reset" type="button" @onclick="ResetFilters">Reset</button>
+    </div>
+
+    <form @onsubmit="ApplyFilters" @onsubmit:preventDefault>
+        <PlantFilter @key="FilterVersion" Plants="RegisteredPlants" @bind-SelectedIds="SelectedPlantIds" />
+        <div class="filter-grid">
+            <fieldset class="filter-field filter-date-range">
+                <legend>Date range</legend>
+                <div class="date-pair">
+                    <label><span>From</span><input type="date" @bind="DateFrom" @bind:format="yyyy-MM-dd" /></label>
+                    <label><span>To</span><input type="date" @bind="DateTo" @bind:format="yyyy-MM-dd" /></label>
+                </div>
+            </fieldset>
+
+            <label class="filter-field">
+                <span>Data interval</span>
+                <select @bind="SelectedInterval">
+                    @foreach (var interval in Intervals)
+                    {
+                        <option value="@interval.Value">@interval.Label</option>
+                    }
+                </select>
+            </label>
+
+            <label class="filter-field">
+                <span>Data type</span>
+                <select @bind="SelectedDataType">
+                    @foreach (var dataType in DataTypes)
+                    {
+                        <option value="@dataType">@dataType</option>
+                    }
+                </select>
+            </label>
+
+            <label class="filter-field">
+                <span>Submission date</span>
+                <input type="date" @bind="SubmissionDate" @bind:format="yyyy-MM-dd" />
+                <small>Date the data was retrieved</small>
+            </label>
+
+            <label class="filter-field">
+                <span>State</span>
+                <select @bind="SelectedState">
+                    <option value="">All states</option>
+                    @foreach (var state in States)
+                    {
+                        <option value="@state">@state</option>
+                    }
+                </select>
+            </label>
+
+            <label class="filter-field">
+                <span>Region</span>
+                <select @bind="SelectedRegion">
+                    <option value="">All regions</option>
+                    @foreach (var region in Regions)
+                    {
+                        <option value="@region">@region</option>
+                    }
+                </select>
+            </label>
+
+            <fieldset class="filter-field filter-timestamp">
+                <legend>Timestamp</legend>
+                <div class="date-pair">
+                    <label><span>Start</span><input type="datetime-local" @bind="TimestampStart" @bind:format="yyyy-MM-ddTHH:mm" /></label>
+                    <label><span>End</span><input type="datetime-local" @bind="TimestampEnd" @bind:format="yyyy-MM-ddTHH:mm" /></label>
+                </div>
+            </fieldset>
+        </div>
+
+        @if (!string.IsNullOrEmpty(ValidationMessage))
+        {
+            <p class="filter-error" role="alert">@ValidationMessage</p>
+        }
+
+        <div class="filter-actions">
+            <span>Apply the filters to find available DDQ datasets.</span>
+            <button class="primary-action" type="submit">Apply Filter <span>→</span></button>
+        </div>
+    </form>
+</section>
+
+@if (HasApplied)
+{
+    <section class="filter-summary" aria-live="polite">
+        <span class="summary-mark">DDQ</span>
+        <div>
+            <strong>Filtered data description</strong>
+            <p>@ResultDescription</p>
+        </div>
+    </section>
+
+    <section class="dataset-panel" aria-labelledby="dataset-heading">
+        <div class="dataset-heading">
+            <div>
+                <p class="section-label">Step 2</p>
+                <h2 id="dataset-heading">Select a DDQ dataset</h2>
+                <p>Choose one item below to display its time-series table.</p>
+            </div>
+            <span class="result-count">@Datasets.Count result(s)</span>
+        </div>
+
+        <div class="dataset-list">
+            @if (Datasets.Count == 0)
+            {
+                <p class="analytics-empty" role="status">No plants match these filters. Change your selection or choose All states / All regions.</p>
+            }
+            @foreach (var dataset in Datasets)
+            {
+                <button class="dataset-item @(SelectedDataset?.Id == dataset.Id ? "selected" : null)"
+                        type="button"
+                        @onclick="() => SelectDataset(dataset)">
+                    <span class="dataset-code">@dataset.Code</span>
+                    <span class="dataset-name">
+                        <strong>@dataset.Name</strong>
+                        <small>@AppliedDataType · @dataset.State, @dataset.Region · Demo data</small>
+                    </span>
+                    <span class="dataset-meta">
+                        <strong>@dataset.CapacityMw.ToString("N0") MW</strong>
+                        <small>@dataset.AvailableRows interval(s)</small>
+                    </span>
+                    <span class="dataset-open">View table <b>→</b></span>
+                </button>
+            }
+        </div>
+    </section>
+}
+
+@if (SelectedDataset is not null)
+{
+    @if (ViewMode == "Table")
+    {
+        <section class="table-panel ddq-table-panel">
+            <div class="ddq-table-heading">
+                <div>
+                    <p class="section-label">Step 3 · Time-series result</p>
+                    <h2>@SelectedDataset.Name</h2>
+                    <p>@SelectedDataset.Code · @SelectedDataset.CapacityMw.ToString("N0") MW registered capacity</p>
+                </div>
+                <div class="view-actions">
+                    <span class="result-count">@Rows.Count row(s)</span>
+                    <button class="graph-action" type="button" @onclick="OpenGraphSettings">
+                        Convert to Graph <span>↗</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="ddq-table" role="table" aria-label="Filtered DDQ power data">
+                <div class="ddq-table-row ddq-table-header" role="row">
+                    <span>Timestamp</span>
+                    <span>Submission date</span>
+                    <span>State</span>
+                    <span>Region</span>
+                    <span>Data type</span>
+                    <span>Interval</span>
+                    <span>MW Power</span>
+                    <span>DDQ status</span>
+                </div>
+                @foreach (var row in Rows)
+                {
+                    <div class="ddq-table-row" role="row">
+                        <time datetime="@row.Timestamp.ToString("O")">@row.Timestamp.ToString("dd MMM yyyy, HH:mm")</time>
+                        <span>@row.SubmissionDate.ToString("dd MMM yyyy")</span>
+                        <span>@row.State</span>
+                        <span>@row.Region</span>
+                        <span>@row.DataType</span>
+                        <span>@row.Interval</span>
+                        <strong>@row.MwPower.ToString("N2") MW</strong>
+                        <span><span class="status-pill status-@row.Status.ToLowerInvariant()">@row.Status</span></span>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="graph-panel">
+            <div class="graph-heading">
+                <div>
+                    <p class="section-label">Step 3 · Graph view</p>
+                    <h2>Filtered plant comparison</h2>
+                    <p>@AppliedYAxis plotted against @AppliedXAxis · @ComparisonSeries.Count plant(s) · Demo data</p>
+                </div>
+                <div class="view-actions">
+                    <button class="secondary-action" type="button" @onclick="OpenGraphSettings">Graph Settings</button>
+                    <button class="graph-action" type="button" @onclick="ShowTable">Back to Table <span>↩</span></button>
+                </div>
+            </div>
+
+            <div class="graph-summary-grid">
+                <div><small>Maximum</small><strong>@GraphMaximum.ToString("N2") @GraphUnit</strong></div>
+                <div><small>Average</small><strong>@GraphAverage.ToString("N2") @GraphUnit</strong></div>
+                <div><small>Data points across plants</small><strong>@GraphValues.Count</strong></div>
+            </div>
+
+            <div class="ddq-chart-wrap">
+                <div class="y-axis-title">@AppliedYAxis (@GraphUnit)</div>
+                <svg class="ddq-chart" viewBox="0 0 1000 390" role="img" aria-label="@AppliedYAxis against @AppliedXAxis graph">
+                    <defs>
+                        <linearGradient id="ddqAreaFill" x1="0" x2="0" y1="0" y2="1">
+                            <stop offset="0%" stop-color="#1068b8" stop-opacity="0.3" />
+                            <stop offset="100%" stop-color="#1068b8" stop-opacity="0.02" />
+                        </linearGradient>
+                    </defs>
+                    @foreach (var gridY in new[] { 45, 115, 185, 255, 325 })
+                    {
+                        <line class="chart-grid-line" x1="72" y1="@gridY" x2="970" y2="@gridY" />
+                    }
+                    <line class="chart-axis-line" x1="72" y1="25" x2="72" y2="325" />
+                    <line class="chart-axis-line" x1="72" y1="325" x2="970" y2="325" />
+                    @for (var i = 0; i < ComparisonSeries.Count; i++)
+                    {
+                        var series = ComparisonSeries[i];
+                        <polyline fill="none" stroke="@PlantGraphSeries.Colour(i)" stroke-width="3" stroke-dasharray="@(i < 6 ? "none" : "7 4")" points="@PlantGraphSeries.Points(series.Values, 0, Math.Max(GraphMaximum, 1))">
+                            <title>@series.Name</title>
+                        </polyline>
+                    }
+                    <text class="chart-label" x="72" y="350">@GraphStartLabel</text>
+                    <text class="chart-label chart-label-end" x="970" y="350">@GraphEndLabel</text>
+                    <text class="chart-label" x="60" y="49" text-anchor="end">@GraphMaximum.ToString("N0")</text>
+                    <text class="chart-label" x="60" y="329" text-anchor="end">0</text>
+                </svg>
+                <div class="x-axis-title">@AppliedXAxis</div>
+                <div class="plant-graph-legend" aria-label="Plants in graph">
+                    @for (var i = 0; i < ComparisonSeries.Count; i++)
+                    {
+                        <span><i style="background:@PlantGraphSeries.Colour(i)"></i>@ComparisonSeries[i].Name</span>
+                    }
+                </div>
+                <p class="analytics-empty">Based on the last applied filters. Showing up to 200 intervals per plant.</p>
+            </div>
+        </section>
+    }
+}
+
+@if (IsGraphSettingsOpen)
+{
+    <div class="graph-modal-overlay" role="presentation">
+        <section class="graph-dialog" role="dialog" aria-modal="true" aria-labelledby="graph-dialog-title">
+            <div class="graph-dialog-header">
+                <div>
+                    <p class="section-label">Graph configuration</p>
+                    <h2 id="graph-dialog-title">Choose graph axes</h2>
+                </div>
+                <button class="profile-close" type="button" @onclick="CloseGraphSettings" aria-label="Close graph settings">×</button>
+            </div>
+
+            <div class="graph-dialog-body">
+                <p>Compare all @Datasets.Count plants in the filtered results. Choose the horizontal and vertical axes.</p>
+                <div class="axis-preview">
+                    <span><b>Y</b> @PendingYAxis</span>
+                    <i>versus</i>
+                    <span><b>X</b> @PendingXAxis</span>
+                </div>
+                <div class="graph-form-grid">
+                    <label class="filter-field">
+                        <span>X-axis (horizontal)</span>
+                        <select @bind="PendingXAxis">
+                            @foreach (var option in XAxisOptions)
+                            {
+                                <option value="@option">@option</option>
+                            }
+                        </select>
+                    </label>
+                    <label class="filter-field">
+                        <span>Y-axis (vertical)</span>
+                        <select @bind="PendingYAxis">
+                            @foreach (var option in YAxisOptions)
+                            {
+                                <option value="@option">@option</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+                <div class="profile-actions">
+                    <button class="profile-cancel" type="button" @onclick="CloseGraphSettings">Cancel</button>
+                    <button class="primary-action" type="button" @onclick="GenerateGraph">Generate Graph <span>→</span></button>
+                </div>
+            </div>
+        </section>
+    </div>
+}
+
+</div>
+
+@code {
+    private List<LssPlant> RegisteredPlants = [];
+    private HashSet<int> SelectedPlantIds = [];
+    private int FilterVersion;
+    private string AppliedDataType = "Rolling 24 Hour";
+    private DateTime AppliedStart, AppliedSubmission;
+    private int AppliedInterval;
+    protected override async Task OnInitializedAsync()
+    {
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        RegisteredPlants = await database.LssPlants.Where(p => p.IsActive).OrderBy(p => p.Name).ToListAsync();
+    }
+    private static readonly (string Label, int Value)[] Intervals =
+    [
+        ("15 minutes", 15),
+        ("30 minutes", 30),
+        ("1 hour", 60)
+    ];
+
+    private static readonly string[] DataTypes = ["Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month"];
+    private static readonly string[] XAxisOptions = ["Timestamp", "Data Point Number"];
+    private static readonly string[] YAxisOptions = ["MW Power", "Capacity Utilisation", "DDQ Success"];
+
+    private static readonly string[] States =
+    [
+        "Johor", "Kedah", "Kelantan", "Melaka", "Negeri Sembilan", "Pahang", "Penang",
+        "Perak", "Perlis", "Sabah", "Sarawak", "Selangor", "Terengganu"
+    ];
+
+    private static readonly string[] Regions = ["Northern", "Central", "Southern", "East Coast"];
+
+    private DateTime DateFrom { get; set; } = DateTime.Today.AddDays(-7);
+    private DateTime DateTo { get; set; } = DateTime.Today;
+    private DateTime SubmissionDate { get; set; } = DateTime.Today;
+    private DateTime TimestampStart { get; set; } = DateTime.Today.AddHours(8);
+    private DateTime TimestampEnd { get; set; } = DateTime.Today.AddHours(18);
+    private int SelectedInterval { get; set; } = 15;
+    private string SelectedDataType { get; set; } = "Rolling 24 Hour";
+    private string SelectedState { get; set; } = "";
+    private string SelectedRegion { get; set; } = "";
+    private string ValidationMessage { get; set; } = string.Empty;
+    private string ResultDescription { get; set; } = string.Empty;
+    private bool HasApplied { get; set; }
+    private List<DdqDataset> Datasets { get; set; } = [];
+    private DdqDataset? SelectedDataset { get; set; }
+    private List<DdqRow> Rows { get; set; } = [];
+    private List<PlantGraphSeries> ComparisonSeries = [];
+    private string ViewMode { get; set; } = "Table";
+    private bool IsGraphSettingsOpen { get; set; }
+    private string PendingXAxis { get; set; } = "Timestamp";
+    private string PendingYAxis { get; set; } = "MW Power";
+    private string AppliedXAxis { get; set; } = "Timestamp";
+    private string AppliedYAxis { get; set; } = "MW Power";
+
+    private void ApplyFilters()
+    {
+        ValidationMessage = string.Empty;
+        HasApplied = false;
+        Datasets = [];
+        SelectedDataset = null;
+        Rows = [];
+        ViewMode = "Table";
+        IsGraphSettingsOpen = false;
+
+        if (DateTo.Date < DateFrom.Date)
+        {
+            ValidationMessage = "The end date must be on or after the start date.";
+            return;
+        }
+
+        if (TimestampEnd <= TimestampStart)
+        {
+            ValidationMessage = "The end timestamp must be later than the start timestamp.";
+            return;
+        }
+
+        var totalAvailable = (int)Math.Floor((TimestampEnd - TimestampStart).TotalMinutes / SelectedInterval) + 1;
+        HasApplied = true;
+        AppliedDataType = SelectedDataType;
+        AppliedStart = TimestampStart;
+        AppliedSubmission = SubmissionDate;
+        AppliedInterval = SelectedInterval;
+        Datasets = AnalyticsPlantFilter.Match(RegisteredPlants, SelectedPlantIds, SelectedState, SelectedRegion)
+            .Select(plant => new DdqDataset(plant.Id,
+                $"DDQ-{plant.PlantId}-{SubmissionDate:yyyyMMdd}", plant.Name,
+                (double)plant.CapacityMw, totalAvailable, plant.State, AnalyticsPlantFilter.RegionFor(plant.State)))
+            .ToList();
+
+        ResultDescription = $"Demo data: {Datasets.Count} {SelectedDataType} dataset(s) for {string.Join(", ", Datasets.Select(d => d.Name))}. "
+            + $"submitted on {SubmissionDate:dd MMM yyyy}. Date range {DateFrom:dd MMM yyyy} to {DateTo:dd MMM yyyy}; "
+            + $"timestamps {TimestampStart:dd MMM yyyy HH:mm} to {TimestampEnd:dd MMM yyyy HH:mm} at {IntervalLabel} intervals.";
+    }
+
+    private void SelectDataset(DdqDataset dataset)
+    {
+        SelectedDataset = dataset;
+        ViewMode = "Table";
+        IsGraphSettingsOpen = false;
+        Rows = BuildRows(dataset);
+    }
+
+    private List<DdqRow> BuildRows(DdqDataset dataset)
+    {
+        var rowCount = Math.Min(dataset.AvailableRows, 200);
+        var stateFactor = Array.IndexOf(States, dataset.State) * 1.7;
+        var typeFactor = Array.IndexOf(DataTypes, AppliedDataType) * 4.2;
+
+        return Enumerable.Range(0, rowCount)
+            .Select(index =>
+            {
+                var timestamp = AppliedStart.AddMinutes(index * AppliedInterval);
+                var daylightCurve = Math.Max(0, Math.Sin((timestamp.TimeOfDay.TotalHours - 6) / 13 * Math.PI));
+                var variation = Math.Sin((index + dataset.Id) * 0.73) * 5.2;
+                var power = Math.Min(dataset.CapacityMw,
+                    Math.Max(0, 8 + (daylightCurve * dataset.CapacityMw * 0.78) + stateFactor + typeFactor + variation));
+                var status = index > 0 && (index + dataset.Id) % 11 == 0 ? "Failed" : "Successful";
+
+                return new DdqRow(timestamp, AppliedSubmission, dataset.State, dataset.Region,
+                    AppliedDataType, Intervals.First(i => i.Value == AppliedInterval).Label, Math.Round(power, 2), status);
+            })
+            .ToList();
+    }
+
+    private void OpenGraphSettings()
+    {
+        PendingXAxis = AppliedXAxis;
+        PendingYAxis = AppliedYAxis;
+        IsGraphSettingsOpen = true;
+    }
+
+    private void CloseGraphSettings() => IsGraphSettingsOpen = false;
+
+    private void GenerateGraph()
+    {
+        AppliedXAxis = PendingXAxis;
+        AppliedYAxis = PendingYAxis;
+        ComparisonSeries = Datasets.Select(dataset => new PlantGraphSeries(dataset.Name,
+            BuildRows(dataset).Select(row => AppliedYAxis switch
+            {
+                "Capacity Utilisation" => dataset.CapacityMw <= 0 ? 0 : row.MwPower / dataset.CapacityMw * 100,
+                "DDQ Success" => row.Status == "Successful" ? 100d : 0d,
+                _ => row.MwPower
+            }).ToList())).ToList();
+        IsGraphSettingsOpen = false;
+        ViewMode = "Graph";
+    }
+
+    private void ShowTable() => ViewMode = "Table";
+
+    private void ResetFilters()
+    {
+        DateFrom = DateTime.Today.AddDays(-7);
+        DateTo = DateTime.Today;
+        SubmissionDate = DateTime.Today;
+        TimestampStart = DateTime.Today.AddHours(8);
+        TimestampEnd = DateTime.Today.AddHours(18);
+        SelectedInterval = 15;
+        SelectedDataType = "Rolling 24 Hour";
+        SelectedState = "";
+        SelectedRegion = "";
+        SelectedPlantIds = [];
+        FilterVersion++;
+        ValidationMessage = string.Empty;
+        ResultDescription = string.Empty;
+        HasApplied = false;
+        Datasets = [];
+        SelectedDataset = null;
+        Rows = [];
+        ViewMode = "Table";
+        IsGraphSettingsOpen = false;
+        PendingXAxis = "Timestamp";
+        PendingYAxis = "MW Power";
+        AppliedXAxis = "Timestamp";
+        AppliedYAxis = "MW Power";
+    }
+
+    private string IntervalLabel => Intervals.First(interval => interval.Value == SelectedInterval).Label;
+    private string GraphUnit => AppliedYAxis == "MW Power" ? "MW" : "%";
+    private double GraphMaximum => GraphValues.Count == 0 ? 0 : GraphValues.Max();
+    private double GraphAverage => GraphValues.Count == 0 ? 0 : GraphValues.Average();
+    private string GraphLinePoints => BuildGraphPoints();
+    private string GraphAreaPoints => Rows.Count == 0 ? string.Empty : $"72,325 {GraphLinePoints} 970,325";
+    private string GraphStartLabel => AppliedXAxis == "Timestamp" && Rows.Count > 0
+        ? Rows[0].Timestamp.ToString("dd MMM HH:mm")
+        : "Point 1";
+    private string GraphEndLabel => AppliedXAxis == "Timestamp" && Rows.Count > 0
+        ? Rows[^1].Timestamp.ToString("dd MMM HH:mm")
+        : $"Point {Rows.Count}";
+
+    private List<double> GraphValues => ComparisonSeries.SelectMany(s => s.Values).ToList();
+
+    private double GetGraphValue(DdqRow row) => AppliedYAxis switch
+    {
+        "Capacity Utilisation" when SelectedDataset is not null => row.MwPower / SelectedDataset.CapacityMw * 100,
+        "DDQ Success" => row.Status == "Successful" ? 100 : 0,
+        _ => row.MwPower
+    };
+
+    private string BuildGraphPoints()
+    {
+        if (Rows.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var values = GraphValues;
+        var maximum = Math.Max(values.Max(), 1);
+
+        return string.Join(" ", values.Select((value, index) =>
+        {
+            var x = Rows.Count == 1 ? 72 : 72 + (898d * index / (Rows.Count - 1));
+            var y = 325 - (280d * value / maximum);
+            return FormattableString.Invariant($"{x:F1},{y:F1}");
+        }));
+    }
+
+    private sealed record DdqDataset(int Id, string Code, string Name, double CapacityMw, int AvailableRows, string State, string Region);
+
+    private sealed record DdqRow(
+        DateTime Timestamp,
+        DateTime SubmissionDate,
+        string State,
+        string Region,
+        string DataType,
+        string Interval,
+        double MwPower,
+        string Status);
+}

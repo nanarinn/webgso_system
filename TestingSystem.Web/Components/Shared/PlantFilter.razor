@@ -1,0 +1,40 @@
+<fieldset class="plant-filter">
+    <legend>Plants</legend>
+    <div class="plant-filter-controls">
+        <label class="filter-field">
+            <span>Choose a plant</span>
+            <select @bind="PendingId">
+                <option value="0">Select a plant to add</option>
+                @foreach (var plant in Plants.Where(p => !SelectedIds.Contains(p.Id)))
+                {
+                    <option value="@plant.Id">@plant.Name (@plant.PlantId) - @plant.State</option>
+                }
+            </select>
+        </label>
+        <button class="secondary-action" type="button" disabled="@(PendingId == 0)" @onclick="Add">+ Add plant</button>
+    </div>
+    <div class="plant-filter-chips" aria-live="polite">
+        @foreach (var plant in Plants.Where(p => SelectedIds.Contains(p.Id)))
+        {
+            <button type="button" class="plant-filter-chip" @onclick="() => Remove(plant.Id)" aria-label="@($"Remove {plant.Name}")">
+                @plant.Name <span aria-hidden="true">&times;</span>
+            </button>
+        }
+    </div>
+    <small>@(Plants.Count == 0 ? "No active plants are registered." : SelectedIds.Count == 0 ? "All active plants. Add plants to narrow your search." : $"{SelectedIds.Count} plant(s) selected. Add more or remove a selection.") Other filters also apply.</small>
+</fieldset>
+
+@code {
+    [Parameter] public List<LssPlant> Plants { get; set; } = [];
+    [Parameter] public HashSet<int> SelectedIds { get; set; } = [];
+    [Parameter] public EventCallback<HashSet<int>> SelectedIdsChanged { get; set; }
+    private int PendingId;
+    private async Task Add()
+    {
+        if (!Plants.Any(p => p.Id == PendingId)) return;
+        var ids = new HashSet<int>(SelectedIds) { PendingId };
+        PendingId = 0;
+        await SelectedIdsChanged.InvokeAsync(ids);
+    }
+    private Task Remove(int id) => SelectedIdsChanged.InvokeAsync(SelectedIds.Where(value => value != id).ToHashSet());
+}
