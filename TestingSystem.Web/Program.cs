@@ -71,6 +71,24 @@ app.UseAntiforgery();
 
 await DatabaseInitializer.InitialiseAsync(app.Services, app.Configuration);
 
+if (args.Contains("--seed-dummy-api", StringComparer.OrdinalIgnoreCase))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await DummyApiDataSeeder.SeedAsync(database);
+    var jobs = await database.CollectionJobs.CountAsync(job => job.Mode == "Simulated API");
+    var rawResponses = await database.RawApiResponses.CountAsync();
+    var readings = await database.SolarApiReadings.CountAsync();
+    Console.WriteLine();
+    Console.WriteLine("Simulated API seed completed.");
+    Console.WriteLine($"CollectionJobs:   {jobs:N0}");
+    Console.WriteLine($"RawApiResponses:  {rawResponses:N0}");
+    Console.WriteLine($"SolarApiReadings: {readings:N0}");
+    if (jobs == 0 || rawResponses == 0 || readings == 0)
+        throw new InvalidOperationException("Simulated API seed produced zero database rows.");
+    return;
+}
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapLoginEndpoints();

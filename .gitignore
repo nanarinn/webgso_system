@@ -12,6 +12,7 @@ dist/
 build/
 **/bin/
 **/obj/
+**/artifacts/
 coverage/
 .idea/
 *.log

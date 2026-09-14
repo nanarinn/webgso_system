@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using TestingSystem.Web.Models;
+using TestingSystem.Web.Demo;
 using TestingSystem.Web.Services;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
@@ -76,7 +77,7 @@ public partial class MmfAnalytics : ComponentBase
         AppliedStart = StartDate.Date;
         AppliedInterval = SelectedInterval;
         var selectedPlants = AnalyticsPlantFilter.Match(RegisteredPlants, SelectedPlantIds, SelectedState).ToList();
-        var streamNames = new[] { $"{SelectedParameter} Forecast", "Operational Availability", "Dispatch Performance" };
+        var streamNames = DemoData.MmfStreamNames(SelectedParameter);
 
         Datasets = selectedPlants.SelectMany(plant => streamNames.Select((name, index) => new MmfDataset(
             plant.Id * 3 + index,
@@ -105,26 +106,14 @@ public partial class MmfAnalytics : ComponentBase
     {
         var rowCount = Math.Min(dataset.AvailableRows, 200);
         var startTimestamp = AppliedStart;
-        var parameterFactor = AppliedParameter switch
-        {
-            "GHI" => 0.92,
-            "POA" => 1.08,
-            _ => 1d
-        };
-
         return Enumerable.Range(0, rowCount)
             .Select(index =>
             {
                 var timestamp = startTimestamp.AddMinutes(index * AppliedInterval);
-                var solarCurve = Math.Max(0, Math.Sin((timestamp.TimeOfDay.TotalHours - 6) / 13 * Math.PI));
-                var forecast = Math.Min(dataset.CapacityMw, solarCurve * dataset.CapacityMw * 0.9 * parameterFactor);
-                var variation = Math.Sin((index + dataset.Id) * 0.57) * 4.8;
-                var actual = Math.Clamp(forecast * (1 + variation / 100), 0, dataset.CapacityMw);
-                var variance = forecast <= 0 ? 0 : (actual - forecast) / forecast * 100;
-                var status = Math.Abs(variance) <= 5 ? "Within" : "Alert";
+                var reading = DemoData.MmfReading(dataset.CapacityMw, AppliedParameter, timestamp, index, dataset.Id);
 
                 return new MmfRow(timestamp, dataset.PlantName, dataset.State, AppliedParameter, Intervals.First(i => i.Value == AppliedInterval).Label,
-                    Math.Round(forecast, 2), Math.Round(actual, 2), Math.Round(variance, 2), status);
+                    reading.ForecastMw, reading.ActualMw, reading.VariancePercent, reading.Status);
             })
             .ToList();
     }

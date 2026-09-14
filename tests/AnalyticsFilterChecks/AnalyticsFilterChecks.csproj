@@ -6,8 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../TestingSystem.Web/Models/LssPlant.cs" Link="LssPlant.cs" />
-    <Compile Include="../../TestingSystem.Web/Services/AnalyticsPlantFilter.cs" Link="AnalyticsPlantFilter.cs" />
-    <Compile Include="../../TestingSystem.Web/Services/PlantGraphSeries.cs" Link="PlantGraphSeries.cs" />
+    <Compile Include="../../TestingSystem.Web/Database/UseCases/LssPlantTable.cs" Link="LssPlant.cs" />
+    <Compile Include="../../TestingSystem.Web/Connectors/UseCases/AnalyticsConnector.cs" Link="AnalyticsPlantFilter.cs" />
+    <Compile Include="../../TestingSystem.Web/Connectors/UseCases/PlantGraphConnector.cs" Link="PlantGraphSeries.cs" />
   </ItemGroup>
 </Project>

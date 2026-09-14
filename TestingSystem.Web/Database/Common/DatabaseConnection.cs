@@ -18,6 +18,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<CollectionSchedule> CollectionSchedules => Set<CollectionSchedule>();
     public DbSet<ReportExecution> ReportExecutions => Set<ReportExecution>();
     public DbSet<StoredDataRecord> StoredDataRecords => Set<StoredDataRecord>();
+    public DbSet<SolarApiReading> SolarApiReadings => Set<SolarApiReading>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -65,16 +66,17 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         builder.Entity<CollectionJobEntity>(item =>
         {
             item.Property(x => x.CollectionId).HasMaxLength(60);
-            item.Property(x => x.DataType).HasMaxLength(10);
-            item.Property(x => x.Mode).HasMaxLength(20);
+            item.Property(x => x.DataType).HasColumnType("nvarchar(max)");
+            item.Property(x => x.Mode).HasColumnType("nvarchar(max)");
             item.Property(x => x.Status).HasMaxLength(30);
-            item.Property(x => x.ErrorMessage).HasMaxLength(1000);
+            item.Property(x => x.ErrorMessage).HasColumnType("nvarchar(max)");
             item.HasIndex(x => x.CollectionId).IsUnique();
         });
 
         builder.Entity<RawApiResponse>(item =>
         {
-            item.Property(x => x.ContentType).HasMaxLength(100);
+            item.Property(x => x.ContentType).HasColumnType("nvarchar(max)");
+            item.Property(x => x.Payload).HasColumnType("nvarchar(max)");
             item.Property(x => x.Sha256).HasMaxLength(64);
             item.HasIndex(x => x.CollectionJobId);
         });
@@ -127,6 +129,17 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.Category).HasMaxLength(80);
             item.Property(x => x.RecordKey).HasMaxLength(160);
             item.HasIndex(x => new { x.Category, x.RecordKey }).IsUnique();
+        });
+
+        builder.Entity<SolarApiReading>(item =>
+        {
+            item.Property(x => x.DataType).HasMaxLength(30);
+            item.Property(x => x.Parameter).HasColumnType("nvarchar(max)");
+            item.Property(x => x.Value).HasPrecision(18, 6);
+            item.Property(x => x.Unit).HasColumnType("nvarchar(max)");
+            item.Property(x => x.ErrorMessage).HasColumnType("nvarchar(max)");
+            item.Property(x => x.SyntheticReason).HasColumnType("nvarchar(max)");
+            item.HasIndex(x => new { x.DataType, x.PlantId, x.IntervalStart });
         });
     }
 }

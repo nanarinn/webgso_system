@@ -2,6 +2,8 @@
 
 Filenames use descriptive names without FSD numbers.
 
+All prototype records and generated sample readings are kept in `TestingSystem.Web/Demo/DemoData.cs`. Change that file when adjusting demo content; production data must come from SQL Server and approved plant APIs.
+
 | Function | Razor frontend | C# logic | Connector | Database table |
 | --- | --- | --- | --- | --- |
 | Login | `Login.razor` | `Login.cs` | `LoginConnector.cs` | `UserTable.cs` |

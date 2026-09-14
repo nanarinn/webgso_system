@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using TestingSystem.Web.Demo;
 using TestingSystem.Web.Models;
 
 namespace TestingSystem.Web.Data;
@@ -15,6 +16,7 @@ public static class DatabaseInitializer
         await database.Database.EnsureCreatedAsync();
         await EnsurePlantTableAsync(database);
         await EnsureFsdCoreTablesAsync(database);
+        await EnsureSolarApiReadingTableAsync(database);
         await SeedDocumentsAsync(database);
         await SeedPlantsAsync(database);
         await SeedUsersAsync(serviceProvider, configuration);
@@ -82,41 +84,34 @@ public static class DatabaseInitializer
             return;
         }
 
-        database.SolarDocuments.AddRange(
-            new SolarDocument
-            {
-                ReferenceNumber = "LSS-PLN-001",
-                Title = "LSS Project Development Plan",
-                Category = "Planning",
-                ProjectStage = "Active",
-                UpdatedAt = DateTimeOffset.UtcNow.AddDays(-2)
-            },
-            new SolarDocument
-            {
-                ReferenceNumber = "LSS-PPA-002",
-                Title = "Power Purchase Agreement Register",
-                Category = "Commercial",
-                ProjectStage = "Review",
-                UpdatedAt = DateTimeOffset.UtcNow.AddDays(-4)
-            },
-            new SolarDocument
-            {
-                ReferenceNumber = "LSS-GRD-003",
-                Title = "Grid Interconnection Assessment",
-                Category = "Technical",
-                ProjectStage = "Approved",
-                UpdatedAt = DateTimeOffset.UtcNow.AddDays(-7)
-            },
-            new SolarDocument
-            {
-                ReferenceNumber = "LSS-COM-004",
-                Title = "Commercial Operation Milestone Tracker",
-                Category = "Operations",
-                ProjectStage = "Active",
-                UpdatedAt = DateTimeOffset.UtcNow.AddDays(-10)
-            });
+        database.SolarDocuments.AddRange(DemoData.SolarDocuments(DateTimeOffset.UtcNow));
 
         await database.SaveChangesAsync();
+    }
+
+    private static async Task EnsureSolarApiReadingTableAsync(ApplicationDbContext database)
+    {
+        await database.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'[SolarApiReadings]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [SolarApiReadings] (
+                    [Id] bigint IDENTITY PRIMARY KEY, [CollectionJobId] bigint NOT NULL,
+                    [PlantId] int NOT NULL, [DataType] nvarchar(30) NOT NULL,
+                    [SubmissionDateTime] datetime2 NOT NULL, [IntervalStart] datetime2 NOT NULL,
+                    [IntervalEnd] datetime2 NULL, [IntervalMinutes] int NULL,
+                    [Parameter] nvarchar(100) NOT NULL, [Value] decimal(18,6) NOT NULL,
+                    [Unit] nvarchar(30) NOT NULL, [ErrorCode] int NULL,
+                    [ErrorMessage] nvarchar(500) NULL, [IsSynthetic] bit NOT NULL,
+                    [SyntheticReason] nvarchar(500) NULL);
+                CREATE INDEX [IX_SolarApiReadings_Query]
+                    ON [SolarApiReadings] ([DataType], [PlantId], [IntervalStart]);
+            END
+
+            ALTER TABLE [SolarApiReadings] ALTER COLUMN [Parameter] nvarchar(max) NOT NULL;
+            ALTER TABLE [SolarApiReadings] ALTER COLUMN [Unit] nvarchar(max) NOT NULL;
+            ALTER TABLE [SolarApiReadings] ALTER COLUMN [ErrorMessage] nvarchar(max) NULL;
+            ALTER TABLE [SolarApiReadings] ALTER COLUMN [SyntheticReason] nvarchar(max) NULL;
+            """);
     }
 
     private static async Task EnsureFsdCoreTablesAsync(ApplicationDbContext database)
@@ -185,6 +180,11 @@ public static class DatabaseInitializer
                 [RecordKey] nvarchar(160) NOT NULL, [JsonData] nvarchar(max) NOT NULL,
                 [UpdatedAt] datetimeoffset NOT NULL,
                 CONSTRAINT [UQ_StoredDataRecords_Category_RecordKey] UNIQUE ([Category], [RecordKey]));
+
+            ALTER TABLE [CollectionJobs] ALTER COLUMN [DataType] nvarchar(max) NOT NULL;
+            ALTER TABLE [CollectionJobs] ALTER COLUMN [Mode] nvarchar(max) NOT NULL;
+            ALTER TABLE [CollectionJobs] ALTER COLUMN [ErrorMessage] nvarchar(max) NULL;
+            ALTER TABLE [RawApiResponses] ALTER COLUMN [ContentType] nvarchar(max) NOT NULL;
             """);
     }
 
@@ -230,27 +230,8 @@ public static class DatabaseInitializer
             return;
         }
 
-        database.LssPlants.AddRange(
-            CreatePlant("PLT-BDR-01", "Bidor Solar Plant", "Perak", 50),
-            CreatePlant("PLT-KLM-02", "Kulim Solar Plant", "Kedah", 100),
-            CreatePlant("PLT-SPG-03", "Sepang Solar Plant", "Selangor", 75),
-            CreatePlant("PLT-PGR-04", "Pengerang Solar Plant", "Johor", 90));
+        database.LssPlants.AddRange(DemoData.LssPlants());
         await database.SaveChangesAsync();
-    }
-
-    private static LssPlant CreatePlant(string plantId, string name, string state, decimal capacityMw)
-    {
-        var slug = name.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0].ToLowerInvariant();
-        return new LssPlant
-        {
-            PlantId = plantId,
-            Name = name,
-            State = state,
-            CapacityMw = capacityMw,
-            DdqApiEndpoint = $"https://api.sblss.local/ddq/{slug}",
-            MmfApiEndpoint = $"https://api.sblss.local/mmf/{slug}",
-            IsActive = true
-        };
     }
 
     private static void EnsureSucceeded(IdentityResult result, string operation)

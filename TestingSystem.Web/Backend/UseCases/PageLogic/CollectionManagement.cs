@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using TestingSystem.Web.Data;
+using TestingSystem.Web.Demo;
 using TestingSystem.Web.Services;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
@@ -14,16 +15,16 @@ public partial class CollectionManagement : ComponentBase
 
     private List<PlantConnection> Plants { get; set; } = [];
 
-    private List<CollectionJob> Jobs { get; set; } = [];
+    private List<DemoCollectionJob> Jobs { get; set; } = [];
     private string SearchTerm { get; set; } = string.Empty;
     private string SelectedPlantName { get; set; } = string.Empty;
     private bool IsRunDialogOpen { get; set; }
     private bool IsSummaryDialogOpen { get; set; }
     private string SummaryFilter { get; set; } = "All";
-    private CollectionJob? RunResult { get; set; }
+    private DemoCollectionJob? RunResult { get; set; }
     private int Sequence { get; set; } = 6;
 
-    private List<CollectionJob> SummaryJobs => SummaryFilter == "All"
+    private List<DemoCollectionJob> SummaryJobs => SummaryFilter == "All"
         ? Jobs
         : Jobs.Where(job => job.Status == SummaryFilter).ToList();
 
@@ -33,7 +34,7 @@ public partial class CollectionManagement : ComponentBase
 
     private PlantConnection SelectedPlant => Plants.First(plant => plant.Name == SelectedPlantName);
 
-    private List<CollectionJob> FilteredJobs => string.IsNullOrWhiteSpace(SearchTerm)
+    private List<DemoCollectionJob> FilteredJobs => string.IsNullOrWhiteSpace(SearchTerm)
         ? Jobs
         : Jobs.Where(job => job.PlantName.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
                 || job.State.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
@@ -52,18 +53,9 @@ public partial class CollectionManagement : ComponentBase
             .Select(plant => new PlantConnection(plant.PlantId, plant.Name, plant.State, plant.DdqApiEndpoint))
             .ToListAsync();
         SelectedPlantName = Plants[0].Name;
-        var now = DateTime.Now;
-        var seed = new[]
-        {
-            CreateJob(Plants[0], "Auto", "Successful", now.AddMinutes(-18), 1),
-            CreateJob(Plants[1], "Manual", "Successful", now.AddHours(-2), 2),
-            CreateJob(Plants[2], "Auto", "Failed", now.AddHours(-5), 3),
-            CreateJob(Plants[3], "Auto", "Successful", now.AddDays(-1), 4),
-            CreateJob(Plants[0], "Manual", "Failed", now.AddDays(-1).AddHours(-3), 5),
-            CreateJob(Plants[1], "Auto", "Successful", now.AddDays(-2), 6)
-        };
+        var seed = DemoData.CollectionJobs(Plants.Select(p => p.Name).ToList(), Plants.Select(p => p.State).ToList(), DateTime.Now);
         await DataStore.SeedAsync(DataCategory, seed.Select(item => (item.CollectionId, item)));
-        Jobs = await DataStore.LoadAsync<CollectionJob>(DataCategory);
+        Jobs = await DataStore.LoadAsync<DemoCollectionJob>(DataCategory);
         Sequence = Math.Max(Sequence, Jobs.Count);
     }
 
@@ -97,32 +89,15 @@ public partial class CollectionManagement : ComponentBase
         Sequence++;
         var apiResult = await ApiClient.CollectAsync(SelectedPlant.Name, "DDQ", SelectedPlant.ApiUrl);
         var status = apiResult.IsSuccessful ? "Successful" : "Failed";
-        var job = CreateJob(SelectedPlant, "Manual", status, DateTime.Now, Sequence);
+        var job = DemoData.CreateCollectionJob(SelectedPlant.Name, SelectedPlant.State, "Manual", status, DateTime.Now, Sequence);
         job = job with { ResponseMessage = apiResult.Message };
         await DataStore.SaveAsync(DataCategory, job.CollectionId, job);
         Jobs.Insert(0, job);
         RunResult = job;
     }
 
-    private static CollectionJob CreateJob(PlantConnection plant, string mode, string status, DateTime runAt, int sequence)
-    {
-        var collectionId = $"DDQ-{runAt:yyyyMMdd}-{sequence:000}";
-        var description = status == "Successful"
-            ? "DDQ interval records collected and validated."
-            : "Plant API did not return a complete interval dataset.";
-        var responseMessage = status == "Successful"
-            ? $"DDQ data from {plant.Name} was received and validated successfully."
-            : $"Collection from {plant.Name} failed validation. Review the API configuration before retrying.";
-
-        return new CollectionJob(collectionId, plant.Name, plant.State, mode, runAt.Date, runAt, status,
-            description, responseMessage, 1.4 + (sequence % 6) * 0.7);
-    }
-
     private static string GetPlantCode(string plantName) => string.Concat(
         plantName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(word => word[0]));
 
     private sealed record PlantConnection(string PlantId, string Name, string State, string ApiUrl);
-    private sealed record CollectionJob(string CollectionId, string PlantName, string State, string Mode,
-        DateTime SubmissionDate, DateTime RunAt, string Status, string Description,
-        string ResponseMessage, double DurationSeconds);
 }

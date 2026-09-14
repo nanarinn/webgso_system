@@ -1,0 +1,131 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using TestingSystem.Web.Database.Entities;
+using TestingSystem.Web.Models;
+
+namespace TestingSystem.Web.Data;
+
+public static class DummyApiDataSeeder
+{
+    private static readonly string[] DataTypes =
+        ["Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month Ahead"];
+
+    private static readonly (string Name, string State, decimal Capacity)[] PlantDefinitions =
+    [
+        ("Northern Star Solar", "Kedah", 50m),
+        ("Perak Green Energy", "Perak", 60m),
+        ("Selangor Solar Park", "Selangor", 75m),
+        ("Seremban Solar Farm", "Negeri Sembilan", 55m),
+        ("Johor Sun Power", "Johor", 90m),
+        ("Melaka Solar Valley", "Melaka", 65m),
+        ("Pahang Renewable Plant", "Pahang", 80m),
+        ("Terengganu Solar Coast", "Terengganu", 70m),
+        ("Kelantan Solar Field", "Kelantan", 45m),
+        ("Penang Solar Hub", "Penang", 58m)
+    ];
+
+    public static async Task SeedAsync(ApplicationDbContext database)
+    {
+        Console.WriteLine("Resetting previous DDQ test data...");
+        await database.SolarApiReadings.ExecuteDeleteAsync();
+        await database.RawApiResponses.ExecuteDeleteAsync();
+        await database.CollectionJobs.ExecuteDeleteAsync();
+        await database.StoredDataRecords.Where(x => x.Category == "DdqFilterResults").ExecuteDeleteAsync();
+        await database.LssPlants.ExecuteUpdateAsync(update => update.SetProperty(x => x.IsActive, false));
+        await database.LssPlants.Where(x => x.PlantId.StartsWith("SAMPLE-") || x.PlantId.StartsWith("DUMMY-"))
+            .ExecuteDeleteAsync();
+
+        var plants = new List<LssPlant>();
+        for (var index = 0; index < PlantDefinitions.Length; index++)
+        {
+            var definition = PlantDefinitions[index];
+            plants.Add(new LssPlant
+            {
+                PlantId = $"DUMMY-{index + 1:00}", Name = definition.Name,
+                State = definition.State, CapacityMw = definition.Capacity,
+                DdqApiEndpoint = $"https://simulated-api.local/ddq/DUMMY-{index + 1:00}",
+                MmfApiEndpoint = $"https://simulated-api.local/mmf/DUMMY-{index + 1:00}",
+                IsActive = true, ApiConnectionStatus = "Simulated API"
+            });
+        }
+        database.LssPlants.AddRange(plants);
+        await database.SaveChangesAsync();
+
+        var submission = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day,
+            DateTime.Now.Hour, DateTime.Now.Minute, 0);
+        var rangeStart = DateTime.Today.AddDays(-2);
+        const int periods = 3 * 96;
+
+        foreach (var plant in plants)
+        {
+            foreach (var dataType in DataTypes)
+            {
+                var apiResponse = BuildApiResponse(plant, dataType, submission, rangeStart, periods);
+                var rawJson = JsonSerializer.Serialize(apiResponse, new JsonSerializerOptions { WriteIndented = true });
+                var compactType = new string(dataType.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+                var job = new CollectionJobEntity
+                {
+                    CollectionId = $"API-DUMMY-{plant.PlantId}-{compactType}", PlantId = plant.Id,
+                    DataType = dataType, Mode = "Simulated API", SubmissionDate = DateOnly.FromDateTime(submission),
+                    StartedAt = DateTimeOffset.UtcNow, CompletedAt = DateTimeOffset.UtcNow, Status = "Completed"
+                };
+                database.CollectionJobs.Add(job);
+                await database.SaveChangesAsync();
+
+                database.RawApiResponses.Add(new RawApiResponse
+                {
+                    CollectionJobId = job.Id, ReceivedAt = DateTimeOffset.UtcNow, HttpStatusCode = 200,
+                    ContentType = "application/json", Payload = rawJson,
+                    Sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawJson)))
+                });
+
+                // Translation stage: read the stored API contract and map it to the normalized SQL table.
+                var translated = JsonSerializer.Deserialize<DummyApiResponse>(rawJson)
+                    ?? throw new InvalidDataException("The simulated API response could not be translated.");
+                database.SolarApiReadings.AddRange(translated.ForecastData.Select(row => new SolarApiReading
+                {
+                    CollectionJobId = job.Id, PlantId = plant.Id, DataType = translated.DataType,
+                    SubmissionDateTime = translated.SubmissionDateTime, IntervalStart = row.StartTime,
+                    IntervalEnd = row.EndTime, IntervalMinutes = 15,
+                    Parameter = "ActivePowerProduction", Value = row.ForecastValue,
+                    Unit = row.ValueUnit, ErrorCode = 0, ErrorMessage = "OK", IsSynthetic = true,
+                    SyntheticReason = "Generated by the local simulated API for system testing."
+                }));
+                await database.SaveChangesAsync();
+                database.ChangeTracker.Clear();
+                Console.WriteLine($"  {plant.PlantId} / {dataType}: {translated.ForecastData.Count:N0} readings");
+            }
+        }
+    }
+
+    private static DummyApiResponse BuildApiResponse(
+        LssPlant plant, string dataType, DateTime submission, DateTime rangeStart, int periods)
+    {
+        var typeFactor = dataType switch
+        {
+            "Day Ahead" => 0.97,
+            "Week Ahead" => 0.93,
+            "4 Month Ahead" => 0.88,
+            _ => 1.0
+        };
+        var readings = Enumerable.Range(0, periods).Select(index =>
+        {
+            var timestamp = rangeStart.AddMinutes(index * 15);
+            var hour = timestamp.TimeOfDay.TotalHours;
+            var daylight = Math.Max(0, Math.Sin((hour - 6) / 12 * Math.PI));
+            var variation = Math.Sin(index * 0.47 + plant.Id) * 1.8;
+            var value = Math.Clamp(daylight * (double)plant.CapacityMw * 0.84 * typeFactor + variation,
+                0, (double)plant.CapacityMw);
+            return new DummyApiReading(timestamp, timestamp.AddMinutes(15), Math.Round((decimal)value, 2), "MW");
+        }).ToList();
+        return new DummyApiResponse("ChatGPT Local Simulated Solar API", plant.PlantId,
+            plant.Name, dataType, submission, readings);
+    }
+
+    private sealed record DummyApiResponse(string Source, string PlantId, string PlantName,
+        string DataType, DateTime SubmissionDateTime, List<DummyApiReading> ForecastData);
+    private sealed record DummyApiReading(DateTime StartTime, DateTime EndTime,
+        decimal ForecastValue, string ValueUnit);
+}

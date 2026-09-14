@@ -7,303 +7,342 @@
 <PageTitle>DDQ Analytics | SBLSS System</PageTitle>
 
 <div class="ddq-page">
-<header class="page-heading ddq-heading">
-    <div>
-        <p class="section-label">Data quality</p>
-        <h1>DDQ Analytics</h1>
-        <p class="page-subtitle">Filter submissions, select a dataset, then review its time-series power values.</p>
-    </div>
-    <span class="admin-badge"><span></span> Dynamic analysis</span>
-</header>
-
-<section class="filter-panel" aria-labelledby="filter-heading">
-    <div class="filter-panel-heading">
+    <header class="page-heading ddq-heading">
         <div>
-            <p class="section-label">Step 1 · Query controls</p>
-            <h2 id="filter-heading">Filter</h2>
+            <p class="section-label">Data query</p>
+            <h1>DDQ Analytics</h1>
+            <p class="page-subtitle">Optionally choose a location, then select one or more data types and a date-time range.</p>
         </div>
-        <button class="filter-reset" type="button" @onclick="ResetFilters">Reset</button>
-    </div>
+        <span class="admin-badge"><span></span> Dynamic analysis</span>
+    </header>
 
-    <form @onsubmit="ApplyFilters" @onsubmit:preventDefault>
-        <PlantFilter @key="FilterVersion" Plants="RegisteredPlants" @bind-SelectedIds="SelectedPlantIds" />
-        <div class="filter-grid">
-            <fieldset class="filter-field filter-date-range">
-                <legend>Date range</legend>
-                <div class="date-pair">
-                    <label><span>From</span><input type="date" @bind="DateFrom" @bind:format="yyyy-MM-dd" /></label>
-                    <label><span>To</span><input type="date" @bind="DateTo" @bind:format="yyyy-MM-dd" /></label>
-                </div>
-            </fieldset>
-
-            <label class="filter-field">
-                <span>Data interval</span>
-                <select @bind="SelectedInterval">
-                    @foreach (var interval in Intervals)
-                    {
-                        <option value="@interval.Value">@interval.Label</option>
-                    }
-                </select>
-            </label>
-
-            <label class="filter-field">
-                <span>Data type</span>
-                <select @bind="SelectedDataType">
-                    @foreach (var dataType in DataTypes)
-                    {
-                        <option value="@dataType">@dataType</option>
-                    }
-                </select>
-            </label>
-
-            <label class="filter-field">
-                <span>Submission date</span>
-                <input type="date" @bind="SubmissionDate" @bind:format="yyyy-MM-dd" />
-                <small>Date the data was retrieved</small>
-            </label>
-
-            <label class="filter-field">
-                <span>State</span>
-                <select @bind="SelectedState">
-                    <option value="">All states</option>
-                    @foreach (var state in States)
-                    {
-                        <option value="@state">@state</option>
-                    }
-                </select>
-            </label>
-
-            <label class="filter-field">
-                <span>Region</span>
-                <select @bind="SelectedRegion">
-                    <option value="">All regions</option>
-                    @foreach (var region in Regions)
-                    {
-                        <option value="@region">@region</option>
-                    }
-                </select>
-            </label>
-
-            <fieldset class="filter-field filter-timestamp">
-                <legend>Timestamp</legend>
-                <div class="date-pair">
-                    <label><span>Start</span><input type="datetime-local" @bind="TimestampStart" @bind:format="yyyy-MM-ddTHH:mm" /></label>
-                    <label><span>End</span><input type="datetime-local" @bind="TimestampEnd" @bind:format="yyyy-MM-ddTHH:mm" /></label>
-                </div>
-            </fieldset>
-        </div>
-
-        @if (!string.IsNullOrEmpty(ValidationMessage))
-        {
-            <p class="filter-error" role="alert">@ValidationMessage</p>
-        }
-
-        <div class="filter-actions">
-            <span>Apply the filters to find available DDQ datasets.</span>
-            <button class="primary-action" type="submit">Apply Filter <span>→</span></button>
-        </div>
-    </form>
-</section>
-
-@if (HasApplied)
-{
-    <section class="filter-summary" aria-live="polite">
-        <span class="summary-mark">DDQ</span>
-        <div>
-            <strong>Filtered data description</strong>
-            <p>@ResultDescription</p>
-        </div>
-    </section>
-
-    <section class="dataset-panel" aria-labelledby="dataset-heading">
-        <div class="dataset-heading">
+    <section class="filter-panel" aria-labelledby="filter-heading">
+        <div class="filter-panel-heading">
             <div>
-                <p class="section-label">Step 2</p>
-                <h2 id="dataset-heading">Select a DDQ dataset</h2>
-                <p>Choose one item below to display its time-series table.</p>
+                <p class="section-label">Step 1 · Query controls</p>
+                <h2 id="filter-heading">Filter</h2>
             </div>
-            <span class="result-count">@Datasets.Count result(s)</span>
         </div>
 
-        <div class="dataset-list">
-            @if (Datasets.Count == 0)
+        <form @onsubmit="ApplyFilters" @onsubmit:preventDefault>
+            <div class="compact-filter-layout">
+            <div class="filter-section location-section">
+                <div class="filter-section-heading"><span>1</span><div><strong>Plant or location</strong><small>Leave empty for all active plants.</small></div></div>
+            <PlantFilter @key="FilterVersion"
+                         Plants="RegisteredPlants"
+                         SelectedIds="SelectedPlantIds"
+                         SelectedIdsChanged="OnPlantsChanged"
+                         Disabled="PlantFilterDisabled" />
+
+            <div class="location-divider"><span>or filter by one location</span></div>
+            <div class="location-alternatives">
+                <label class="filter-field">
+                    <span>State</span>
+                    <select value="@SelectedState" @onchange="OnStateChanged" disabled="@StateFilterDisabled">
+                        <option value="">Choose a state</option>
+                        @foreach (var state in AvailableStates) { <option value="@state">@state</option> }
+                    </select>
+                    @if (StateFilterDisabled) { <small>Unavailable while Plants or Region is selected.</small> }
+                </label>
+                <div class="location-or">OR</div>
+                <label class="filter-field">
+                    <span>Region</span>
+                    <select value="@SelectedRegion" @onchange="OnRegionChanged" disabled="@RegionFilterDisabled">
+                        <option value="">Choose a region</option>
+                        @foreach (var region in AvailableRegions) { <option value="@region">@region</option> }
+                    </select>
+                    @if (RegionFilterDisabled) { <small>Unavailable while Plants or State is selected.</small> }
+                </label>
+            </div>
+            </div>
+
+            <div class="compact-filter-right">
+            <div class="filter-section data-type-section">
+                <div class="filter-section-heading"><span>2</span><div><strong>Data type and interval</strong><small>Select the datasets and interval to display.</small></div></div>
+                <div class="data-type-and-interval">
+                    <div class="data-type-checks">
+                        @foreach (var dataType in DataTypes)
+                        {
+                            <label>
+                                <input type="checkbox" checked="@SelectedDataTypes.Contains(dataType)"
+                                       @onchange="args => ToggleDataType(dataType, args.Value)" />
+                                <span>@dataType</span>
+                            </label>
+                        }
+                    </div>
+                    <label class="filter-field interval-control">
+                        <span>Data interval</span>
+                        <select @bind="SelectedInterval">
+                            @foreach (var interval in Intervals) { <option value="@interval.Value">@interval.Label</option> }
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            <div class="filter-section period-section">
+                <div class="filter-section-heading"><span>3</span><div><strong>Period</strong><small>Choose the data timestamp and submission period.</small></div></div>
+                <div class="period-filter-grid period-only-grid">
+                    <fieldset class="filter-field submission-period-field required-filter-field">
+                        <legend>Submission date range <span aria-hidden="true">*</span></legend>
+                        <div class="date-pair">
+                            <div class="date-time-control">
+                                <span>Start</span>
+                                <label><small>Date</small><input type="date" required value="@(SubmissionStartDate?.ToString("yyyy-MM-dd") ?? string.Empty)" max="@(SubmissionEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)" @oninput="OnSubmissionStartDateChanged" /></label>
+                            </div>
+                            <div class="date-time-control">
+                                <span>End</span>
+                                <label><small>Date</small><input type="date" required value="@(SubmissionEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)" min="@(SubmissionStartDate?.ToString("yyyy-MM-dd") ?? string.Empty)" @oninput="OnSubmissionEndDateChanged" /></label>
+                            </div>
+                        </div>
+                        <small>Required. Select both the Start Date and End Date.</small>
+                    </fieldset>
+                    <fieldset class="filter-field filter-date-time-range">
+                        <legend>Data timestamp range</legend>
+                        <div class="date-pair">
+                            <div class="date-time-control">
+                                <span>Start</span>
+                                <div><label><small>Date</small><input type="date" value="@(RangeStart?.ToString("yyyy-MM-dd") ?? string.Empty)" max="@(RangeEnd?.ToString("yyyy-MM-dd") ?? string.Empty)" @oninput="OnRangeStartDateChanged" /></label>
+                                <label><small>Time</small><input type="time" value="@(RangeStart?.ToString("HH:mm") ?? string.Empty)" step="900" @oninput="OnRangeStartTimeChanged" /></label></div>
+                            </div>
+                            <div class="date-time-control">
+                                <span>End</span>
+                                <div><label><small>Date</small><input type="date" value="@(RangeEnd?.ToString("yyyy-MM-dd") ?? string.Empty)" min="@(RangeStart?.ToString("yyyy-MM-dd") ?? string.Empty)" @oninput="OnRangeEndDateChanged" /></label>
+                                <label><small>Time</small><input type="time" value="@(RangeEnd?.ToString("HH:mm") ?? string.Empty)" step="900" @oninput="OnRangeEndTimeChanged" /></label></div>
+                            </div>
+                        </div>
+                        <small>Optional. Leave both Start and End empty to include every data timestamp.</small>
+                    </fieldset>
+                </div>
+            </div>
+            </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(ValidationMessage))
             {
-                <p class="analytics-empty" role="status">No plants match these filters. Change your selection or choose All states / All regions.</p>
+                <p class="filter-error" role="alert">@ValidationMessage</p>
             }
-            @foreach (var dataset in Datasets)
-            {
-                <button class="dataset-item @(SelectedDataset?.Id == dataset.Id ? "selected" : null)"
-                        type="button"
-                        @onclick="() => SelectDataset(dataset)">
-                    <span class="dataset-code">@dataset.Code</span>
-                    <span class="dataset-name">
-                        <strong>@dataset.Name</strong>
-                        <small>@AppliedDataType · @dataset.State, @dataset.Region · Demo data</small>
-                    </span>
-                    <span class="dataset-meta">
-                        <strong>@dataset.CapacityMw.ToString("N0") MW</strong>
-                        <small>@dataset.AvailableRows interval(s)</small>
-                    </span>
-                    <span class="dataset-open">View table <b>→</b></span>
-                </button>
-            }
-        </div>
+
+            <div class="filter-actions">
+                <span>Results will use the same column layout as the solar submission template.</span>
+                <div class="filter-action-buttons">
+                    <button class="filter-reset" type="button" @onclick="ResetFilters">Reset</button>
+                    <button class="primary-action" type="submit">Apply Filter <span>→</span></button>
+                </div>
+            </div>
+        </form>
     </section>
-}
 
-@if (SelectedDataset is not null)
-{
-    @if (ViewMode == "Table")
+    @if (HasApplied)
     {
-        <section class="table-panel ddq-table-panel">
+        <section class="filter-summary" aria-live="polite">
+            <span class="summary-mark">DDQ</span>
+            <div><strong>Filtered data</strong><p>@ResultDescription</p></div>
+        </section>
+
+        <section class="table-panel ddq-template-panel">
             <div class="ddq-table-heading">
                 <div>
-                    <p class="section-label">Step 3 · Time-series result</p>
-                    <h2>@SelectedDataset.Name</h2>
-                    <p>@SelectedDataset.Code · @SelectedDataset.CapacityMw.ToString("N0") MW registered capacity</p>
+                    <p class="section-label">Step 2 · Results</p>
+                    <h2>Solar data submission</h2>
+                    <p>Submission: @SubmissionPeriodLabel · @ResultPlants.Count plant(s)</p>
                 </div>
-                <div class="view-actions">
-                    <span class="result-count">@Rows.Count row(s)</span>
-                    <button class="graph-action" type="button" @onclick="OpenGraphSettings">
-                        Convert to Graph <span>↗</span>
-                    </button>
+                <div class="result-heading-actions">
+                    <span class="result-count">@TableRows.Count row(s)</span>
+                    @if (TableRows.Count > 0)
+                    {
+                        <button type="button" class="result-download excel" disabled="@IsExporting" @onclick="DownloadExcelAsync">
+                            @(IsExporting ? "Preparing Excel..." : "↓ Download Excel")
+                        </button>
+                    }
                 </div>
             </div>
 
-            <div class="ddq-table" role="table" aria-label="Filtered DDQ power data">
-                <div class="ddq-table-row ddq-table-header" role="row">
-                    <span>Timestamp</span>
-                    <span>Submission date</span>
-                    <span>State</span>
-                    <span>Region</span>
-                    <span>Data type</span>
-                    <span>Interval</span>
-                    <span>MW Power</span>
-                    <span>DDQ status</span>
-                </div>
-                @foreach (var row in Rows)
+            <div class="result-view-switch" role="group" aria-label="Result display mode">
+                <button type="button" class="@(DisplayMode == "table" ? "active" : null)" @onclick='() => SetDisplayMode("table")'><span aria-hidden="true">▦</span> Table View</button>
+                <button type="button" class="@(DisplayMode == "graph" ? "active" : null)" @onclick='() => SetDisplayMode("graph")'><span aria-hidden="true">⌁</span> Graph View</button>
+            </div>
+
+            <div class="data-type-tabs" role="tablist" aria-label="Selected data types">
+                @foreach (var dataType in DataTypes.Where(SelectedDataTypes.Contains))
                 {
-                    <div class="ddq-table-row" role="row">
-                        <time datetime="@row.Timestamp.ToString("O")">@row.Timestamp.ToString("dd MMM yyyy, HH:mm")</time>
-                        <span>@row.SubmissionDate.ToString("dd MMM yyyy")</span>
-                        <span>@row.State</span>
-                        <span>@row.Region</span>
-                        <span>@row.DataType</span>
-                        <span>@row.Interval</span>
-                        <strong>@row.MwPower.ToString("N2") MW</strong>
-                        <span><span class="status-pill status-@row.Status.ToLowerInvariant()">@row.Status</span></span>
-                    </div>
+                    <button type="button"
+                            role="tab"
+                            aria-selected="@(ActiveDataType == dataType)"
+                            class="@(ActiveDataType == dataType ? "active" : null)"
+                            @onclick="() => SelectDataTypeTab(dataType)">@dataType</button>
                 }
             </div>
+
+            @if (ResultPlants.Count == 0)
+            {
+                <p class="analytics-empty">No active plants match this filter.</p>
+            }
+            else
+            {
+                <div class="excel-sheet-heading">
+                    <div class="excel-sheet-title">SOLAR DATA SUBMISSION / DATA MONITORING</div>
+                    <div class="excel-sheet-meta">
+                        <span><small>Data type</small><strong>@ActiveDataType</strong></span>
+                        <span><small>Submission period</small><strong>@SubmissionPeriodLabel</strong></span>
+                        <span><small>Data interval</small><strong>@IntervalLabel</strong></span>
+                        <span><small>Data timestamp range</small><strong>@TimestampRangeLabel</strong></span>
+                    </div>
+                </div>
+                @if (DisplayMode == "graph")
+                {
+                    <div class="graph-panel">
+                        <div class="graph-heading">
+                            <div><strong>Generation profile</strong><small>Date/time versus active power (MW)</small></div>
+                            <div class="graph-metrics">
+                                <span><b>@(ResultPlants.Count - HiddenGraphPlantIds.Count)</b> visible plant(s)</span>
+                                <span><b>@GraphMaximum.ToString("N0") MW</b> scale</span>
+                                <span><b>@TableRows.Count</b> intervals</span>
+                            </div>
+                        </div>
+                        <div class="graph-help"><span>ⓘ</span> Hover over any point to see the plant, date, time and MW value. Click a legend item to show or hide its line.</div>
+                        @if (TableRows.Count == 0)
+                        {
+                            <p class="analytics-empty">No readings are available for this graph.</p>
+                        }
+                        else
+                        {
+                            <div class="graph-scroll">
+                                <svg class="ddq-line-chart" viewBox="0 0 1100 420" role="img" aria-label="Plant active power by date and time">
+                                    <defs>
+                                        <linearGradient id="chartBackground" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stop-color="#f5faff" />
+                                            <stop offset="100%" stop-color="#ffffff" />
+                                        </linearGradient>
+                                        <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
+                                            <feGaussianBlur stdDeviation="1.2" result="blur" />
+                                            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                                        </filter>
+                                    </defs>
+                                    <rect x="74" y="24" width="990" height="340" fill="#fbfdff" class="chart-plot-bg" />
+                                    @foreach (var tick in GraphYTicks())
+                                    {
+                                        <line x1="74" y1="@tick.Y" x2="1064" y2="@tick.Y" class="chart-grid-line" />
+                                        <svg:text x="64" y="@(tick.Y + 4)" text-anchor="end" class="chart-axis-label">@tick.Value.ToString("N0")</svg:text>
+                                    }
+                                    @foreach (var tick in GraphXTicks())
+                                    {
+                                        <line x1="@tick.X" y1="24" x2="@tick.X" y2="364" class="chart-grid-line vertical" />
+                                        <svg:text x="@tick.X" y="386" text-anchor="middle" class="chart-axis-label">@tick.Value.ToString("dd MMM HH:mm")</svg:text>
+                                    }
+                                    <svg:text x="18" y="194" transform="rotate(-90 18 194)" text-anchor="middle" class="chart-axis-title">Active power (MW)</svg:text>
+                                    <svg:text x="569" y="412" text-anchor="middle" class="chart-axis-title">Date and time</svg:text>
+                                    @foreach (var plant in ResultPlants.Where(x => !HiddenGraphPlantIds.Contains(x.Id)))
+                                    {
+                                        <polyline points="@GraphPoints(plant)" fill="none" stroke="@GraphColour(plant)" class="plant-series">
+                                            <title>@plant.Name (@plant.PlantId)</title>
+                                        </polyline>
+                                        @foreach (var point in GraphPointItems(plant))
+                                        {
+                                            <g class="chart-hover-target">
+                                                @if (ShowGraphCrosshair)
+                                                {
+                                                    <line x1="@point.X" y1="24" x2="@point.X" y2="364" class="chart-crosshair" />
+                                                    <line x1="74" y1="@point.Y" x2="1064" y2="@point.Y" class="chart-crosshair" />
+                                                }
+                                                <circle cx="@point.X" cy="@point.Y" r="6" fill="transparent" class="plant-data-hit" stroke="@GraphColour(plant)">
+                                                    <title>@plant.Name (@plant.PlantId)&#10;@point.Timestamp.ToString("dd MMM yyyy, HH:mm")&#10;@ActiveDataType: @point.Value.ToString("N2") MW</title>
+                                                </circle>
+                                            </g>
+                                        }
+                                    }
+                                </svg>
+                            </div>
+                        }
+                        <div class="graph-legend-section">
+                            <div class="graph-legend-title">
+                                <div><strong>Plant legend</strong><small>@FilteredLegendPlants.Count() of @ResultPlants.Count site(s)</small></div>
+                                <div class="graph-legend-tools">
+                                    <label class="legend-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search plant or ID" @bind="LegendSearch" @bind:event="oninput" /></label>
+                                    <button type="button" class="crosshair-toggle @(ShowGraphCrosshair ? "active" : null)"
+                                            aria-pressed="@ShowGraphCrosshair" @onclick="ToggleGraphCrosshair">
+                                        <span aria-hidden="true">⌖</span> Crosshair @(ShowGraphCrosshair ? "On" : "Off")
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="graph-legend" aria-label="Plant line visibility">
+                                @foreach (var plant in FilteredLegendPlants)
+                                {
+                                    var hidden = HiddenGraphPlantIds.Contains(plant.Id);
+                                    <button type="button" class="@(hidden ? "hidden" : null)"
+                                            aria-pressed="@(!hidden)" @onclick="() => ToggleGraphPlant(plant.Id)">
+                                        <i style="background:@GraphColour(plant)"></i>
+                                        <span><b>@plant.Name</b><small>@plant.PlantId</small></span>
+                                        <em aria-hidden="true">@(hidden ? "○" : "●")</em>
+                                    </button>
+                                }
+                            </div>
+                            @if (!FilteredLegendPlants.Any())
+                            {
+                                <p class="legend-empty">No plant matches “@LegendSearch”.</p>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                <div class="template-table-wrap">
+                    <table class="template-data-table">
+                        <thead>
+                            <tr>
+                                <th class="excel-row-number">#</th>
+                                <th rowspan="2" class="sticky-submission">Submission Date &amp; Time</th>
+                                <th rowspan="2" class="sticky-timestamp">Data Timestamp</th>
+                                <th rowspan="2">Year</th>
+                                <th rowspan="2">Month</th>
+                                <th rowspan="2">Day</th>
+                                <th rowspan="2" title="15-minute period; resets to 1 at midnight">Period</th>
+                                @foreach (var plant in ResultPlants)
+                                {
+                                    <th title="@plant.PlantId">@plant.Name</th>
+                                }
+                            </tr>
+                            <tr class="plant-code-row">
+                                <th class="excel-row-number"></th>
+                                @foreach (var plant in ResultPlants)
+                                {
+                                    <th>@plant.PlantId · MW</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var rowIndex = 0; rowIndex < TableRows.Count; rowIndex++)
+                            {
+                                var row = TableRows[rowIndex];
+                                <tr>
+                                    <th class="excel-row-number">@(rowIndex + 1)</th>
+                                    <td class="submission-cell sticky-submission">@SubmissionTableLabel</td>
+                                    <td class="sticky-timestamp">@row.Timestamp.ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>@row.Timestamp.Year</td>
+                                    <td>@row.Timestamp.Month</td>
+                                    <td>@row.Timestamp.Day</td>
+                                    <td title="@row.Timestamp.ToString("HH:mm:ss")">@PeriodNumber(row.Timestamp)</td>
+                                    @foreach (var plant in ResultPlants)
+                                    {
+                                        if (row.PlantValues.TryGetValue(plant.Id, out var plantValue))
+                                        {
+                                            <td>@plantValue.ToString("N2")</td>
+                                        }
+                                        else
+                                        {
+                                            <td class="missing-reading" title="No reading was supplied for this plant and interval">—</td>
+                                        }
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (TableRows.Count == 500)
+                {
+                    <p class="table-limit-note">Showing the first 500 intervals for browser performance.</p>
+                }
+                }
+            }
         </section>
     }
-    else
-    {
-        <section class="graph-panel">
-            <div class="graph-heading">
-                <div>
-                    <p class="section-label">Step 3 · Graph view</p>
-                    <h2>Filtered plant comparison</h2>
-                    <p>@AppliedYAxis plotted against @AppliedXAxis · @ComparisonSeries.Count plant(s) · Demo data</p>
-                </div>
-                <div class="view-actions">
-                    <button class="secondary-action" type="button" @onclick="OpenGraphSettings">Graph Settings</button>
-                    <button class="graph-action" type="button" @onclick="ShowTable">Back to Table <span>↩</span></button>
-                </div>
-            </div>
-
-            <div class="graph-summary-grid">
-                <div><small>Maximum</small><strong>@GraphMaximum.ToString("N2") @GraphUnit</strong></div>
-                <div><small>Average</small><strong>@GraphAverage.ToString("N2") @GraphUnit</strong></div>
-                <div><small>Data points across plants</small><strong>@GraphValues.Count</strong></div>
-            </div>
-
-            <div class="ddq-chart-wrap">
-                <div class="y-axis-title">@AppliedYAxis (@GraphUnit)</div>
-                <svg class="ddq-chart" viewBox="0 0 1000 390" role="img" aria-label="@AppliedYAxis against @AppliedXAxis graph">
-                    <defs>
-                        <linearGradient id="ddqAreaFill" x1="0" x2="0" y1="0" y2="1">
-                            <stop offset="0%" stop-color="#1068b8" stop-opacity="0.3" />
-                            <stop offset="100%" stop-color="#1068b8" stop-opacity="0.02" />
-                        </linearGradient>
-                    </defs>
-                    @foreach (var gridY in new[] { 45, 115, 185, 255, 325 })
-                    {
-                        <line class="chart-grid-line" x1="72" y1="@gridY" x2="970" y2="@gridY" />
-                    }
-                    <line class="chart-axis-line" x1="72" y1="25" x2="72" y2="325" />
-                    <line class="chart-axis-line" x1="72" y1="325" x2="970" y2="325" />
-                    @for (var i = 0; i < ComparisonSeries.Count; i++)
-                    {
-                        var series = ComparisonSeries[i];
-                        <polyline fill="none" stroke="@PlantGraphSeries.Colour(i)" stroke-width="3" stroke-dasharray="@(i < 6 ? "none" : "7 4")" points="@PlantGraphSeries.Points(series.Values, 0, Math.Max(GraphMaximum, 1))">
-                            <title>@series.Name</title>
-                        </polyline>
-                    }
-                    <text class="chart-label" x="72" y="350">@GraphStartLabel</text>
-                    <text class="chart-label chart-label-end" x="970" y="350">@GraphEndLabel</text>
-                    <text class="chart-label" x="60" y="49" text-anchor="end">@GraphMaximum.ToString("N0")</text>
-                    <text class="chart-label" x="60" y="329" text-anchor="end">0</text>
-                </svg>
-                <div class="x-axis-title">@AppliedXAxis</div>
-                <div class="plant-graph-legend" aria-label="Plants in graph">
-                    @for (var i = 0; i < ComparisonSeries.Count; i++)
-                    {
-                        <span><i style="background:@PlantGraphSeries.Colour(i)"></i>@ComparisonSeries[i].Name</span>
-                    }
-                </div>
-                <p class="analytics-empty">Based on the last applied filters. Showing up to 200 intervals per plant.</p>
-            </div>
-        </section>
-    }
-}
-
-@if (IsGraphSettingsOpen)
-{
-    <div class="graph-modal-overlay" role="presentation">
-        <section class="graph-dialog" role="dialog" aria-modal="true" aria-labelledby="graph-dialog-title">
-            <div class="graph-dialog-header">
-                <div>
-                    <p class="section-label">Graph configuration</p>
-                    <h2 id="graph-dialog-title">Choose graph axes</h2>
-                </div>
-                <button class="profile-close" type="button" @onclick="CloseGraphSettings" aria-label="Close graph settings">×</button>
-            </div>
-
-            <div class="graph-dialog-body">
-                <p>Compare all @Datasets.Count plants in the filtered results. Choose the horizontal and vertical axes.</p>
-                <div class="axis-preview">
-                    <span><b>Y</b> @PendingYAxis</span>
-                    <i>versus</i>
-                    <span><b>X</b> @PendingXAxis</span>
-                </div>
-                <div class="graph-form-grid">
-                    <label class="filter-field">
-                        <span>X-axis (horizontal)</span>
-                        <select @bind="PendingXAxis">
-                            @foreach (var option in XAxisOptions)
-                            {
-                                <option value="@option">@option</option>
-                            }
-                        </select>
-                    </label>
-                    <label class="filter-field">
-                        <span>Y-axis (vertical)</span>
-                        <select @bind="PendingYAxis">
-                            @foreach (var option in YAxisOptions)
-                            {
-                                <option value="@option">@option</option>
-                            }
-                        </select>
-                    </label>
-                </div>
-                <div class="profile-actions">
-                    <button class="profile-cancel" type="button" @onclick="CloseGraphSettings">Cancel</button>
-                    <button class="primary-action" type="button" @onclick="GenerateGraph">Generate Graph <span>→</span></button>
-                </div>
-            </div>
-        </section>
-    </div>
-}
-
 </div>
