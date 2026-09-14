@@ -1,0 +1,25 @@
+@page "/admin/data-quality"
+@attribute [Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+
+<PageTitle>Data Quality | SBLSS System</PageTitle>
+
+<div class="admin-page">
+    <header class="page-heading"><div><p class="section-label">UCLSS017 and UCLSS018</p><h1>Validation Rules and Anomalies</h1><p class="page-subtitle">Manage validation thresholds and monitor detected DDQ or MMF anomalies.</p></div><button class="primary-action admin-primary" type="button" @onclick="OpenRuleDialog">+ New Rule</button></header>
+    @if (!string.IsNullOrWhiteSpace(Message)) { <p class="form-success">@Message</p> }
+    <section class="admin-summary"><div><small>Validation rules</small><strong>@Rules.Count</strong></div><div><small>Active rules</small><strong>@Rules.Count(x => x.IsActive)</strong></div><div><small>Open anomalies</small><strong>@Anomalies.Count(x => x.Status == "Open")</strong></div></section>
+    <section class="table-panel"><div class="report-table"><div class="report-row report-header"><span>Code</span><span>Data</span><span>Field</span><span>Range</span><span>Severity</span><span>Status</span></div>
+        @foreach (var rule in Rules) { <div class="report-row"><span>@rule.Code</span><span>@rule.DataType</span><span>@rule.FieldName</span><span>@FormatRange(rule)</span><span>@rule.Severity</span><button type="button" class="status-pill" @onclick="() => ToggleRuleAsync(rule)">@(rule.IsActive ? "Active" : "Inactive")</button></div> }
+    </div></section>
+    <section class="table-panel"><div class="report-table"><div class="report-row report-header"><span>Detected</span><span>Data</span><span>Field</span><span>Original</span><span>Reason</span><span>Status</span></div>
+        @if (Anomalies.Count == 0) { <div class="collection-empty"><strong>No anomalies recorded</strong><span>Anomalies will appear after the collection pipeline is connected.</span></div> }
+        @foreach (var item in Anomalies) { <div class="report-row"><span>@item.DetectedAt.ToLocalTime().ToString("dd MMM HH:mm")</span><span>@item.DataType</span><span>@item.FieldName</span><span>@(item.OriginalValue ?? "Missing")</span><span>@item.Reason</span><span>@item.Status</span></div> }
+    </div></section>
+</div>
+
+@if (IsRuleDialogOpen)
+{
+    <div class="modal-backdrop" @onclick="CloseRuleDialog"><section class="admin-modal" @onclick:stopPropagation="true"><h2>New validation rule</h2><div class="admin-form-grid">
+        <label><span>Code</span><input required @bind="Code" /></label><label><span>Data type</span><select @bind="DataType"><option>DDQ</option><option>MMF</option></select></label><label><span>Field</span><input required @bind="FieldName" /></label><label><span>Minimum</span><input type="number" step="any" @bind="Minimum" /></label><label><span>Maximum</span><input type="number" step="any" @bind="Maximum" /></label><label><span>Severity</span><select @bind="Severity"><option>Warning</option><option>Error</option></select></label>
+    </div><div class="modal-actions"><button type="button" @onclick="CloseRuleDialog">Cancel</button><button class="primary-action" type="button" @onclick="SaveRuleAsync">Save rule</button></div></section></div>
+}

@@ -1,0 +1,33 @@
+@page "/admin/audit-logs"
+@attribute [Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+
+<PageTitle>Audit Logs | SBLSS System</PageTitle>
+
+<div class="admin-page audit-page">
+    <header class="page-heading">
+        <div><p class="section-label">UCLSS019</p><h1>Audit and Operational Events</h1>
+            <p class="page-subtitle">Search security, administration and automated-system events stored in SQL Server.</p></div>
+        <a class="primary-action admin-primary" href="@ExportDataUri" download="sblss-audit-log.csv">Export CSV</a>
+    </header>
+    <section class="admin-summary" aria-label="Audit summary">
+        <div><small>Total events</small><strong>@Events.Count</strong></div>
+        <div><small>Successful</small><strong>@Events.Count(x => x.Result == "Success")</strong></div>
+        <div><small>Failed</small><strong>@Events.Count(x => x.Result == "Failed")</strong></div>
+    </section>
+    <section class="admin-toolbar">
+        <label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search actor, action, record or result..." @bind="SearchTerm" @bind:event="oninput" /></label>
+        <label class="report-filter"><span>Result</span><select @bind="ResultFilter"><option value="All">All results</option><option value="Success">Success</option><option value="Failed">Failed</option></select></label>
+        <span class="result-count">@FilteredEvents.Count record(s)</span>
+    </section>
+    <section class="table-panel">
+        <div class="report-table" role="table" aria-label="Audit events">
+            <div class="report-row report-header" role="row"><span>Timestamp</span><span>Actor</span><span>Action</span><span>Reference</span><span>Result</span><span>Detail</span></div>
+            @if (FilteredEvents.Count == 0) { <div class="collection-empty"><strong>No audit events found</strong><span>Change the search or result filter.</span></div> }
+            @foreach (var item in FilteredEvents)
+            {
+                <div class="report-row" role="row"><span>@item.OccurredAt.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")</span><span>@item.Actor</span><span>@item.Action</span><span>@(item.EntityReference ?? "-")</span><span class="status-pill status-@item.Result.ToLowerInvariant()">@item.Result</span><span>@(item.Detail ?? "-")</span></div>
+            }
+        </div>
+    </section>
+</div>

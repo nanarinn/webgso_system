@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TestingSystem.Web.Components;
@@ -7,6 +6,8 @@ using TestingSystem.Web.Data;
 using TestingSystem.Web.HealthChecks;
 using TestingSystem.Web.Models;
 using TestingSystem.Web.Services;
+using TestingSystem.Web.Backend.UseCases.UCLSS027Audit;
+using TestingSystem.Web.Connectors.UseCases;
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -18,6 +19,9 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(DatabaseSettings.SectionName));
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ILssDataApiClient, PrototypeLssDataApiClient>();
+builder.Services.AddScoped<IStoredDataService, StoredDataService>();
+builder.Services.AddScoped<IAuditTrailService, AuditTrailService>();
+builder.Services.AddAntiforgery();
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString, sqlOptions =>
@@ -69,38 +73,8 @@ await DatabaseInitializer.InitialiseAsync(app.Services, app.Configuration);
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
-
-app.MapPost("/account/login", async (
-    HttpContext context,
-    IAntiforgery antiforgery,
-    SignInManager<ApplicationUser> signInManager) =>
-{
-    await antiforgery.ValidateRequestAsync(context);
-    var form = await context.Request.ReadFormAsync();
-    var userName = form["username"].ToString().Trim();
-    var password = form["password"].ToString();
-    var returnUrl = GetSafeReturnUrl(form["returnUrl"].ToString());
-
-    var result = await signInManager.PasswordSignInAsync(
-        userName,
-        password,
-        isPersistent: false,
-        lockoutOnFailure: true);
-
-    return result.Succeeded
-        ? Results.LocalRedirect(returnUrl)
-        : Results.LocalRedirect($"/login?error=invalid&returnUrl={Uri.EscapeDataString(returnUrl)}");
-});
-
-app.MapPost("/account/logout", async (
-    HttpContext context,
-    IAntiforgery antiforgery,
-    SignInManager<ApplicationUser> signInManager) =>
-{
-    await antiforgery.ValidateRequestAsync(context);
-    await signInManager.SignOutAsync();
-    return Results.LocalRedirect("/login");
-});
+app.MapLoginEndpoints();
+app.MapSystemStatusEndpoint();
 
 app.MapHealthChecks("/health");
 app.MapGet("/api/ping", () => Results.Ok(new
@@ -110,25 +84,4 @@ app.MapGet("/api/ping", () => Results.Ok(new
     date = DateTimeOffset.UtcNow
 }));
 
-app.MapGet("/api/status", async (IDbContextFactory<ApplicationDbContext> contextFactory) =>
-{
-    await using var database = await contextFactory.CreateDbContextAsync();
-    return Results.Ok(new
-    {
-        database = "Microsoft SQL Server",
-        connected = await database.Database.CanConnectAsync(),
-        users = await database.Users.CountAsync(),
-        documents = await database.SolarDocuments.CountAsync()
-    });
-}).RequireAuthorization();
-
 app.Run();
-
-static string GetSafeReturnUrl(string? returnUrl)
-{
-    return !string.IsNullOrWhiteSpace(returnUrl)
-        && returnUrl.StartsWith('/')
-        && !returnUrl.StartsWith("//")
-            ? returnUrl
-            : "/";
-}
