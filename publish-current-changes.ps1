@@ -18,7 +18,7 @@ if (-not $stagedChanges) {
     exit 0
 }
 
-git commit -m "Complete MMF analytics and database pipeline"
+git commit -m "Improve plant API configuration management"
 if ($LASTEXITCODE -ne 0) { throw "Unable to create the Git commit." }
 
 git pull --rebase origin main

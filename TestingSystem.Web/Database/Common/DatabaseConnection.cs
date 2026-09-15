@@ -10,6 +10,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 {
     public DbSet<SolarDocument> SolarDocuments => Set<SolarDocument>();
     public DbSet<LssPlant> LssPlants => Set<LssPlant>();
+    public DbSet<PlantApiConfiguration> PlantApiConfigurations => Set<PlantApiConfiguration>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<CollectionJobEntity> CollectionJobs => Set<CollectionJobEntity>();
     public DbSet<RawApiResponse> RawApiResponses => Set<RawApiResponse>();
@@ -49,6 +50,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             plant.Property(item => item.LastApiTestSource).HasMaxLength(10);
             plant.Property(item => item.LastApiTestMessage).HasMaxLength(500);
             plant.HasIndex(item => item.PlantId).IsUnique();
+        });
+
+        builder.Entity<PlantApiConfiguration>(api =>
+        {
+            api.Property(x => x.ApiType).HasMaxLength(10);
+            api.Property(x => x.DataType).HasMaxLength(40);
+            api.Property(x => x.ApiLink).HasMaxLength(1000);
+            api.HasIndex(x => new { x.PlantId, x.ApiType, x.DataType }).IsUnique();
+            api.HasOne(x => x.Plant).WithMany(x => x.ApiConfigurations).HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<AuditEvent>(item =>

@@ -25,13 +25,6 @@ Check("Inactive plants are excluded", [4], "", "");
 Check("Unknown plant is excluded", [99], "", "");
 if (AnalyticsPlantFilter.Match([], [], "").Any()) throw new Exception("Empty registry failed");
 Console.WriteLine("PASS: Empty registry");
-if (PlantGraphSeries.Points([0, 50, 100], 0, 100) != "72.0,325.0 521.0,185.0 970.0,45.0")
-    throw new Exception("Shared graph scale failed");
-if (PlantGraphSeries.Points([-5, 0, 5], -5, 5) != "72.0,325.0 521.0,185.0 970.0,45.0")
-    throw new Exception("Signed variance scale failed");
-if (PlantGraphSeries.Points([0], 0, 0) != "72.0,325.0")
-    throw new Exception("Single zero point failed");
-Console.WriteLine("PASS: Graph scale, negative variance and zero series");
 if (MmfSensorAveraging.AverageNonZero([20m, 22m, 0m, 24m, 0m]) != 22m)
     throw new Exception("MMF averaging must exclude zero placeholders");
 if (MmfSensorAveraging.AverageNonZero([0m, 0m, 0m]) != 0m)

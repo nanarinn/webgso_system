@@ -15,6 +15,7 @@ public static class DatabaseInitializer
 
         await database.Database.EnsureCreatedAsync();
         await EnsurePlantTableAsync(database);
+        await EnsurePlantApiConfigurationsAsync(database);
         await EnsureFsdCoreTablesAsync(database);
         await EnsureSolarApiReadingTableAsync(database);
         await SeedDocumentsAsync(database);
@@ -247,6 +248,25 @@ public static class DatabaseInitializer
 
         database.LssPlants.AddRange(DemoData.LssPlants());
         await database.SaveChangesAsync();
+    }
+
+    private static async Task EnsurePlantApiConfigurationsAsync(ApplicationDbContext database)
+    {
+        await database.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'[PlantApiConfigurations]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [PlantApiConfigurations] (
+                    [Id] int IDENTITY PRIMARY KEY, [PlantId] int NOT NULL,
+                    [ApiType] nvarchar(10) NOT NULL, [DataType] nvarchar(40) NOT NULL,
+                    [ApiLink] nvarchar(1000) NOT NULL,
+                    CONSTRAINT [FK_PlantApiConfigurations_LssPlants] FOREIGN KEY ([PlantId]) REFERENCES [LssPlants]([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [UQ_PlantApiConfigurations] UNIQUE ([PlantId], [ApiType], [DataType]));
+                INSERT INTO [PlantApiConfigurations] ([PlantId], [ApiType], [DataType], [ApiLink])
+                    SELECT [Id], N'DDQ', N'Rolling 24 Hour', [DdqApiEndpoint] FROM [LssPlants] WHERE NULLIF([DdqApiEndpoint], N'') IS NOT NULL;
+                INSERT INTO [PlantApiConfigurations] ([PlantId], [ApiType], [DataType], [ApiLink])
+                    SELECT [Id], N'MMF', N'MMF', [MmfApiEndpoint] FROM [LssPlants] WHERE NULLIF([MmfApiEndpoint], N'') IS NOT NULL;
+            END
+            """);
     }
 
     private static void EnsureSucceeded(IdentityResult result, string operation)

@@ -99,20 +99,6 @@ public static class DemoData
         return Math.Round((decimal)value, 2);
     }
 
-    public static string[] MmfStreamNames(string parameter) =>
-        [$"{parameter} Forecast", "Operational Availability", "Dispatch Performance"];
-
-    public static DemoMmfReading MmfReading(double capacityMw, string parameter, DateTime timestamp, int index, int datasetId)
-    {
-        var parameterFactor = parameter switch { "GHI" => 0.92, "POA" => 1.08, _ => 1d };
-        var solarCurve = Math.Max(0, Math.Sin((timestamp.TimeOfDay.TotalHours - 6) / 13 * Math.PI));
-        var forecast = Math.Min(capacityMw, solarCurve * capacityMw * 0.9 * parameterFactor);
-        var variation = Math.Sin((index + datasetId) * 0.57) * 4.8;
-        var actual = Math.Clamp(forecast * (1 + variation / 100), 0, capacityMw);
-        var variance = forecast <= 0 ? 0 : (actual - forecast) / forecast * 100;
-        return new(Math.Round(forecast, 2), Math.Round(actual, 2), Math.Round(variance, 2), Math.Abs(variance) <= 5 ? "Within" : "Alert");
-    }
-
     private static LssPlant CreatePlant(string plantId, string name, string state, decimal capacityMw)
     {
         var slug = name.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0].ToLowerInvariant();
@@ -136,4 +122,3 @@ public sealed record DemoReportRecord(string ReportId, string Name, string Sourc
 public sealed record DemoDistributionList(string Id, string Name, List<string> Emails, bool IsActive);
 public sealed record DemoReportSchedule(string Id, string Name, string Template, List<string> Plants, string ReportingPeriod, string Frequency, string ExecutionTime, string DistributionListId, bool IsActive);
 public sealed record DemoReportDelivery(string Id, string ScheduleName, string Source, DateTime GeneratedAt, int AnomalyCount, string MainReportStatus, string MainEmailStatus, string AnomalyReportStatus, string AnomalyEmailStatus, string OverallStatus, string DistributionListName, List<string> Recipients, string Message);
-public sealed record DemoMmfReading(double ForecastMw, double ActualMw, double VariancePercent, string Status);

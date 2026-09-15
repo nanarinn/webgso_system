@@ -15,4 +15,5 @@ public sealed class LssPlant
     public string? LastApiTestMessage { get; set; }
     public DateTimeOffset? LastApiTestAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public List<PlantApiConfiguration> ApiConfigurations { get; set; } = [];
 }

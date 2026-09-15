@@ -12,8 +12,11 @@ public partial class LssPlants : ComponentBase
     [Inject] private ILssDataApiClient ApiClient { get; set; } = default!;
 
     private static readonly string[] States = ["Johor", "Kedah", "Melaka", "Negeri Sembilan", "Pahang", "Perak", "Perlis", "Pulau Pinang", "Sabah", "Sarawak", "Selangor", "Terengganu", "Kelantan"];
+    private static readonly string[] ApiTypes = ["DDQ", "MMF"];
+    private static readonly string[] DdqDataTypes = ["Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month Ahead"];
     private List<LssPlant> Plants { get; set; } = [];
     private string SearchTerm { get; set; } = string.Empty;
+    private string SelectedApiType { get; set; } = "DDQ";
     private bool IsDialogOpen { get; set; }
     private bool IsApiTestDialogOpen { get; set; }
     private bool IsTestingApi { get; set; }
@@ -27,8 +30,10 @@ public partial class LssPlants : ComponentBase
     private string NewPlantId { get; set; } = string.Empty;
     private string NewState { get; set; } = "Johor";
     private int NewCapacity { get; set; } = 50;
-    private string NewDdqApi { get; set; } = "https://api.example.com/ddq/collection";
-    private string NewMmfApi { get; set; } = "https://api.example.com/mmf/collection";
+    private string NewApiType { get; set; } = "DDQ";
+    private string OriginalApiType { get; set; } = "DDQ";
+    private string NewApiLink { get; set; } = string.Empty;
+    private List<ApiLinkInput> NewApiLinks { get; set; } = [];
 
     private List<LssPlant> FilteredPlants => string.IsNullOrWhiteSpace(SearchTerm)
         ? Plants
@@ -37,12 +42,14 @@ public partial class LssPlants : ComponentBase
                 || x.PlantId.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
+    private List<PlantApiConfiguration> FilteredApiConfigurations => FilteredPlants.SelectMany(x => x.ApiConfigurations).ToList();
+
     protected override async Task OnInitializedAsync() => await LoadPlantsAsync();
 
     private async Task LoadPlantsAsync()
     {
         await using var database = await ContextFactory.CreateDbContextAsync();
-        Plants = await database.LssPlants.OrderBy(x => x.Name).ToListAsync();
+        Plants = await database.LssPlants.Include(x => x.ApiConfigurations).OrderBy(x => x.Name).ToListAsync();
     }
 
     private void OpenAddDialog()
@@ -52,26 +59,43 @@ public partial class LssPlants : ComponentBase
         NewPlantId = $"PLT-{Plants.Count + 1:000}";
         NewState = "Johor";
         NewCapacity = 50;
-        NewDdqApi = "https://api.example.com/ddq/collection";
-        NewMmfApi = "https://api.example.com/mmf/collection";
+        NewApiType = "DDQ";
+        OriginalApiType = "DDQ";
+        NewApiLink = string.Empty;
+        NewApiLinks = [new ApiLinkInput { DataType = "Rolling 24 Hour" }];
         FormError = string.Empty;
         IsDialogOpen = true;
     }
 
-    private void OpenEditDialog(LssPlant plant)
+    private void OpenEditDialog(LssPlant plant, string apiType)
     {
         EditingPlantId = plant.Id;
         NewName = plant.Name;
         NewPlantId = plant.PlantId;
         NewState = plant.State;
         NewCapacity = (int)plant.CapacityMw;
-        NewDdqApi = plant.DdqApiEndpoint;
-        NewMmfApi = plant.MmfApiEndpoint;
+        NewApiType = apiType;
+        OriginalApiType = apiType;
+        NewApiLink = apiType == "DDQ" ? plant.DdqApiEndpoint : plant.MmfApiEndpoint;
+        NewApiLinks = plant.ApiConfigurations.Where(x => x.ApiType == apiType)
+            .Select(x => new ApiLinkInput { DataType = x.DataType, ApiLink = x.ApiLink }).ToList();
+        if (NewApiLinks.Count == 0) NewApiLinks.Add(new ApiLinkInput { DataType = apiType == "DDQ" ? "Rolling 24 Hour" : "MMF" });
         FormError = string.Empty;
         IsDialogOpen = true;
     }
 
     private void CloseDialog() => IsDialogOpen = false;
+    private void AddApiLink()
+    {
+        if (!CanAddApiLink) return;
+        var dataType = DdqDataTypes.First(type => NewApiLinks.All(link => link.DataType != type));
+        NewApiLinks.Add(new ApiLinkInput { DataType = dataType });
+    }
+    private void RemoveApiLink(ApiLinkInput input) { if (NewApiLinks.Count > 1) NewApiLinks.Remove(input); }
+    private void ApiTypeChanged() => NewApiLinks = [new ApiLinkInput { DataType = NewApiType == "DDQ" ? "Rolling 24 Hour" : "MMF" }];
+    private bool CanAddApiLink => NewApiType == "DDQ" && NewApiLinks.Count < DdqDataTypes.Length;
+    private IEnumerable<string> AvailableDataTypes(ApiLinkInput current) => DdqDataTypes
+        .Where(type => type == current.DataType || NewApiLinks.All(link => ReferenceEquals(link, current) || link.DataType != type));
 
     private void OpenApiTestDialog()
     {
@@ -128,14 +152,21 @@ public partial class LssPlants : ComponentBase
             ? await database.LssPlants.SingleAsync(x => x.Id == EditingPlantId.Value)
             : new LssPlant();
 
+        var apiLink = NewApiLinks.FirstOrDefault()?.ApiLink.Trim() ?? string.Empty;
+        var previousApiLink = OriginalApiType == "DDQ" ? plant.DdqApiEndpoint : plant.MmfApiEndpoint;
         var apiChanged = EditingPlantId.HasValue
-            && (plant.DdqApiEndpoint != NewDdqApi.Trim() || plant.MmfApiEndpoint != NewMmfApi.Trim());
+            && (OriginalApiType != NewApiType || previousApiLink != apiLink);
         plant.PlantId = plantId;
         plant.Name = NewName.Trim();
         plant.State = NewState;
         plant.CapacityMw = NewCapacity;
-        plant.DdqApiEndpoint = NewDdqApi.Trim();
-        plant.MmfApiEndpoint = NewMmfApi.Trim();
+        if (EditingPlantId.HasValue && OriginalApiType != NewApiType)
+        {
+            if (OriginalApiType == "DDQ") plant.DdqApiEndpoint = string.Empty;
+            else plant.MmfApiEndpoint = string.Empty;
+        }
+        if (NewApiType == "DDQ") plant.DdqApiEndpoint = apiLink;
+        else plant.MmfApiEndpoint = apiLink;
         plant.IsActive = true;
         if (apiChanged)
         {
@@ -150,6 +181,12 @@ public partial class LssPlants : ComponentBase
             database.LssPlants.Add(plant);
         }
         await database.SaveChangesAsync();
+        await database.PlantApiConfigurations.Where(x => x.PlantId == plant.Id && x.ApiType == NewApiType).ExecuteDeleteAsync();
+        var links = NewApiLinks.Where(x => !string.IsNullOrWhiteSpace(x.ApiLink))
+            .GroupBy(x => x.DataType).Select(x => x.Last()).ToList();
+        database.PlantApiConfigurations.AddRange(links.Select(x => new PlantApiConfiguration
+            { PlantId = plant.Id, ApiType = NewApiType, DataType = NewApiType == "DDQ" ? x.DataType : "MMF", ApiLink = x.ApiLink.Trim() }));
+        await database.SaveChangesAsync();
         IsDialogOpen = false;
         await LoadPlantsAsync();
     }
@@ -157,8 +194,5 @@ public partial class LssPlants : ComponentBase
     private static string GetCode(string name) => string.Concat(
         name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => x[0]));
 
-    private static string GetApiStatusClass(string status) => status.ToLowerInvariant().Replace(" ", string.Empty);
-    private static string GetLastTestLabel(LssPlant plant) => plant.LastApiTestAt.HasValue
-        ? $"{plant.LastApiTestSource} · {plant.LastApiTestAt.Value.ToLocalTime():dd MMM HH:mm}"
-        : "No test recorded";
+    private sealed class ApiLinkInput { public string DataType { get; set; } = string.Empty; public string ApiLink { get; set; } = string.Empty; }
 }

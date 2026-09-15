@@ -13,13 +13,30 @@
         </div>
     </header>
 
-    <section class="admin-summary"><div><small>Configured plants</small><strong>@Plants.Count</strong></div><div><small>Active</small><strong>@Plants.Count(x => x.IsActive)</strong></div><div><small>Total capacity</small><strong>@Plants.Sum(x => x.CapacityMw) MW</strong></div></section>
+    <section class="admin-summary"><div><small>Total configured plants</small><strong>@Plants.Count</strong></div><div><small>Active plants</small><strong>@Plants.Count(x => x.IsActive)</strong></div><div><small>Inactive plants</small><strong>@Plants.Count(x => !x.IsActive)</strong></div></section>
     <section class="admin-toolbar"><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search plant, state or Plant ID..." @bind="SearchTerm" @bind:event="oninput" /></label><span class="result-count">@FilteredPlants.Count plant(s)</span></section>
-    <section class="table-panel admin-panel"><div class="admin-table-heading"><div><p class="section-label">Plant registry</p><h2>Configured LSS plants</h2></div><span>API settings are restricted to administrators</span></div>
-        <div class="plant-admin-table"><div class="plant-admin-row admin-table-header"><span>Plant</span><span>State</span><span>Capacity</span><span>DDQ API</span><span>MMF API</span><span>API Test</span><span>Status</span><span>Action</span></div>
-            @foreach (var plant in FilteredPlants)
+    <div class="api-type-switch" role="group" aria-label="Select API type">
+        @foreach (var apiType in ApiTypes)
+        {
+            <button type="button" class="@(SelectedApiType == apiType ? "active" : null)" aria-pressed="@(SelectedApiType == apiType)" @onclick="() => SelectedApiType = apiType">
+                <span class="api-switch-dot api-switch-@apiType.ToLowerInvariant()"></span>
+                @apiType API
+                <small>@FilteredApiConfigurations.Count(api => api.ApiType == apiType)</small>
+            </button>
+        }
+    </div>
+
+    @{ var configurations = FilteredApiConfigurations.Where(api => api.ApiType == SelectedApiType).ToList(); }
+    <section class="table-panel admin-panel api-registry-panel">
+        <div class="admin-table-heading"><div><p class="section-label">@SelectedApiType API registry</p><h2>@SelectedApiType API Configuration</h2></div><span>@configurations.Count endpoint(s) · Administrator access only</span></div>
+        <div class="plant-admin-table"><div class="plant-admin-row admin-table-header"><span>Plant</span><span>State</span><span>Capacity</span><span>API Type</span><span>Data Type</span><span>API Link</span><span>Status</span><span>Action</span></div>
+            @foreach (var api in configurations)
             {
-                <div class="plant-admin-row"><div class="admin-entity"><span>@GetCode(plant.Name)</span><div><strong>@plant.Name</strong><small>@plant.PlantId</small></div></div><span>@plant.State</span><strong>@plant.CapacityMw.ToString("N0") MW</strong><code>@plant.DdqApiEndpoint</code><code>@plant.MmfApiEndpoint</code><div class="api-test-state"><span class="api-test-pill api-@GetApiStatusClass(plant.ApiConnectionStatus)">@plant.ApiConnectionStatus</span><small>@GetLastTestLabel(plant)</small></div><span class="status-pill @(plant.IsActive ? "status-successful" : "status-failed")">@(plant.IsActive ? "Active" : "Inactive")</span><button class="admin-edit-action" type="button" @onclick="() => OpenEditDialog(plant)">Edit</button></div>
+                <div class="plant-admin-row"><div class="admin-entity"><span>@GetCode(api.Plant.Name)</span><div><strong>@api.Plant.Name</strong><small>@api.Plant.PlantId</small></div></div><span>@api.Plant.State</span><strong>@api.Plant.CapacityMw.ToString("N0") MW</strong><span class="api-type-badge api-type-@api.ApiType.ToLowerInvariant()">@api.ApiType</span><strong>@api.DataType</strong><code title="@api.ApiLink">@api.ApiLink</code><span class="status-pill @(api.Plant.IsActive ? "status-successful" : "status-failed")">@(api.Plant.IsActive ? "Active" : "Inactive")</span><button class="admin-edit-action" type="button" @onclick="() => OpenEditDialog(api.Plant, api.ApiType)">Edit</button></div>
+            }
+            @if (configurations.Count == 0)
+            {
+                <div class="api-registry-empty">No @SelectedApiType API configuration matches the current search.</div>
             }
         </div>
     </section>
@@ -27,7 +44,7 @@
     @if (IsDialogOpen)
     {
         <div class="admin-overlay"><section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="plant-form-title"><div class="admin-dialog-header"><div><p class="section-label">@(EditingPlantId.HasValue ? "Update configuration" : "New configuration")</p><h2 id="plant-form-title">@(EditingPlantId.HasValue ? "Edit LSS plant" : "Add LSS plant")</h2></div><button class="profile-close" type="button" @onclick="CloseDialog">&#215;</button></div>
-            <form @onsubmit="SavePlantAsync" @onsubmit:preventDefault>@if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }<div class="admin-form-grid"><label><span>Plant name</span><input required @bind="NewName" /></label><label><span>Plant ID</span><input required @bind="NewPlantId" /></label><label><span>State</span><select @bind="NewState">@foreach (var state in States){<option>@state</option>}</select></label><label><span>Capacity (MW)</span><input type="number" min="1" required @bind="NewCapacity" /></label><label class="wide"><span>DDQ API endpoint</span><input type="url" required @bind="NewDdqApi" /></label><label class="wide"><span>MMF API endpoint</span><input type="url" required @bind="NewMmfApi" /></label></div><div class="profile-actions"><button class="profile-cancel" type="button" @onclick="CloseDialog">Cancel</button><button class="primary-action admin-primary" type="submit">@(EditingPlantId.HasValue ? "Save Changes" : "Save Plant to MS SQL")</button></div></form>
+            <form @onsubmit="SavePlantAsync" @onsubmit:preventDefault>@if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }<div class="admin-form-grid plant-details-grid"><label><span>Plant name</span><input required @bind="NewName" /></label><label><span>Plant ID</span><input required @bind="NewPlantId" /></label><label><span>State</span><select @bind="NewState">@foreach (var state in States){<option>@state</option>}</select></label><label><span>Capacity (MW)</span><input type="number" min="1" required @bind="NewCapacity" /></label><label class="wide"><span>API type</span><select @bind="NewApiType" @bind:after="ApiTypeChanged"><option value="DDQ">DDQ</option><option value="MMF">MMF</option></select></label></div><div class="api-config-heading"><div><strong>@NewApiType endpoint@(NewApiType == "DDQ" ? "s" : null)</strong><small>@(NewApiType == "DDQ" ? "Choose one unique data type for every API link." : "MMF supports one API link for each plant.")</small></div></div><div class="api-link-list">@foreach (var link in NewApiLinks){<div class="api-link-entry"><label><span>Data type</span><select @bind="link.DataType" disabled="@(NewApiType == "MMF")">@if(NewApiType == "DDQ"){@foreach(var type in AvailableDataTypes(link)){<option value="@type">@type</option>}}else{<option value="MMF">MMF</option>}</select></label><label><span>API link</span><input type="url" required placeholder="https://api.example.com/collection" @bind="link.ApiLink" /></label>@if(NewApiType == "DDQ"){<button type="button" title="Remove API link" disabled="@(NewApiLinks.Count == 1)" @onclick="() => RemoveApiLink(link)">&#215;</button>}</div>}@if(CanAddApiLink){<button class="add-api-link" type="button" @onclick="AddApiLink">+ Add another DDQ API link</button>}</div><div class="profile-actions"><button class="profile-cancel" type="button" @onclick="CloseDialog">Cancel</button><button class="primary-action admin-primary" type="submit">@(EditingPlantId.HasValue ? "Save Changes" : "Save Plant to MS SQL")</button></div></form>
         </section></div>
     }
 
