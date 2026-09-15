@@ -1,7 +1,9 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.JSInterop;
+using TestingSystem.Web.Database.Entities;
 using TestingSystem.Web.Models;
-using TestingSystem.Web.Demo;
 using TestingSystem.Web.Services;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
@@ -9,208 +11,311 @@ namespace TestingSystem.Web.Components.Frontend.UseCases;
 public partial class MmfAnalytics : ComponentBase
 {
     [Inject] private IStoredDataService DataStore { get; set; } = default!;
-    private List<LssPlant> RegisteredPlants { get; set; } = [];
-    private HashSet<int> SelectedPlantIds = [];
-    private int FilterVersion;
-    private string AppliedParameter = "Irradiance";
-    private DateTime AppliedStart;
-    private int AppliedInterval;
-    private List<string> States { get; set; } = [];
-    private static readonly string[] Parameters = ["Irradiance", "GHI", "POA"];
-    private static readonly (string Label, int Value)[] Intervals =
-    [
-        ("15 minutes", 15),
-        ("30 minutes", 30),
-        ("1 hour", 60)
-    ];
-    private static readonly string[] XAxisOptions = ["Timestamp", "Data Point Number"];
-    private static readonly string[] YAxisOptions = ["Actual MW", "Forecast MW", "Variance"];
+    [Inject] private IJSRuntime JavaScript { get; set; } = default!;
 
-    private string SelectedState { get; set; } = string.Empty;
-    private string SelectedParameter { get; set; } = "Irradiance";
-    private DateTime StartDate { get; set; } = DateTime.Today.AddDays(-1);
-    private DateTime EndDate { get; set; } = DateTime.Today;
-    private int SelectedInterval { get; set; } = 15;
-    private string ValidationMessage { get; set; } = string.Empty;
-    private string ResultDescription { get; set; } = string.Empty;
-    private bool HasApplied { get; set; }
-    private List<MmfDataset> Datasets { get; set; } = [];
-    private MmfDataset? SelectedDataset { get; set; }
-    private List<MmfRow> Rows { get; set; } = [];
-    private List<PlantGraphSeries> ComparisonSeries = [];
-    private string ViewMode { get; set; } = "Table";
-    private bool IsGraphSettingsOpen { get; set; }
-    private string PendingXAxis { get; set; } = "Timestamp";
-    private string PendingYAxis { get; set; } = "Actual MW";
-    private string AppliedXAxis { get; set; } = "Timestamp";
-    private string AppliedYAxis { get; set; } = "Actual MW";
+    private static readonly (string Label, int Value)[] Intervals =
+        [("15 minutes", 15), ("30 minutes", 30), ("1 hour", 60)];
+    private static readonly string[] GraphColours =
+        ["#0875c9", "#00a56a", "#f2a900", "#d64545", "#7656d6", "#00a6a6", "#e06c00", "#c13f87", "#54708f", "#4c9b35"];
+
+    private List<LssPlant> RegisteredPlants = [], ResultPlants = [];
+    private List<string> AvailableParameters = [], AppliedParameters = [];
+    private HashSet<int> SelectedPlantIds = [], HiddenGraphPlantIds = [];
+    private HashSet<string> SelectedParameters = new(StringComparer.OrdinalIgnoreCase);
+    private List<SolarApiReading> LoadedReadings = [];
+    private List<DateTime> TimeColumns = [];
+    private Dictionary<ReadingKey, SolarApiReading> ReadingIndex = [];
+    private string SelectedState = "", SelectedRegion = "", ActiveParameter = "", ValidationMessage = "";
+    private string ResultDescription = "", DisplayMode = "table", LegendSearch = "";
+    private DateTime StartDate = DateTime.Today, EndDate = DateTime.Today;
+    private DateTime DefaultStartDate = DateTime.Today, DefaultEndDate = DateTime.Today;
+    private TimeOnly StartTime = TimeOnly.MinValue, EndTime = new(23, 45);
+    private TimeOnly DefaultStartTime = TimeOnly.MinValue, DefaultEndTime = new(23, 45);
+    private int SelectedInterval = 15, AppliedInterval = 15, FilterVersion, ParameterFilterVersion;
+    private bool HasApplied, ShowGraphCrosshair = true, IsExporting, IsLoading;
+    private DateTime AppliedStart, AppliedEnd;
+    private decimal GraphMinimumValue, GraphMaximumValue = 1;
+
+    private IEnumerable<string> AvailableStates => RegisteredPlants.Select(x => x.State)
+        .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x);
+    private IEnumerable<string> AvailableRegions => RegisteredPlants.Select(x => AnalyticsPlantFilter.RegionFor(x.State))
+        .Where(x => x != "Not assigned").Distinct().OrderBy(x => x);
+    private bool PlantFilterDisabled => SelectedState.Length > 0 || SelectedRegion.Length > 0;
+    private bool StateFilterDisabled => SelectedPlantIds.Count > 0 || SelectedRegion.Length > 0;
+    private bool RegionFilterDisabled => SelectedPlantIds.Count > 0 || SelectedState.Length > 0;
+    private int VisibleGraphPlantCount => ResultPlants.Count(x => !HiddenGraphPlantIds.Contains(x.Id));
 
     protected override async Task OnInitializedAsync()
     {
-        await using var database = await ContextFactory.CreateDbContextAsync();
-        RegisteredPlants = await database.LssPlants
-            .Where(plant => plant.IsActive)
-            .OrderBy(plant => plant.Name)
-            .ToListAsync();
-        States = RegisteredPlants.Select(plant => plant.State).Distinct().OrderBy(state => state).ToList();
+        try
+        {
+            await using var db = await ContextFactory.CreateDbContextAsync();
+            RegisteredPlants = await db.LssPlants.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
+            var parameterValues = await db.SolarApiReadings.AsNoTracking()
+                .Where(x => x.DataType == "MMF" && x.Parameter != "").Select(x => x.Parameter).ToListAsync();
+            AvailableParameters = parameterValues.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+            var window = await db.SolarApiReadings.AsNoTracking().Where(x => x.DataType == "MMF").GroupBy(_ => 1)
+                .Select(g => new { Start = g.Min(x => x.IntervalStart), End = g.Max(x => x.IntervalStart) }).FirstOrDefaultAsync();
+            if (window is not null)
+            {
+                DefaultStartDate = window.Start.Date;
+                DefaultStartTime = TimeOnly.FromDateTime(window.Start);
+                DefaultEndDate = window.End.Date;
+                DefaultEndTime = TimeOnly.FromDateTime(window.End);
+                RestoreDefaultRange();
+            }
+            else ValidationMessage = "No MMF readings are available yet. Run the MMF API import before applying a filter.";
+        }
+        catch (Exception exception)
+        {
+            ValidationMessage = $"MMF data could not be loaded: {exception.GetBaseException().Message}";
+        }
+    }
+
+    private Task OnPlantsChanged(HashSet<int> ids)
+    {
+        SelectedPlantIds = ids;
+        if (ids.Count > 0) { SelectedState = ""; SelectedRegion = ""; }
+        return Task.CompletedTask;
+    }
+
+    private void OnStateChanged(ChangeEventArgs e)
+    {
+        SelectedState = e.Value?.ToString() ?? "";
+        if (SelectedState.Length > 0) { SelectedRegion = ""; SelectedPlantIds = []; FilterVersion++; }
+    }
+
+    private void OnRegionChanged(ChangeEventArgs e)
+    {
+        SelectedRegion = e.Value?.ToString() ?? "";
+        if (SelectedRegion.Length > 0) { SelectedState = ""; SelectedPlantIds = []; FilterVersion++; }
     }
 
     private async Task ApplyFilters()
     {
-        ValidationMessage = string.Empty;
+        if (IsLoading) return;
+        ValidationMessage = "";
         HasApplied = false;
-        Datasets = [];
-        SelectedDataset = null;
-        Rows = [];
-        ViewMode = "Table";
-
-        if (EndDate.Date < StartDate.Date)
+        var start = StartDate.Date.Add(StartTime.ToTimeSpan());
+        var end = EndDate.Date.Add(EndTime.ToTimeSpan());
+        if (end <= start)
         {
-            ValidationMessage = "The end date must be on or after the start date.";
+            ValidationMessage = "The end date and time must be later than the start date and time.";
             return;
         }
 
-        var totalRows = CalculateAvailableRows();
-        HasApplied = true;
-        IsGraphSettingsOpen = false;
-        AppliedParameter = SelectedParameter;
-        AppliedStart = StartDate.Date;
-        AppliedInterval = SelectedInterval;
-        var selectedPlants = AnalyticsPlantFilter.Match(RegisteredPlants, SelectedPlantIds, SelectedState).ToList();
-        var streamNames = DemoData.MmfStreamNames(SelectedParameter);
+        ResultPlants = AnalyticsPlantFilter.Match(RegisteredPlants, SelectedPlantIds, SelectedState, SelectedRegion).ToList();
+        if (ResultPlants.Count == 0)
+        {
+            ValidationMessage = "No active plants match the selected plant, state, or region.";
+            return;
+        }
 
-        Datasets = selectedPlants.SelectMany(plant => streamNames.Select((name, index) => new MmfDataset(
-            plant.Id * 3 + index,
-            $"MMF-{plant.PlantId}-{StartDate:yyyyMMdd}-{index + 1:00}",
-            $"{plant.Name} {name}", (double)plant.CapacityMw,
-            totalRows, plant.Name, plant.State))).ToList();
-        foreach (var dataset in Datasets)
-            await DataStore.SaveAsync("MmfDatasets", dataset.Code, dataset);
+        IsLoading = true;
+        try
+        {
+            var ids = ResultPlants.Select(x => x.Id).ToArray();
+            await using var db = await ContextFactory.CreateDbContextAsync();
+            LoadedReadings = await db.SolarApiReadings.AsNoTracking()
+                .Where(x => x.DataType == "MMF" && ids.Contains(x.PlantId)
+                    && x.IntervalStart >= start && x.IntervalStart <= end
+                    && x.IntervalStart.Second == 0 && x.IntervalStart.Minute % SelectedInterval == 0
+                    && (SelectedParameters.Count == 0 || SelectedParameters.Contains(x.Parameter)))
+                .OrderByDescending(x => x.Id).ToListAsync();
 
-        var limitNote = totalRows > 200 ? $" Each table displays the first 200 of {totalRows} intervals." : string.Empty;
-        ResultDescription = $"{Datasets.Count} {SelectedParameter} MMF dataset(s) for {string.Join(", ", selectedPlants.Select(p => p.Name))}, "
-            + $"from {StartDate:dd MMM yyyy} to {EndDate:dd MMM yyyy} at {IntervalLabel} intervals.{limitNote}";
-    }
+            RebuildReadingIndex();
+            AppliedParameters = ReadingIndex.Values.Select(x => x.Parameter)
+                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+            ActiveParameter = AppliedParameters.FirstOrDefault() ?? "";
+            AppliedStart = start;
+            AppliedEnd = end;
+            AppliedInterval = SelectedInterval;
+            RefreshActiveParameter();
+            HiddenGraphPlantIds.Clear();
+            LegendSearch = "";
+            DisplayMode = "table";
+            HasApplied = true;
+            ResultDescription = $"{ReadingIndex.Count:N0} averaged MMF reading(s), {ResultPlants.Count} plant(s), " +
+                $"{AppliedParameters.Count} parameter(s), {start:dd MMM yyyy HH:mm} to {end:dd MMM yyyy HH:mm}, {IntervalLabel}.";
+            if (ReadingIndex.Count == 0)
+                ValidationMessage = "No imported MMF readings match the selected location, parameters, interval, and forecast range.";
 
-    private async Task SelectDataset(MmfDataset dataset)
-    {
-        SelectedDataset = dataset;
-        ViewMode = "Table";
-        IsGraphSettingsOpen = false;
-        Rows = BuildRows(dataset);
-        foreach (var row in Rows)
-            await DataStore.SaveAsync("MmfRecords", $"{dataset.Code}:{row.Timestamp:O}", row);
-    }
-
-    private List<MmfRow> BuildRows(MmfDataset dataset)
-    {
-        var rowCount = Math.Min(dataset.AvailableRows, 200);
-        var startTimestamp = AppliedStart;
-        return Enumerable.Range(0, rowCount)
-            .Select(index =>
+            try
             {
-                var timestamp = startTimestamp.AddMinutes(index * AppliedInterval);
-                var reading = DemoData.MmfReading(dataset.CapacityMw, AppliedParameter, timestamp, index, dataset.Id);
-
-                return new MmfRow(timestamp, dataset.PlantName, dataset.State, AppliedParameter, Intervals.First(i => i.Value == AppliedInterval).Label,
-                    reading.ForecastMw, reading.ActualMw, reading.VariancePercent, reading.Status);
-            })
-            .ToList();
+                await DataStore.SaveAsync("MmfFilterResults", DateTime.UtcNow.ToString("O"),
+                    new { ids, Parameters = SelectedParameters, start, end, SelectedInterval });
+            }
+            catch
+            {
+                // History/cache failure must not hide valid MSSQL query results.
+            }
+        }
+        catch (Exception exception)
+        {
+            ClearResults();
+            ValidationMessage = $"The MMF query could not be completed: {exception.GetBaseException().Message}";
+        }
+        finally { IsLoading = false; }
     }
 
-    private void OpenGraphSettings()
+    private void RebuildReadingIndex()
     {
-        PendingXAxis = AppliedXAxis;
-        PendingYAxis = AppliedYAxis;
-        IsGraphSettingsOpen = true;
+        ReadingIndex = [];
+        foreach (var reading in LoadedReadings)
+            ReadingIndex.TryAdd(new(reading.Parameter.ToUpperInvariant(), reading.PlantId, reading.IntervalStart), reading);
     }
 
-    private void CloseGraphSettings() => IsGraphSettingsOpen = false;
-
-    private void GenerateGraph()
+    private void SelectParameter(string parameter) { ActiveParameter = parameter; RefreshActiveParameter(); }
+    private void RefreshActiveParameter()
     {
-        AppliedXAxis = PendingXAxis;
-        AppliedYAxis = PendingYAxis;
-        ComparisonSeries = Datasets.Where(d => SelectedDataset is not null && d.Id % 3 == SelectedDataset.Id % 3)
-            .Select(dataset => new PlantGraphSeries(dataset.PlantName,
-                BuildRows(dataset).Select(row => AppliedYAxis switch
+        TimeColumns = string.IsNullOrWhiteSpace(ActiveParameter) ? [] : ReadingIndex.Values
+            .Where(x => x.Parameter.Equals(ActiveParameter, StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.IntervalStart).Distinct().OrderBy(x => x).ToList();
+        RecalculateGraphBounds();
+    }
+    private void SetDisplayMode(string mode) => DisplayMode = mode is "graph" ? "graph" : "table";
+    private SolarApiReading? ReadingFor(string parameter, int plantId, DateTime timestamp) =>
+        ReadingIndex.GetValueOrDefault(new(parameter.ToUpperInvariant(), plantId, timestamp));
+    private decimal? ValueFor(int plantId, DateTime timestamp) => ReadingFor(ActiveParameter, plantId, timestamp)?.Value;
+    private string UnitForParameter => ReadingIndex.Values.FirstOrDefault(x => x.Parameter.Equals(ActiveParameter, StringComparison.OrdinalIgnoreCase))?.Unit ?? "";
+    private string TimeHeading(DateTime value) => AppliedStart.Date == AppliedEnd.Date ? value.ToString("HH:mm") : value.ToString("dd/MM HH:mm");
+    private void ToggleGraphPlant(int id) { if (!HiddenGraphPlantIds.Add(id)) HiddenGraphPlantIds.Remove(id); RecalculateGraphBounds(); }
+    private void ShowAllGraphPlants() { HiddenGraphPlantIds.Clear(); RecalculateGraphBounds(); }
+    private void HideAllGraphPlants() { HiddenGraphPlantIds = ResultPlants.Select(x => x.Id).ToHashSet(); RecalculateGraphBounds(); }
+    private void ToggleGraphCrosshair() => ShowGraphCrosshair = !ShowGraphCrosshair;
+    private IEnumerable<LssPlant> FilteredLegendPlants => string.IsNullOrWhiteSpace(LegendSearch) ? ResultPlants :
+        ResultPlants.Where(x => x.Name.Contains(LegendSearch, StringComparison.OrdinalIgnoreCase)
+            || x.PlantId.Contains(LegendSearch, StringComparison.OrdinalIgnoreCase));
+    private string GraphColour(LssPlant plant) => GraphColours[Math.Max(0, ResultPlants.FindIndex(x => x.Id == plant.Id)) % GraphColours.Length];
+    private decimal GraphMinimum => GraphMinimumValue;
+    private decimal GraphMaximum => GraphMaximumValue;
+    private string GraphTickFormat => AnalyticsGraphScale.TickFormat(GraphMaximum - GraphMinimum);
+    private void RecalculateGraphBounds()
+    {
+        var bounds = AnalyticsGraphScale.Bounds(ReadingIndex.Values
+        .Where(x => x.Parameter.Equals(ActiveParameter, StringComparison.OrdinalIgnoreCase) && !HiddenGraphPlantIds.Contains(x.PlantId))
+        .Select(x => x.Value));
+        GraphMinimumValue = bounds.Minimum;
+        GraphMaximumValue = bounds.Maximum;
+    }
+
+    private string GraphPoints(LssPlant plant)
+    {
+        const double left = 74, top = 24, width = 990, height = 340;
+        var denominator = Math.Max(1, TimeColumns.Count - 1);
+        var minimum = (double)GraphMinimum;
+        var range = Math.Max(0.0000001, (double)(GraphMaximum - GraphMinimum));
+        return string.Join(' ', TimeColumns.Select((time, index) => (time, index, value: ValueFor(plant.Id, time)))
+            .Where(x => x.value.HasValue).Select(x =>
+                $"{(left + x.index / (double)denominator * width).ToString("F1", CultureInfo.InvariantCulture)}," +
+                $"{(top + (1 - ((double)x.value!.Value - minimum) / range) * height).ToString("F1", CultureInfo.InvariantCulture)}"));
+    }
+
+    private IEnumerable<GraphPoint> GraphPointItems(LssPlant plant)
+    {
+        const double left = 74, top = 24, width = 990, height = 340;
+        var denominator = Math.Max(1, TimeColumns.Count - 1);
+        var minimum = (double)GraphMinimum;
+        var range = Math.Max(0.0000001, (double)(GraphMaximum - GraphMinimum));
+        for (var index = 0; index < TimeColumns.Count; index++)
+        {
+            var value = ValueFor(plant.Id, TimeColumns[index]);
+            if (value.HasValue) yield return new(left + index / (double)denominator * width,
+                top + (1 - ((double)value.Value - minimum) / range) * height, TimeColumns[index], value.Value);
+        }
+    }
+
+    private IEnumerable<(double Y, decimal Value)> GraphYTicks()
+    {
+        const double top = 24, height = 340;
+        for (var index = 0; index <= 5; index++)
+            yield return (top + height - index / 5d * height,
+                GraphMinimum + (GraphMaximum - GraphMinimum) * index / 5m);
+    }
+
+    private IEnumerable<(double X, DateTime Value)> GraphXTicks()
+    {
+        const double left = 74, width = 990;
+        if (TimeColumns.Count == 0) yield break;
+        var last = TimeColumns.Count - 1;
+        for (var index = 0; index <= 4; index++)
+        {
+            var timeIndex = (int)Math.Round(last * index / 4d);
+            yield return (left + index / 4d * width, TimeColumns[timeIndex]);
+        }
+    }
+
+    private async Task DownloadExcelAsync()
+    {
+        if (IsExporting || ReadingIndex.Count == 0) return;
+        IsExporting = true;
+        try
+        {
+            var sheets = new List<DdqWorkbookSheet>();
+            var anomalies = new List<IReadOnlyList<object?>>();
+            foreach (var parameter in AppliedParameters)
+            {
+                var times = ReadingIndex.Values.Where(x => x.Parameter.Equals(parameter, StringComparison.OrdinalIgnoreCase))
+                    .Select(x => x.IntervalStart).Distinct().OrderBy(x => x).ToList();
+                var headers = new List<string> { "Plant Name", "Plant ID / Code" };
+                headers.AddRange(times.Select(TimeHeading));
+                var rows = new List<IReadOnlyList<object?>>();
+                foreach (var plant in ResultPlants)
                 {
-                    "Forecast MW" => row.ForecastMw,
-                    "Variance" => row.VariancePercent,
-                    _ => row.ActualMw
-                }).ToList())).ToList();
-        IsGraphSettingsOpen = false;
-        ViewMode = "Graph";
+                    var values = new List<object?> { plant.Name, plant.PlantId };
+                    foreach (var time in times)
+                    {
+                        var reading = ReadingFor(parameter, plant.Id, time);
+                        values.Add(reading?.Value);
+                        if (reading is null) anomalies.Add(new object?[] { parameter, time.ToString("yyyy-MM-dd HH:mm"),
+                            plant.PlantId, plant.Name, "Missing reading", null, "No reading was supplied for this plant and interval." });
+                    }
+                    rows.Add(values);
+                }
+                sheets.Add(new(parameter, parameter.ToUpperInvariant(), Metadata(parameter), headers, rows, 2));
+            }
+            sheets.Add(new("Anomaly Report", "ANOMALY REPORT", Metadata("All selected parameters"),
+                ["Parameter", "Data Timestamp", "Plant ID", "Plant Name", "Anomaly Type", "Value", "Reason"], anomalies));
+            var bytes = DdqExcelWorkbookExporter.Build(sheets);
+            await JavaScript.InvokeVoidAsync("sblssDownloadBase64", "SBLSS-MMF-Filtered-Data.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+        }
+        catch (Exception exception)
+        {
+            ValidationMessage = $"The Excel file could not be prepared: {exception.GetBaseException().Message}";
+        }
+        finally { IsExporting = false; }
     }
 
-    private void ShowTable() => ViewMode = "Table";
+    private (string Label, string Value)[] Metadata(string parameter) =>
+        [("Parameter", parameter), ("Data Interval", IntervalLabel),
+         ("Date Range", $"{AppliedStart:dd/MM/yyyy HH:mm} - {AppliedEnd:dd/MM/yyyy HH:mm}")];
+
+    private void RestoreDefaultRange()
+    {
+        StartDate = DefaultStartDate; StartTime = DefaultStartTime;
+        EndDate = DefaultEndDate; EndTime = DefaultEndTime;
+    }
 
     private void ResetFilters()
     {
         SelectedPlantIds = [];
-        FilterVersion++;
-        SelectedState = "";
-        SelectedParameter = "Irradiance";
-        StartDate = DateTime.Today.AddDays(-1);
-        EndDate = DateTime.Today;
-        SelectedInterval = 15;
-        ValidationMessage = string.Empty;
-        ResultDescription = string.Empty;
-        HasApplied = false;
-        Datasets = [];
-        SelectedDataset = null;
-        Rows = [];
-        ViewMode = "Table";
-        IsGraphSettingsOpen = false;
-        PendingXAxis = AppliedXAxis = "Timestamp";
-        PendingYAxis = AppliedYAxis = "Actual MW";
+        SelectedParameters = new(StringComparer.OrdinalIgnoreCase);
+        SelectedState = ""; SelectedRegion = ""; SelectedInterval = 15;
+        RestoreDefaultRange();
+        FilterVersion++; ParameterFilterVersion++;
+        ValidationMessage = "";
+        ClearResults();
     }
 
-    private int CalculateAvailableRows() =>
-        (int)Math.Ceiling((EndDate.Date.AddDays(1) - StartDate.Date).TotalMinutes / SelectedInterval);
-
-    private string IntervalLabel => Intervals.First(interval => interval.Value == SelectedInterval).Label;
-    private string GraphUnit => AppliedYAxis == "Variance" ? "%" : "MW";
-    private List<double> GraphValues => ComparisonSeries.SelectMany(s => s.Values).ToList();
-    private double GraphMinimum => GraphValues.Count == 0 ? 0 : Math.Min(0, GraphValues.Min());
-    private double GraphMaximum => GraphValues.Count == 0 ? 0 : GraphValues.Max();
-    private double GraphAverage => GraphValues.Count == 0 ? 0 : GraphValues.Average();
-    private string GraphLinePoints => BuildGraphPoints();
-    private string GraphAreaPoints => Rows.Count == 0 ? string.Empty : $"72,325 {GraphLinePoints} 970,325";
-    private string GraphStartLabel => AppliedXAxis == "Timestamp" && Rows.Count > 0
-        ? Rows[0].Timestamp.ToString("dd MMM HH:mm")
-        : "Point 1";
-    private string GraphEndLabel => AppliedXAxis == "Timestamp" && Rows.Count > 0
-        ? Rows[^1].Timestamp.ToString("dd MMM HH:mm")
-        : $"Point {Rows.Count}";
-
-    private string BuildGraphPoints()
+    private void ClearResults()
     {
-        if (Rows.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        var values = GraphValues;
-        var maximum = Math.Max(values.Max(), 1);
-        return string.Join(" ", values.Select((value, index) =>
-        {
-            var x = Rows.Count == 1 ? 72 : 72 + (898d * index / (Rows.Count - 1));
-            var y = 325 - (280d * value / maximum);
-            return FormattableString.Invariant($"{x:F1},{y:F1}");
-        }));
+        ResultDescription = ""; HasApplied = false; ResultPlants = []; LoadedReadings = [];
+        AppliedParameters = []; TimeColumns = []; ReadingIndex = []; ActiveParameter = "";
+        DisplayMode = "table"; HiddenGraphPlantIds.Clear(); LegendSearch = "";
     }
 
-    private sealed record MmfDataset(int Id, string Code, string Name, double CapacityMw, int AvailableRows, string PlantName, string State);
-
-    private sealed record MmfRow(
-        DateTime Timestamp,
-        string Plant,
-        string State,
-        string Parameter,
-        string Interval,
-        double ForecastMw,
-        double ActualMw,
-        double VariancePercent,
-        string Status);
+    private string IntervalLabel => Intervals.First(x => x.Value == (HasApplied ? AppliedInterval : SelectedInterval)).Label;
+    private readonly record struct ReadingKey(string Parameter, int PlantId, DateTime Timestamp);
+    private sealed record GraphPoint(double X, double Y, DateTime Timestamp, decimal Value);
 }

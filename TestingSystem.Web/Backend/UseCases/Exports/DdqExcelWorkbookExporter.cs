@@ -7,7 +7,8 @@ namespace TestingSystem.Web.Components.Frontend.UseCases;
 
 internal sealed record DdqWorkbookSheet(string Name, string Title,
     IReadOnlyList<(string Label, string Value)> Metadata,
-    IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<object?>> Rows);
+    IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<object?>> Rows,
+    int FrozenColumns = 3);
 
 internal static class DdqExcelWorkbookExporter
 {
@@ -62,7 +63,9 @@ internal static class DdqExcelWorkbookExporter
         var lastRow = sheet.Rows.Count + 6;
         var xml = new StringBuilder();
         xml.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
-        xml.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane xSplit=\"3\" ySplit=\"6\" topLeftCell=\"D7\" activePane=\"bottomRight\" state=\"frozen\"/></sheetView></sheetViews>");
+        var frozenColumns = Math.Clamp(sheet.FrozenColumns, 0, csvColumns);
+        var topLeftColumn = ColumnName(frozenColumns + 1);
+        xml.Append($"<sheetViews><sheetView workbookViewId=\"0\"><pane xSplit=\"{frozenColumns}\" ySplit=\"6\" topLeftCell=\"{topLeftColumn}7\" activePane=\"bottomRight\" state=\"frozen\"/></sheetView></sheetViews>");
         xml.Append("<cols>");
         for (var column = 1; column <= csvColumns; column++)
         {

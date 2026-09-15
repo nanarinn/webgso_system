@@ -22,53 +22,41 @@
                 <p class="section-label">Step 1 · Query controls</p>
                 <h2 id="mmf-filter-heading">MMF Filter</h2>
             </div>
-            <button class="filter-reset" type="button" @onclick="ResetFilters">Reset</button>
         </div>
 
         <form @onsubmit="ApplyFilters" @onsubmit:preventDefault>
-            <PlantFilter @key="FilterVersion" Plants="RegisteredPlants" @bind-SelectedIds="SelectedPlantIds" />
-            <div class="mmf-filter-grid">
-
-                <label class="filter-field">
-                    <span>State</span>
-                    <select @bind="SelectedState">
-                        <option value="">All states</option>
-                        @foreach (var state in States)
-                        {
-                            <option value="@state">@state</option>
-                        }
-                    </select>
-                </label>
-
-                <label class="filter-field">
-                    <span>Parameter</span>
-                    <select @bind="SelectedParameter">
-                        @foreach (var parameter in Parameters)
-                        {
-                            <option value="@parameter">@parameter</option>
-                        }
-                    </select>
-                </label>
-
-                <label class="filter-field">
-                    <span>Start date</span>
-                    <input type="date" @bind="StartDate" @bind:format="yyyy-MM-dd" />
-                </label>
-
-                <label class="filter-field">
-                    <span>End date</span>
-                    <input type="date" @bind="EndDate" @bind:format="yyyy-MM-dd" />
-                </label>
-
-                <label class="filter-field">
-                    <span>Data interval</span>
-                    <select @bind="SelectedInterval">
-                        @foreach (var interval in Intervals)
-                        {
-                            <option value="@interval.Value">@interval.Label</option>
-                        }
-                    </select>
-                </label>
+            <div class="compact-filter-layout mmf-compact-filter">
+                <div class="filter-section location-section">
+                    <div class="filter-section-heading"><span>1</span><div><strong>Plant or location</strong><small>Leave empty for all active plants.</small></div></div>
+                    <PlantFilter @key="FilterVersion" Plants="RegisteredPlants" SelectedIds="SelectedPlantIds"
+                                 SelectedIdsChanged="OnPlantsChanged" Disabled="PlantFilterDisabled" />
+                    <div class="location-divider"><span>or filter by one location</span></div>
+                    <div class="location-alternatives">
+                        <label class="filter-field"><span>State</span><select value="@SelectedState" @onchange="OnStateChanged" disabled="@StateFilterDisabled">
+                            <option value="">Choose a state</option>@foreach (var state in AvailableStates) { <option value="@state">@state</option> }
+                        </select></label>
+                        <div class="location-or">OR</div>
+                        <label class="filter-field"><span>Region</span><select value="@SelectedRegion" @onchange="OnRegionChanged" disabled="@RegionFilterDisabled">
+                            <option value="">Choose a region</option>@foreach (var region in AvailableRegions) { <option value="@region">@region</option> }
+                        </select></label>
+                    </div>
+                </div>
+                <div class="compact-filter-right">
+                    <div class="filter-section parameter-section">
+                        <div class="filter-section-heading"><span>2</span><div><strong>Parameter and interval</strong><small>Leave parameters empty to include all.</small></div></div>
+                        <ParameterFilter @key="ParameterFilterVersion" Parameters="AvailableParameters" @bind-SelectedValues="SelectedParameters" />
+                        <label class="filter-field interval-control"><span>Data interval</span><select @bind="SelectedInterval">
+                            @foreach (var interval in Intervals) { <option value="@interval.Value">@interval.Label</option> }
+                        </select></label>
+                    </div>
+                    <div class="filter-section period-section">
+                        <div class="filter-section-heading"><span>3</span><div><strong>Forecast data range</strong><small>Select the start and end date and time.</small></div></div>
+                        <div class="date-pair">
+                            <div class="date-time-control"><span>Start</span><div><label><small>Date</small><input type="date" required @bind="StartDate" @bind:format="yyyy-MM-dd" /></label><label><small>Time</small><input type="time" required step="900" @bind="StartTime" /></label></div></div>
+                            <div class="date-time-control"><span>End</span><div><label><small>Date</small><input type="date" required @bind="EndDate" @bind:format="yyyy-MM-dd" /></label><label><small>Time</small><input type="time" required step="900" @bind="EndTime" /></label></div></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             @if (!string.IsNullOrEmpty(ValidationMessage))
@@ -78,214 +66,73 @@
 
             <div class="filter-actions">
                 <span>Apply the filter to find available MMF datasets.</span>
-                <button class="primary-action mmf-primary-action" type="submit">Apply Filter <span>→</span></button>
+                <div class="filter-action-buttons"><button class="filter-reset" type="button" disabled="@IsLoading" @onclick="ResetFilters">Reset</button><button class="primary-action mmf-primary-action" type="submit" disabled="@IsLoading">@(IsLoading ? "Loading..." : "Apply Filter") <span>→</span></button></div>
             </div>
         </form>
     </section>
 
     @if (HasApplied)
     {
-        <section class="filter-summary mmf-summary" aria-live="polite">
-            <span class="summary-mark">MMF</span>
-            <div>
-                <strong>Filtered MMF description</strong>
-                <p>@ResultDescription</p>
-            </div>
-        </section>
-
-        <section class="dataset-panel mmf-dataset-panel" aria-labelledby="mmf-dataset-heading">
-            <div class="dataset-heading">
-                <div>
-                    <p class="section-label">Step 2</p>
-                    <h2 id="mmf-dataset-heading">Select an MMF dataset</h2>
-                    <p>Choose one stream to display its interval data table.</p>
+        <section class="filter-summary mmf-summary" aria-live="polite"><span class="summary-mark">MMF</span><div><strong>Filtered MMF data</strong><p>@ResultDescription</p></div></section>
+        <section class="table-panel mmf-template-panel">
+            <div class="ddq-table-heading">
+                <div><p class="section-label">Step 2 · Results</p><h2>Plant time data</h2><p>Plant names run vertically; forecast intervals run horizontally.</p></div>
+                <div class="result-heading-actions"><span class="result-count">@ReadingIndex.Count reading(s)</span>
+                    @if (LoadedReadings.Count > 0) { <button type="button" class="result-download excel" disabled="@IsExporting" @onclick="DownloadExcelAsync">@(IsExporting ? "Preparing Excel..." : "↓ Download Excel")</button> }
                 </div>
-                <span class="result-count">@Datasets.Count result(s)</span>
             </div>
-
-            <div class="dataset-list">
-                @if (Datasets.Count == 0)
-                {
-                    <p class="analytics-empty" role="status">No plants match these filters. Change your selection or choose All states.</p>
-                }
-                @foreach (var dataset in Datasets)
-                {
-                    <button class="dataset-item @(SelectedDataset?.Id == dataset.Id ? "selected" : null)"
-                            type="button"
-                            @onclick="() => SelectDataset(dataset)">
-                        <span class="dataset-code">@dataset.Code</span>
-                        <span class="dataset-name">
-                            <strong>@dataset.Name</strong>
-                            <small>@dataset.PlantName · @dataset.State · @AppliedParameter · Demo data</small>
-                        </span>
-                        <span class="dataset-meta">
-                            <strong>@dataset.CapacityMw.ToString("N0") MW</strong>
-                            <small>@dataset.AvailableRows interval(s)</small>
-                        </span>
-                        <span class="dataset-open">View table <b>→</b></span>
-                    </button>
-                }
-            </div>
-        </section>
-    }
-
-    @if (SelectedDataset is not null)
-    {
-        @if (ViewMode == "Table")
-        {
-            <section class="table-panel mmf-table-panel">
-                <div class="ddq-table-heading">
-                    <div>
-                        <p class="section-label">Step 3 · MMF time-series</p>
-                        <h2>@SelectedDataset.Name</h2>
-                        <p>@SelectedDataset.Code · @SelectedDataset.CapacityMw.ToString("N0") MW registered capacity</p>
-                    </div>
-                    <div class="view-actions">
-                        <span class="result-count">@Rows.Count row(s)</span>
-                        <button class="graph-action" type="button" @onclick="OpenGraphSettings">
-                            Convert to Graph <span>↗</span>
-                        </button>
-                    </div>
+            @if (LoadedReadings.Count > 0)
+            {
+                <div class="result-view-switch" role="group"><button type="button" class="@(DisplayMode == "table" ? "active" : null)" @onclick='() => SetDisplayMode("table")'>▦ Table View</button><button type="button" class="@(DisplayMode == "graph" ? "active" : null)" @onclick='() => SetDisplayMode("graph")'>⌁ Graph View</button></div>
+                <div class="data-type-tabs" role="tablist" aria-label="Selected MMF parameters">
+                    @foreach (var parameter in AppliedParameters) { <button type="button" role="tab" aria-selected="@(ActiveParameter == parameter)" class="@(ActiveParameter == parameter ? "active" : null)" @onclick="() => SelectParameter(parameter)">@parameter</button> }
                 </div>
-
-                <div class="mmf-table" role="table" aria-label="Filtered MMF plant data">
-                    <div class="mmf-table-row mmf-table-header" role="row">
-                        <span>Timestamp</span>
-                        <span>Plant</span>
-                        <span>State</span>
-                        <span>Parameter</span>
-                        <span>Interval</span>
-                        <span>Forecast MW</span>
-                        <span>Actual MW</span>
-                        <span>Variance</span>
-                        <span>Status</span>
-                    </div>
-                    @foreach (var row in Rows)
+                <div class="excel-sheet-heading mmf-sheet-heading"><div class="excel-sheet-title">@ActiveParameter.ToUpperInvariant()</div><div class="excel-sheet-meta"><span><small>Parameter</small><strong>@ActiveParameter</strong></span><span><small>Data interval</small><strong>@IntervalLabel</strong></span><span><small>Date range</small><strong>@AppliedStart.ToString("dd/MM/yyyy HH:mm") - @AppliedEnd.ToString("dd/MM/yyyy HH:mm")</strong></span><span><small>Unit</small><strong>@UnitForParameter</strong></span></div></div>
+                @if (DisplayMode == "table")
+                {
+                    <div class="mmf-pivot-scroll"><table class="mmf-pivot-table"><thead><tr><th class="sticky-plant">Plant Name</th><th class="sticky-code">Plant ID / Code</th>@foreach (var time in TimeColumns) { <th>@TimeHeading(time)</th> }</tr></thead><tbody>
+                    @foreach (var plant in ResultPlants) { <tr><th class="sticky-plant">@plant.Name</th><td class="sticky-code">@plant.PlantId</td>@foreach (var time in TimeColumns) { var value=ValueFor(plant.Id,time); <td class="@(value.HasValue ? null : "missing-cell")">@(value?.ToString("N2") ?? "-")</td> }</tr> }
+                    </tbody></table></div>
+                }
+                else
+                {
+                    <div class="graph-panel mmf-template-graph">
+                    <div class="graph-heading"><div><strong>@ActiveParameter profile</strong><small>Date/time versus @UnitForParameter</small></div><div class="graph-metrics"><span><b>@VisibleGraphPlantCount</b> visible plant(s)</span><span><b>@GraphMinimum.ToString(GraphTickFormat)–@GraphMaximum.ToString(GraphTickFormat) @UnitForParameter</b> scale</span><span><b>@TimeColumns.Count</b> intervals</span></div></div>
+                    <div class="graph-help"><span>ⓘ</span> Hover over a line to see the plant, timestamp and averaged value. Use the legend below to show or hide lines.</div>
+                    <div class="graph-scroll"><svg class="ddq-line-chart" viewBox="0 0 1100 420" role="img" aria-label="@($"{ActiveParameter} by plant and date time")">
+                    <defs><linearGradient id="mmfChartBackground" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f4fbf7"/><stop offset="100%" stop-color="#ffffff"/></linearGradient><filter id="mmfLineGlow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+                    <rect x="74" y="24" width="990" height="340" class="mmf-chart-plot-bg" />
+                    @foreach (var tick in GraphYTicks())
                     {
-                        <div class="mmf-table-row" role="row">
-                            <time datetime="@row.Timestamp.ToString("O")">@row.Timestamp.ToString("dd MMM yyyy, HH:mm")</time>
-                            <strong>@row.Plant</strong>
-                            <span>@row.State</span>
-                            <span>@row.Parameter</span>
-                            <span>@row.Interval</span>
-                            <span>@row.ForecastMw.ToString("N2") MW</span>
-                            <strong>@row.ActualMw.ToString("N2") MW</strong>
-                            <span class="variance-value @(Math.Abs(row.VariancePercent) > 5 ? "outside" : null)">
-                                @row.VariancePercent.ToString("+0.00;-0.00;0.00")%
-                            </span>
-                            <span><span class="status-pill status-@row.Status.ToLowerInvariant()">@row.Status</span></span>
-                        </div>
+                        <line class="chart-grid-line" x1="74" y1="@tick.Y" x2="1064" y2="@tick.Y" />
+                        <svg:text x="64" y="@(tick.Y + 4)" text-anchor="end" class="chart-axis-label">@tick.Value.ToString(GraphTickFormat)</svg:text>
                     }
-                </div>
-            </section>
-        }
-        else
-        {
-            <section class="graph-panel mmf-graph-panel">
-                <div class="graph-heading">
-                    <div>
-                        <p class="section-label">Step 3 · MMF graph view</p>
-                        <h2>Filtered plant comparison</h2>
-                        <p>@AppliedYAxis plotted against @AppliedXAxis · @ComparisonSeries.Count plant(s) · Same stream as @SelectedDataset.Name · Demo data</p>
-                    </div>
-                    <div class="view-actions">
-                        <button class="secondary-action" type="button" @onclick="OpenGraphSettings">Graph Settings</button>
-                        <button class="graph-action" type="button" @onclick="ShowTable">Back to Table <span>↩</span></button>
-                    </div>
-                </div>
-
-                <div class="graph-summary-grid">
-                    <div><small>Maximum</small><strong>@GraphMaximum.ToString("N2") @GraphUnit</strong></div>
-                    <div><small>Average</small><strong>@GraphAverage.ToString("N2") @GraphUnit</strong></div>
-                    <div><small>Data points across plants</small><strong>@GraphValues.Count</strong></div>
-                </div>
-
-                <div class="ddq-chart-wrap">
-                    <div class="y-axis-title">@AppliedYAxis (@GraphUnit)</div>
-                    <svg class="ddq-chart mmf-chart" viewBox="0 0 1000 390" role="img" aria-label="@AppliedYAxis against @AppliedXAxis graph">
-                        <defs>
-                            <linearGradient id="mmfAreaFill" x1="0" x2="0" y1="0" y2="1">
-                                <stop offset="0%" stop-color="#049f64" stop-opacity="0.34" />
-                                <stop offset="100%" stop-color="#049f64" stop-opacity="0.02" />
-                            </linearGradient>
-                        </defs>
-                        @foreach (var gridY in new[] { 45, 115, 185, 255, 325 })
+                    @foreach (var tick in GraphXTicks())
+                    {
+                        <line class="chart-grid-line vertical" x1="@tick.X" y1="24" x2="@tick.X" y2="364" />
+                        <svg:text x="@tick.X" y="386" text-anchor="middle" class="chart-axis-label">@tick.Value.ToString("dd MMM HH:mm")</svg:text>
+                    }
+                    <svg:text x="18" y="194" transform="rotate(-90 18 194)" text-anchor="middle" class="chart-axis-title">@UnitForParameter</svg:text>
+                    <svg:text x="569" y="412" text-anchor="middle" class="chart-axis-title">Date and time</svg:text>
+                    @foreach (var plant in ResultPlants.Where(x => !HiddenGraphPlantIds.Contains(x.Id)))
+                    {
+                        <polyline fill="none" stroke="@GraphColour(plant)" class="plant-series mmf-plant-series" points="@GraphPoints(plant)"><title>@plant.Name (@plant.PlantId)</title></polyline>
+                        @foreach (var point in GraphPointItems(plant))
                         {
-                            <line class="chart-grid-line" x1="72" y1="@gridY" x2="970" y2="@gridY" />
+                            <g class="chart-hover-target">
+                                @if (ShowGraphCrosshair) { <line x1="@point.X" y1="24" x2="@point.X" y2="364" class="chart-crosshair"/><line x1="74" y1="@point.Y" x2="1064" y2="@point.Y" class="chart-crosshair"/> }
+                                <circle cx="@point.X" cy="@point.Y" r="7" fill="transparent" class="plant-data-hit" stroke="@GraphColour(plant)"><title>@plant.Name (@plant.PlantId)&#10;@point.Timestamp.ToString("dd MMM yyyy, HH:mm")&#10;@ActiveParameter: @point.Value.ToString("N2") @UnitForParameter</title></circle>
+                            </g>
                         }
-                        <line class="chart-axis-line" x1="72" y1="25" x2="72" y2="325" />
-                        <line class="chart-axis-line" x1="72" y1="325" x2="970" y2="325" />
-                        @for (var i = 0; i < ComparisonSeries.Count; i++)
-                        {
-                            var series = ComparisonSeries[i];
-                            <polyline fill="none" stroke="@PlantGraphSeries.Colour(i)" stroke-width="3" stroke-dasharray="@(i < 6 ? "none" : "7 4")" points="@PlantGraphSeries.Points(series.Values, GraphMinimum, Math.Max(GraphMaximum, 1))">
-                                <title>@series.Name</title>
-                            </polyline>
-                        }
-                        <text class="chart-label" x="72" y="350">@GraphStartLabel</text>
-                        <text class="chart-label chart-label-end" x="970" y="350">@GraphEndLabel</text>
-                        <text class="chart-label" x="60" y="49" text-anchor="end">@GraphMaximum.ToString("N0")</text>
-                        <text class="chart-label" x="60" y="329" text-anchor="end">@GraphMinimum.ToString("N1")</text>
-                    </svg>
-                    <div class="x-axis-title">@AppliedXAxis</div>
-                    <div class="plant-graph-legend" aria-label="Plants in graph">
-                        @for (var i = 0; i < ComparisonSeries.Count; i++)
-                        {
-                            <span><i style="background:@PlantGraphSeries.Colour(i)"></i>@ComparisonSeries[i].Name</span>
-                        }
-                    </div>
-                    <p class="analytics-empty">Based on the last applied filters. Showing up to 200 intervals per plant.</p>
-                </div>
-            </section>
-        }
-    }
-
-    @if (IsGraphSettingsOpen)
-    {
-        <div class="graph-modal-overlay mmf-graph-modal" role="presentation">
-            <section class="graph-dialog" role="dialog" aria-modal="true" aria-labelledby="mmf-graph-title">
-                <div class="graph-dialog-header">
-                    <div>
-                        <p class="section-label">MMF graph configuration</p>
-                        <h2 id="mmf-graph-title">Choose graph axes</h2>
-                    </div>
-                    <button class="profile-close" type="button" @onclick="CloseGraphSettings" aria-label="Close graph settings">×</button>
-                </div>
-                <div class="graph-dialog-body">
-                    <p>Compare all plants in the filtered results using the same stream as the open table. Choose the horizontal and vertical axes.</p>
-                    <div class="axis-preview">
-                        <span><b>Y</b> @PendingYAxis</span>
-                        <i>versus</i>
-                        <span><b>X</b> @PendingXAxis</span>
-                    </div>
-                    <div class="graph-form-grid">
-                        <label class="filter-field">
-                            <span>X-axis (horizontal)</span>
-                            <select @bind="PendingXAxis">
-                                @foreach (var option in XAxisOptions)
-                                {
-                                    <option value="@option">@option</option>
-                                }
-                            </select>
-                        </label>
-                        <label class="filter-field">
-                            <span>Y-axis (vertical)</span>
-                            <select @bind="PendingYAxis">
-                                @foreach (var option in YAxisOptions)
-                                {
-                                    <option value="@option">@option</option>
-                                }
-                            </select>
-                        </label>
-                    </div>
-                    <div class="profile-actions">
-                        <button class="profile-cancel" type="button" @onclick="CloseGraphSettings">Cancel</button>
-                        <button class="primary-action mmf-primary-action" type="button" @onclick="GenerateGraph">
-                            Generate Graph <span>→</span>
-                        </button>
-                    </div>
-                </div>
-            </section>
-        </div>
+                    }
+                    </svg></div>
+                    <div class="graph-legend-section"><div class="graph-legend-title"><div><strong>Plant legend</strong><small>@FilteredLegendPlants.Count() of @ResultPlants.Count plant(s)</small></div><div class="graph-legend-tools"><label class="legend-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search plant or ID" @bind="LegendSearch" @bind:event="oninput" /></label><button type="button" class="legend-tool" @onclick="ShowAllGraphPlants">Show all</button><button type="button" class="legend-tool" @onclick="HideAllGraphPlants">Hide all</button><button type="button" class="crosshair-toggle @(ShowGraphCrosshair ? "active" : null)" aria-pressed="@ShowGraphCrosshair" @onclick="ToggleGraphCrosshair"><span aria-hidden="true">⌖</span> Crosshair @(ShowGraphCrosshair ? "On" : "Off")</button></div></div>
+                    <div class="graph-legend" aria-label="Plant line visibility">@foreach (var plant in FilteredLegendPlants) { var hidden=HiddenGraphPlantIds.Contains(plant.Id); <button type="button" class="@(hidden ? "hidden" : null)" aria-pressed="@(!hidden)" @onclick="() => ToggleGraphPlant(plant.Id)"><i style="background:@GraphColour(plant)"></i><span><b>@plant.Name</b><small>@plant.PlantId</small></span><em>@(hidden ? "○" : "✓")</em></button> }</div>
+                    @if (!FilteredLegendPlants.Any()) { <p class="legend-empty">No plant matches “@LegendSearch”.</p> }
+                    </div></div>
+                }
+            }
+            else { <p class="analytics-empty">No MMF data is available for this filter.</p> }
+        </section>
     }
 </div>

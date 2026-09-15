@@ -89,6 +89,39 @@ if (args.Contains("--seed-dummy-api", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
+var sandImportIndex = Array.FindIndex(args, value => value.Equals("--import-sand-data", StringComparison.OrdinalIgnoreCase));
+if (sandImportIndex >= 0)
+{
+    if (sandImportIndex + 1 >= args.Length) throw new ArgumentException("Provide the SAND workbook path after --import-sand-data.");
+    await using var scope = app.Services.CreateAsyncScope();
+    var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await SandForecastDataImporter.ImportAsync(database, args[sandImportIndex + 1]);
+    Console.WriteLine("Bidor SAND Town import completed.");
+    return;
+}
+
+var mmfImportIndex = Array.FindIndex(args, value => value.Equals("--import-mmf-data", StringComparison.OrdinalIgnoreCase));
+if (mmfImportIndex >= 0)
+{
+    if (mmfImportIndex + 1 >= args.Length) throw new ArgumentException("Provide the MMF workbook path after --import-mmf-data.");
+    await using var scope = app.Services.CreateAsyncScope();
+    var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    try
+    {
+        await SampleApiDataImporter.ImportMmfAsync(database, args[mmfImportIndex + 1]);
+        Console.WriteLine("MMF raw API import and averaged translation completed and verified.");
+    }
+    catch (Exception exception)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine();
+        Console.WriteLine($"MMF IMPORT ROOT ERROR: {exception.GetBaseException().Message}");
+        Console.ResetColor();
+        throw;
+    }
+    return;
+}
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapLoginEndpoints();

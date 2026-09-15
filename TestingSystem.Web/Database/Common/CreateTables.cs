@@ -111,6 +111,21 @@ public static class DatabaseInitializer
             ALTER TABLE [SolarApiReadings] ALTER COLUMN [Unit] nvarchar(max) NOT NULL;
             ALTER TABLE [SolarApiReadings] ALTER COLUMN [ErrorMessage] nvarchar(max) NULL;
             ALTER TABLE [SolarApiReadings] ALTER COLUMN [SyntheticReason] nvarchar(max) NULL;
+
+            EXEC(N'CREATE OR ALTER VIEW [dbo].[DdqApiReadings] AS
+                SELECT * FROM [dbo].[SolarApiReadings] WHERE [DataType] <> N''MMF'';');
+            EXEC(N'CREATE OR ALTER VIEW [dbo].[MmfApiReadings] AS
+                SELECT * FROM [dbo].[SolarApiReadings] WHERE [DataType] = N''MMF'';');
+            EXEC(N'CREATE OR ALTER VIEW [dbo].[DdqRawApiResponses] AS
+                SELECT rawResponse.*, job.[CollectionId], job.[PlantId], job.[DataType]
+                FROM [dbo].[RawApiResponses] rawResponse
+                INNER JOIN [dbo].[CollectionJobs] job ON job.[Id] = rawResponse.[CollectionJobId]
+                WHERE job.[DataType] <> N''MMF'';');
+            EXEC(N'CREATE OR ALTER VIEW [dbo].[MmfRawApiResponses] AS
+                SELECT rawResponse.*, job.[CollectionId], job.[PlantId], job.[DataType]
+                FROM [dbo].[RawApiResponses] rawResponse
+                INNER JOIN [dbo].[CollectionJobs] job ON job.[Id] = rawResponse.[CollectionJobId]
+                WHERE job.[DataType] = N''MMF'';');
             """);
     }
 

@@ -1,0 +1,56 @@
+<fieldset class="plant-filter parameter-filter">
+    <legend>Parameters</legend>
+    <div class="plant-filter-controls">
+        <label class="filter-field">
+            <span>Search and choose a parameter</span>
+            <input @key="SearchVersion" type="search" list="available-parameters"
+                   placeholder="@SearchPlaceholder" value="@PendingParameter"
+                   @onchange="AddFromSelection" autocomplete="off" />
+            <datalist id="available-parameters">
+                @foreach (var parameter in AvailableParameters)
+                {
+                    <option value="@parameter"></option>
+                }
+            </datalist>
+        </label>
+        <span class="plant-auto-add @(SelectedValues.Count > 0 ? "has-selection" : null)">@SelectionStatus</span>
+    </div>
+    <div class="plant-filter-chips" aria-live="polite">
+        @foreach (var parameter in Parameters.Where(SelectedValues.Contains))
+        {
+            <button type="button" class="plant-filter-chip" @onclick="() => Remove(parameter)"
+                    aria-label="@($"Remove {parameter}")">
+                @parameter <span aria-hidden="true">&times;</span>
+            </button>
+        }
+    </div>
+    <small>@(SelectedValues.Count == 0
+        ? "No parameter selected. All available MMF parameters will be included."
+        : $"{SelectedValues.Count} parameter(s) selected. Search again to add more.")</small>
+</fieldset>
+
+@code {
+    [Parameter] public List<string> Parameters { get; set; } = [];
+    [Parameter] public HashSet<string> SelectedValues { get; set; } = [];
+    [Parameter] public EventCallback<HashSet<string>> SelectedValuesChanged { get; set; }
+    private string PendingParameter = string.Empty;
+    private int SearchVersion;
+    private IEnumerable<string> AvailableParameters => Parameters.Where(x => !SelectedValues.Contains(x));
+    private string SearchPlaceholder => SelectedValues.Count == 0 ? "Search parameter" : "Search another parameter to add...";
+    private string SelectionStatus => SelectedValues.Count == 0 ? "Select from the suggestions" : $"{SelectedValues.Count} selected";
+
+    private async Task AddFromSelection(ChangeEventArgs args)
+    {
+        PendingParameter = args.Value?.ToString()?.Trim() ?? string.Empty;
+        var parameter = AvailableParameters.FirstOrDefault(x => x.Equals(PendingParameter, StringComparison.OrdinalIgnoreCase));
+        if (parameter is null) return;
+        var values = new HashSet<string>(SelectedValues, StringComparer.OrdinalIgnoreCase) { parameter };
+        PendingParameter = string.Empty;
+        SearchVersion++;
+        await SelectedValuesChanged.InvokeAsync(values);
+    }
+
+    private Task Remove(string parameter) => SelectedValuesChanged.InvokeAsync(
+        SelectedValues.Where(x => !x.Equals(parameter, StringComparison.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase));
+}

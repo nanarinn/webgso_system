@@ -12,6 +12,33 @@
 .plant-filter small { color: var(--sb-muted); font-size: .75rem; }
 .mmf-page .plant-filter { background: #f1faf7; }
 .mmf-page .plant-filter-chip { background: #e0f3ec; border-color: #aed8c8; color: #086047; }
+.mmf-compact-filter .parameter-filter { margin-bottom: 14px; padding: 0; border: 0; background: transparent; }
+.mmf-compact-filter .parameter-filter legend { display: none; }
+.mmf-compact-filter .interval-control { max-width: 260px; }
+.mmf-compact-filter .period-section .date-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mmf-template-panel { overflow: hidden; border-top: 4px solid var(--mmf-accent); }
+.mmf-sheet-heading .excel-sheet-title { background: var(--mmf-deep); }
+.mmf-pivot-scroll { overflow: auto; max-height: 590px; border: 1px solid #c7d5cc; border-radius: 10px; margin: 0 24px 24px; background: #fff; box-shadow: inset 0 1px 0 #fff; }
+.mmf-pivot-table { border-collapse: separate; border-spacing: 0; min-width: 100%; width: max-content; color: #172b24; font-family: "Aptos", "Segoe UI", sans-serif; font-size: .72rem; font-variant-numeric: tabular-nums; }
+.mmf-pivot-table th, .mmf-pivot-table td { box-sizing: border-box; width: 78px; min-width: 78px; height: 40px; padding: 8px 9px; border-right: 1px solid #d4ded7; border-bottom: 1px solid #d4ded7; text-align: right; white-space: nowrap; background: #fff; }
+.mmf-pivot-table thead th { position: sticky; top: 0; z-index: 4; height: 46px; color: #123c2b; background: #d9ead4; text-align: center; font-family: "Aptos", "Segoe UI", sans-serif; font-size: .68rem; font-weight: 800; letter-spacing: .015em; }
+.mmf-pivot-table tbody tr:nth-child(even) td, .mmf-pivot-table tbody tr:nth-child(even) th { background: #f3f8f1; }
+.mmf-pivot-table .sticky-plant { position: sticky; left: 0; z-index: 3; width: 190px; min-width: 190px; text-align: left; color: var(--mmf-deep); font-weight: 750; }
+.mmf-pivot-table .sticky-code { position: sticky; left: 190px; z-index: 3; width: 125px; min-width: 125px; text-align: left; color: #496358; font-weight: 700; box-shadow: 8px 0 12px rgba(16,54,40,.08); }
+.mmf-pivot-table thead .sticky-plant, .mmf-pivot-table thead .sticky-code { z-index: 6; background: #d8ead2; }
+.mmf-pivot-table .missing-cell { color: #9a5b00; background: #fff7dc; }
+.mmf-template-graph { overflow: hidden; margin: 0 24px 24px; border-color: #c7ddd2; box-shadow: 0 12px 30px rgba(19,62,45,.08); }
+.mmf-template-graph .graph-heading { background: linear-gradient(110deg,#f1faf6,#fffdf2); }
+.mmf-template-graph .graph-metrics b, .mmf-template-graph .graph-legend-title { color: var(--mmf-deep); }
+.mmf-chart-plot-bg { fill: url(#mmfChartBackground); stroke: #c8dcd1; }
+.mmf-plant-series:hover { filter: url(#mmfLineGlow); }
+.mmf-graph-scale { display: flex; align-items: center; gap: 14px; }
+.mmf-graph-scale > span { display: grid; color: #48675a; text-align: right; }
+.mmf-graph-scale small { font-size: .58rem; text-transform: uppercase; letter-spacing: .08em; }
+.mmf-graph-scale strong { color: var(--mmf-deep); font-size: .75rem; }
+.mmf-template-graph .graph-legend-panel { border-top: 1px solid #e4ece7; background: #f8fbf9; }
+.legend-tool { width: fit-content; padding: 8px 9px; border: 1px solid #cbd9e6; border-radius: 7px; background: #fff; color: #496358; font: inherit; font-size: .62rem; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.legend-tool:hover { border-color: #8fc5aa; background: #f1faf6; color: var(--mmf-deep); }
 .location-divider { display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; color: var(--sb-muted); font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
 .location-divider::before, .location-divider::after { content: ""; height: 1px; flex: 1; background: var(--sb-border); }
 .location-alternatives { display: grid; grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); align-items: center; gap: 14px; margin-bottom: 24px; }
