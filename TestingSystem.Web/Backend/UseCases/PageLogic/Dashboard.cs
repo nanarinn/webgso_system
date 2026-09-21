@@ -1,8 +1,5 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
-using TestingSystem.Web.Models;
-
-
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
 public partial class Dashboard : ComponentBase
@@ -20,7 +17,7 @@ public partial class Dashboard : ComponentBase
     private int DdqSuccessfulRequests { get; set; }
     private int DdqFailedRequests { get; set; }
     private int ActiveMmf { get; set; }
-    private List<SolarDocument> RecentDocuments { get; set; } = [];
+    private List<RecentRepositoryRecord> RecentRecords { get; set; } = [];
     private List<DashboardItem> PlantItems { get; set; } = [];
     private List<DashboardItem> SuccessfulItems { get; set; } = [];
     private List<DashboardItem> FailedItems { get; set; } = [];
@@ -34,15 +31,15 @@ public partial class Dashboard : ComponentBase
     protected override async Task OnInitializedAsync()
     {
         await using var database = await ContextFactory.CreateDbContextAsync();
-        var documents = await database.SolarDocuments
-            .OrderByDescending(document => document.UpdatedAt)
-            .ToListAsync();
         var plants = await database.LssPlants
             .Where(plant => plant.IsActive)
             .OrderBy(plant => plant.Name)
             .ToListAsync();
 
-        RecentDocuments = documents.Take(4).ToList();
+        var jobs = await database.CollectionJobs.AsNoTracking().OrderByDescending(x => x.StartedAt)
+            .Join(database.LssPlants, job => job.PlantId, plant => plant.Id, (job, plant) => new { job, plant }).Take(100).ToListAsync();
+        RecentRecords = jobs.Take(4).Select(x => new RecentRepositoryRecord(x.job.CollectionId, x.plant.Name,
+            x.job.DataType, x.job.Status == "Completed" ? "Successful" : x.job.Status, x.job.StartedAt)).ToList();
         PlantItems = plants.Select(plant => new DashboardItem(
             plant.Name,
             $"{plant.State} · {plant.CapacityMw:N0} MW · API configuration registered",
@@ -50,13 +47,11 @@ public partial class Dashboard : ComponentBase
             plant.IsActive ? "Active" : "Inactive",
             plant.CreatedAt)).ToList();
 
-        SuccessfulItems = documents
-            .Where(document => document.ProjectStage == "Active")
-            .Select(document => CreateRequestItem(document, "Successful"))
+        SuccessfulItems = jobs.Where(x => x.job.DataType != "MMF" && x.job.Status == "Completed")
+            .Select(x => CreateRequestItem(x.job.CollectionId, x.plant.Name, x.job.StartedAt, "Successful"))
             .ToList();
-        FailedItems = documents
-            .Where(document => document.ProjectStage == "Review")
-            .Select(document => CreateRequestItem(document, "Failed"))
+        FailedItems = jobs.Where(x => x.job.DataType != "MMF" && x.job.Status == "Failed")
+            .Select(x => CreateRequestItem(x.job.CollectionId, x.plant.Name, x.job.StartedAt, "Failed"))
             .ToList();
         MmfItems = plants
             .Where(plant => !string.IsNullOrWhiteSpace(plant.MmfApiEndpoint))
@@ -91,13 +86,15 @@ public partial class Dashboard : ComponentBase
 
     private void CloseMetric() => IsMetricOpen = false;
 
-    private static DashboardItem CreateRequestItem(SolarDocument document, string status) =>
+    private static DashboardItem CreateRequestItem(string collectionId, string plantName, DateTimeOffset updatedAt, string status) =>
         new(
-            $"{document.ReferenceNumber} DDQ Submission",
-            $"{document.Category} data request for {document.Title}",
-            document.ReferenceNumber.Replace("LSS-", "DDQ-"),
+            $"{plantName} DDQ Submission",
+            $"DDQ collection data for {plantName}",
+            collectionId,
             status,
-            document.UpdatedAt);
+            updatedAt);
+
+    private sealed record RecentRepositoryRecord(string Reference, string PlantName, string DataType, string Status, DateTimeOffset UpdatedAt);
 
     private sealed record DashboardItem(
         string Name,

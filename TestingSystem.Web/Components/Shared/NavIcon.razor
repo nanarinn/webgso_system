@@ -1,0 +1,23 @@
+<span class="nav-symbol" aria-hidden="true">
+    <svg viewBox="0 0 24 24" focusable="false">
+        @switch (Name)
+        {
+            case "overview": <path d="M3 11.5 12 4l9 7.5M5.5 10v9.5h13V10M9.5 19.5v-6h5v6" /> break;
+            case "ddq": <path d="M4 18V9m5 9V5m5 13v-7m5 7V3M3 21h18" /> break;
+            case "mmf": <path d="M3 16c3-6 5 2 8-4s5 2 10-5M3 20h18M4 4v12" /> break;
+            case "analysis": <path d="m4 18 5-5 3 3 7-8M15 8h4v4M4 4v16h16" /> break;
+            case "collection": <path d="M5 5h14v14H5zM8 2v6m8-6v6M2 9h20M9 13h6m-6 3h4" /> break;
+            case "reports": <path d="M6 3h9l4 4v14H6zM15 3v5h5M9 12h7m-7 4h7" /> break;
+            case "plant": <path d="M5 5h14l2 10H3L5 5Zm1 4h12M4 12h16M9 5 8 15m7-10 1 10M12 15v4m-4 2h8" /> break;
+            case "schedule": <path d="M5 4h14v16H5zM8 2v5m8-5v5M5 9h14m-10 4h2m3 0h2m-7 3h2" /> break;
+            case "automation": <path d="M4 3h10l4 4v6M14 3v5h5M4 3v18h8m2-5 7 2-7 3v-2.2L10 18l4-.8V16Z" /> break;
+            case "users": <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7-1a3 3 0 1 0 0-6M2 21v-2a6 6 0 0 1 12 0v2m1-7a5 5 0 0 1 7 5v2" /> break;
+            case "audit": <path d="M7 3h10v3H7zM5 5h14v16H5zM8 11h8m-8 4h5" /> break;
+            default: <path d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7zM9 12l2 2 4-5" /> break;
+        }
+    </svg>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;
+}

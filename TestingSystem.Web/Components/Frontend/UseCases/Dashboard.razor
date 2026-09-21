@@ -55,16 +55,16 @@
         </div>
 
         <div class="record-list">
-            @foreach (var document in RecentDocuments)
+            @foreach (var record in RecentRecords)
             {
                 <div class="record-row">
-                    <span class="record-code">@document.ReferenceNumber</span>
+                    <span class="record-code">@record.Reference</span>
                     <div class="record-name">
-                        <strong>@document.Title</strong>
-                        <span>@document.Category</span>
+                        <strong>@record.PlantName</strong>
+                        <span>@record.DataType collection</span>
                     </div>
-                    <span class="status-pill status-@document.ProjectStage.ToLowerInvariant()">@document.ProjectStage</span>
-                    <time datetime="@document.UpdatedAt.ToString("O")">@document.UpdatedAt.ToString("dd MMM yyyy")</time>
+                    <span class="status-pill status-@record.Status.ToLowerInvariant()">@record.Status</span>
+                    <time datetime="@record.UpdatedAt.ToString("O")">@record.UpdatedAt.ToString("dd MMM yyyy")</time>
                 </div>
             }
         </div>

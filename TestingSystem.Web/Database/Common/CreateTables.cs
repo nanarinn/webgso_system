@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using TestingSystem.Web.Demo;
 using TestingSystem.Web.Models;
 
 namespace TestingSystem.Web.Data;
@@ -16,10 +15,8 @@ public static class DatabaseInitializer
         await database.Database.EnsureCreatedAsync();
         await EnsurePlantTableAsync(database);
         await EnsurePlantApiConfigurationsAsync(database);
-        await EnsureFsdCoreTablesAsync(database);
         await EnsureSolarApiReadingTableAsync(database);
-        await SeedDocumentsAsync(database);
-        await SeedPlantsAsync(database);
+        await EnsureFsdCoreTablesAsync(database);
         await SeedUsersAsync(serviceProvider, configuration);
     }
 
@@ -78,18 +75,6 @@ public static class DatabaseInitializer
         }
     }
 
-    private static async Task SeedDocumentsAsync(ApplicationDbContext database)
-    {
-        if (await database.SolarDocuments.AnyAsync())
-        {
-            return;
-        }
-
-        database.SolarDocuments.AddRange(DemoData.SolarDocuments(DateTimeOffset.UtcNow));
-
-        await database.SaveChangesAsync();
-    }
-
     private static async Task EnsureSolarApiReadingTableAsync(ApplicationDbContext database)
     {
         await database.Database.ExecuteSqlRawAsync("""
@@ -117,16 +102,6 @@ public static class DatabaseInitializer
                 SELECT * FROM [dbo].[SolarApiReadings] WHERE [DataType] <> N''MMF'';');
             EXEC(N'CREATE OR ALTER VIEW [dbo].[MmfApiReadings] AS
                 SELECT * FROM [dbo].[SolarApiReadings] WHERE [DataType] = N''MMF'';');
-            EXEC(N'CREATE OR ALTER VIEW [dbo].[DdqRawApiResponses] AS
-                SELECT rawResponse.*, job.[CollectionId], job.[PlantId], job.[DataType]
-                FROM [dbo].[RawApiResponses] rawResponse
-                INNER JOIN [dbo].[CollectionJobs] job ON job.[Id] = rawResponse.[CollectionJobId]
-                WHERE job.[DataType] <> N''MMF'';');
-            EXEC(N'CREATE OR ALTER VIEW [dbo].[MmfRawApiResponses] AS
-                SELECT rawResponse.*, job.[CollectionId], job.[PlantId], job.[DataType]
-                FROM [dbo].[RawApiResponses] rawResponse
-                INNER JOIN [dbo].[CollectionJobs] job ON job.[Id] = rawResponse.[CollectionJobId]
-                WHERE job.[DataType] = N''MMF'';');
             """);
     }
 
@@ -162,9 +137,13 @@ public static class DatabaseInitializer
             CREATE TABLE [ValidationRules] (
                 [Id] int IDENTITY PRIMARY KEY, [Code] nvarchar(40) NOT NULL UNIQUE,
                 [DataType] nvarchar(10) NOT NULL, [FieldName] nvarchar(100) NOT NULL,
+                [Name] nvarchar(200) NOT NULL, [Description] nvarchar(1000) NOT NULL, [Condition] nvarchar(300) NOT NULL,
                 [Operator] nvarchar(30) NOT NULL, [MinimumValue] decimal(18,4) NULL,
                 [MaximumValue] decimal(18,4) NULL, [Severity] nvarchar(20) NOT NULL,
                 [IsActive] bit NOT NULL);
+            IF COL_LENGTH('ValidationRules', 'Name') IS NULL ALTER TABLE [ValidationRules] ADD [Name] nvarchar(200) NOT NULL CONSTRAINT [DF_ValidationRules_Name] DEFAULT '';
+            IF COL_LENGTH('ValidationRules', 'Description') IS NULL ALTER TABLE [ValidationRules] ADD [Description] nvarchar(1000) NOT NULL CONSTRAINT [DF_ValidationRules_Description] DEFAULT '';
+            IF COL_LENGTH('ValidationRules', 'Condition') IS NULL ALTER TABLE [ValidationRules] ADD [Condition] nvarchar(300) NOT NULL CONSTRAINT [DF_ValidationRules_Condition] DEFAULT '';
 
             IF OBJECT_ID(N'[DataAnomalies]', N'U') IS NULL
             CREATE TABLE [DataAnomalies] (
@@ -177,9 +156,31 @@ public static class DatabaseInitializer
             IF OBJECT_ID(N'[CollectionSchedules]', N'U') IS NULL
             CREATE TABLE [CollectionSchedules] (
                 [Id] int IDENTITY PRIMARY KEY, [PlantId] int NOT NULL,
-                [DataType] nvarchar(10) NOT NULL, [CronExpression] nvarchar(100) NOT NULL,
+                [ScheduleCode] nvarchar(40) NOT NULL DEFAULT '', [Name] nvarchar(160) NOT NULL DEFAULT '',
+                [ApiType] nvarchar(10) NOT NULL DEFAULT 'DDQ', [DataType] nvarchar(40) NOT NULL,
+                [Interval] nvarchar(30) NOT NULL DEFAULT '15 minutes', [RunTime] nvarchar(5) NOT NULL DEFAULT '00:15', [ScheduleDay] nvarchar(20) NOT NULL DEFAULT '', [ScheduleMonths] nvarchar(50) NOT NULL DEFAULT '',
+                [CronExpression] nvarchar(100) NOT NULL,
                 [TimeZoneId] nvarchar(100) NOT NULL, [RetryCount] int NOT NULL,
                 [IsActive] bit NOT NULL);
+
+            IF COL_LENGTH('CollectionSchedules', 'ScheduleCode') IS NULL ALTER TABLE [CollectionSchedules] ADD [ScheduleCode] nvarchar(40) NOT NULL CONSTRAINT [DF_CollectionSchedules_ScheduleCode] DEFAULT '';
+            IF COL_LENGTH('CollectionSchedules', 'Name') IS NULL ALTER TABLE [CollectionSchedules] ADD [Name] nvarchar(160) NOT NULL CONSTRAINT [DF_CollectionSchedules_Name] DEFAULT '';
+            IF COL_LENGTH('CollectionSchedules', 'ApiType') IS NULL ALTER TABLE [CollectionSchedules] ADD [ApiType] nvarchar(10) NOT NULL CONSTRAINT [DF_CollectionSchedules_ApiType] DEFAULT 'DDQ';
+            IF COL_LENGTH('CollectionSchedules', 'Interval') IS NULL ALTER TABLE [CollectionSchedules] ADD [Interval] nvarchar(30) NOT NULL CONSTRAINT [DF_CollectionSchedules_Interval] DEFAULT '15 minutes';
+            IF COL_LENGTH('CollectionSchedules', 'RunTime') IS NULL ALTER TABLE [CollectionSchedules] ADD [RunTime] nvarchar(5) NOT NULL CONSTRAINT [DF_CollectionSchedules_RunTime] DEFAULT '00:15';
+            IF COL_LENGTH('CollectionSchedules', 'ScheduleDay') IS NULL ALTER TABLE [CollectionSchedules] ADD [ScheduleDay] nvarchar(20) NOT NULL CONSTRAINT [DF_CollectionSchedules_ScheduleDay] DEFAULT '';
+            IF COL_LENGTH('CollectionSchedules', 'ScheduleMonths') IS NULL ALTER TABLE [CollectionSchedules] ADD [ScheduleMonths] nvarchar(50) NOT NULL CONSTRAINT [DF_CollectionSchedules_ScheduleMonths] DEFAULT '';
+            IF COL_LENGTH('CollectionSchedules', 'DataType') IS NOT NULL ALTER TABLE [CollectionSchedules] ALTER COLUMN [DataType] nvarchar(40) NOT NULL;
+            ;WITH duplicateSchedules AS (
+                SELECT [Id], [ScheduleCode], ROW_NUMBER() OVER (PARTITION BY [ScheduleCode] ORDER BY [Id]) AS [DuplicateNumber]
+                FROM [CollectionSchedules]
+            )
+            UPDATE scheduleRow SET [ScheduleCode] = CONCAT(N'SCH-MIGRATED-', scheduleRow.[Id])
+            FROM [CollectionSchedules] scheduleRow
+            INNER JOIN duplicateSchedules duplicateRow ON duplicateRow.[Id] = scheduleRow.[Id]
+            WHERE NULLIF(LTRIM(RTRIM(scheduleRow.[ScheduleCode])), N'') IS NULL OR duplicateRow.[DuplicateNumber] > 1;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CollectionSchedules_ScheduleCode' AND [object_id] = OBJECT_ID(N'[CollectionSchedules]'))
+                CREATE UNIQUE INDEX [IX_CollectionSchedules_ScheduleCode] ON [CollectionSchedules] ([ScheduleCode]);
 
             IF OBJECT_ID(N'[ReportExecutions]', N'U') IS NULL
             CREATE TABLE [ReportExecutions] (
@@ -190,17 +191,60 @@ public static class DatabaseInitializer
                 [MainFilePath] nvarchar(500) NULL, [AnomalyFilePath] nvarchar(500) NULL,
                 [ErrorMessage] nvarchar(1000) NULL);
 
-            IF OBJECT_ID(N'[StoredDataRecords]', N'U') IS NULL
-            CREATE TABLE [StoredDataRecords] (
-                [Id] bigint IDENTITY PRIMARY KEY, [Category] nvarchar(80) NOT NULL,
-                [RecordKey] nvarchar(160) NOT NULL, [JsonData] nvarchar(max) NOT NULL,
-                [UpdatedAt] datetimeoffset NOT NULL,
-                CONSTRAINT [UQ_StoredDataRecords_Category_RecordKey] UNIQUE ([Category], [RecordKey]));
+            IF COL_LENGTH('CollectionJobs', 'ResponseMessage') IS NULL ALTER TABLE [CollectionJobs] ADD [ResponseMessage] nvarchar(1000) NOT NULL CONSTRAINT [DF_CollectionJobs_ResponseMessage] DEFAULT '';
+            IF COL_LENGTH('CollectionJobs', 'DurationSeconds') IS NULL ALTER TABLE [CollectionJobs] ADD [DurationSeconds] float NOT NULL CONSTRAINT [DF_CollectionJobs_DurationSeconds] DEFAULT 0;
+
+            IF COL_LENGTH('ReportExecutions', 'Name') IS NULL ALTER TABLE [ReportExecutions] ADD [Name] nvarchar(200) NOT NULL CONSTRAINT [DF_ReportExecutions_Name] DEFAULT '';
+            IF COL_LENGTH('ReportExecutions', 'SubmissionDate') IS NULL ALTER TABLE [ReportExecutions] ADD [SubmissionDate] datetime2 NOT NULL CONSTRAINT [DF_ReportExecutions_SubmissionDate] DEFAULT '2000-01-01';
+            IF COL_LENGTH('ReportExecutions', 'DataSelection') IS NULL ALTER TABLE [ReportExecutions] ADD [DataSelection] nvarchar(100) NOT NULL CONSTRAINT [DF_ReportExecutions_DataSelection] DEFAULT '';
+            IF COL_LENGTH('ReportExecutions', 'Description') IS NULL ALTER TABLE [ReportExecutions] ADD [Description] nvarchar(2000) NOT NULL CONSTRAINT [DF_ReportExecutions_Description] DEFAULT '';
+            IF COL_LENGTH('ReportExecutions', 'PlantCount') IS NULL ALTER TABLE [ReportExecutions] ADD [PlantCount] int NOT NULL CONSTRAINT [DF_ReportExecutions_PlantCount] DEFAULT 0;
+            IF COL_LENGTH('ReportExecutions', 'RecordCount') IS NULL ALTER TABLE [ReportExecutions] ADD [RecordCount] int NOT NULL CONSTRAINT [DF_ReportExecutions_RecordCount] DEFAULT 0;
+            IF COL_LENGTH('ReportExecutions', 'AnomalyCount') IS NULL ALTER TABLE [ReportExecutions] ADD [AnomalyCount] int NOT NULL CONSTRAINT [DF_ReportExecutions_AnomalyCount] DEFAULT 0;
+
+            IF OBJECT_ID(N'[ReportSchedules]', N'U') IS NULL CREATE TABLE [ReportSchedules] (
+                [Id] int IDENTITY PRIMARY KEY, [ScheduleCode] nvarchar(60) NOT NULL UNIQUE, [Name] nvarchar(200) NOT NULL,
+                [ApiType] nvarchar(10) NOT NULL, [DataType] nvarchar(50) NOT NULL, [IntervalMinutes] int NOT NULL,
+                [ScheduleType] nvarchar(30) NOT NULL, [ScheduleDay] nvarchar(20) NOT NULL, [ScheduleMonths] nvarchar(50) NOT NULL,
+                [ExecutionTime] nvarchar(5) NOT NULL, [IsActive] bit NOT NULL, [CreatedAt] datetimeoffset NOT NULL);
+            IF OBJECT_ID(N'[ReportScheduleRecipients]', N'U') IS NULL CREATE TABLE [ReportScheduleRecipients] (
+                [Id] int IDENTITY PRIMARY KEY, [ReportScheduleId] int NOT NULL, [Email] nvarchar(320) NOT NULL,
+                CONSTRAINT [FK_ReportScheduleRecipients_ReportSchedules] FOREIGN KEY ([ReportScheduleId]) REFERENCES [ReportSchedules]([Id]) ON DELETE CASCADE,
+                CONSTRAINT [UQ_ReportScheduleRecipients] UNIQUE ([ReportScheduleId], [Email]));
+            IF OBJECT_ID(N'[ReportDeliveryAttempts]', N'U') IS NULL CREATE TABLE [ReportDeliveryAttempts] (
+                [Id] bigint IDENTITY PRIMARY KEY, [DeliveryCode] nvarchar(60) NOT NULL UNIQUE, [ReportScheduleId] int NULL,
+                [ScheduleName] nvarchar(200) NOT NULL, [ApiType] nvarchar(10) NOT NULL, [GeneratedAt] datetimeoffset NOT NULL,
+                [ReportStatus] nvarchar(30) NOT NULL, [EmailStatus] nvarchar(30) NOT NULL, [OverallStatus] nvarchar(30) NOT NULL,
+                [Message] nvarchar(2000) NOT NULL,
+                CONSTRAINT [FK_ReportDeliveryAttempts_ReportSchedules] FOREIGN KEY ([ReportScheduleId]) REFERENCES [ReportSchedules]([Id]) ON DELETE SET NULL);
+            IF OBJECT_ID(N'[ReportDeliveryRecipients]', N'U') IS NULL CREATE TABLE [ReportDeliveryRecipients] (
+                [Id] bigint IDENTITY PRIMARY KEY, [ReportDeliveryAttemptId] bigint NOT NULL, [Email] nvarchar(320) NOT NULL,
+                CONSTRAINT [FK_ReportDeliveryRecipients_ReportDeliveryAttempts] FOREIGN KEY ([ReportDeliveryAttemptId]) REFERENCES [ReportDeliveryAttempts]([Id]) ON DELETE CASCADE);
 
             ALTER TABLE [CollectionJobs] ALTER COLUMN [DataType] nvarchar(max) NOT NULL;
             ALTER TABLE [CollectionJobs] ALTER COLUMN [Mode] nvarchar(max) NOT NULL;
             ALTER TABLE [CollectionJobs] ALTER COLUMN [ErrorMessage] nvarchar(max) NULL;
             ALTER TABLE [RawApiResponses] ALTER COLUMN [ContentType] nvarchar(max) NOT NULL;
+            IF OBJECT_ID(N'[FK_CollectionJobs_LssPlants]', N'F') IS NULL ALTER TABLE [CollectionJobs] WITH CHECK ADD CONSTRAINT [FK_CollectionJobs_LssPlants] FOREIGN KEY ([PlantId]) REFERENCES [LssPlants]([Id]);
+            IF OBJECT_ID(N'[FK_RawApiResponses_CollectionJobs]', N'F') IS NULL ALTER TABLE [RawApiResponses] WITH CHECK ADD CONSTRAINT [FK_RawApiResponses_CollectionJobs] FOREIGN KEY ([CollectionJobId]) REFERENCES [CollectionJobs]([Id]) ON DELETE CASCADE;
+            IF OBJECT_ID(N'[FK_SolarApiReadings_CollectionJobs]', N'F') IS NULL ALTER TABLE [SolarApiReadings] WITH CHECK ADD CONSTRAINT [FK_SolarApiReadings_CollectionJobs] FOREIGN KEY ([CollectionJobId]) REFERENCES [CollectionJobs]([Id]) ON DELETE CASCADE;
+            IF OBJECT_ID(N'[FK_SolarApiReadings_LssPlants]', N'F') IS NULL ALTER TABLE [SolarApiReadings] WITH CHECK ADD CONSTRAINT [FK_SolarApiReadings_LssPlants] FOREIGN KEY ([PlantId]) REFERENCES [LssPlants]([Id]);
+            IF OBJECT_ID(N'[FK_DataAnomalies_CollectionJobs]', N'F') IS NULL ALTER TABLE [DataAnomalies] WITH CHECK ADD CONSTRAINT [FK_DataAnomalies_CollectionJobs] FOREIGN KEY ([CollectionJobId]) REFERENCES [CollectionJobs]([Id]) ON DELETE CASCADE;
+            IF OBJECT_ID(N'[FK_DataAnomalies_ValidationRules]', N'F') IS NULL ALTER TABLE [DataAnomalies] WITH CHECK ADD CONSTRAINT [FK_DataAnomalies_ValidationRules] FOREIGN KEY ([ValidationRuleId]) REFERENCES [ValidationRules]([Id]) ON DELETE SET NULL;
+            IF OBJECT_ID(N'[FK_CollectionSchedules_LssPlants]', N'F') IS NULL ALTER TABLE [CollectionSchedules] WITH CHECK ADD CONSTRAINT [FK_CollectionSchedules_LssPlants] FOREIGN KEY ([PlantId]) REFERENCES [LssPlants]([Id]) ON DELETE CASCADE;
+            IF OBJECT_ID(N'[StoredDataRecords]', N'U') IS NOT NULL DROP TABLE [StoredDataRecords];
+            IF OBJECT_ID(N'[SolarDocuments]', N'U') IS NOT NULL DROP TABLE [SolarDocuments];
+
+            EXEC(N'CREATE OR ALTER VIEW [dbo].[DdqRawApiResponses] AS
+                SELECT rawResponse.*, job.[CollectionId], job.[PlantId], job.[DataType]
+                FROM [dbo].[RawApiResponses] rawResponse
+                INNER JOIN [dbo].[CollectionJobs] job ON job.[Id] = rawResponse.[CollectionJobId]
+                WHERE job.[DataType] <> N''MMF'';');
+            EXEC(N'CREATE OR ALTER VIEW [dbo].[MmfRawApiResponses] AS
+                SELECT rawResponse.*, job.[CollectionId], job.[PlantId], job.[DataType]
+                FROM [dbo].[RawApiResponses] rawResponse
+                INNER JOIN [dbo].[CollectionJobs] job ON job.[Id] = rawResponse.[CollectionJobId]
+                WHERE job.[DataType] = N''MMF'';');
             """);
     }
 
@@ -237,17 +281,6 @@ public static class DatabaseInitializer
             IF COL_LENGTH('LssPlants', 'LastApiTestAt') IS NULL
                 ALTER TABLE [LssPlants] ADD [LastApiTestAt] datetimeoffset NULL;
             """);
-    }
-
-    private static async Task SeedPlantsAsync(ApplicationDbContext database)
-    {
-        if (await database.LssPlants.AnyAsync())
-        {
-            return;
-        }
-
-        database.LssPlants.AddRange(DemoData.LssPlants());
-        await database.SaveChangesAsync();
     }
 
     private static async Task EnsurePlantApiConfigurationsAsync(ApplicationDbContext database)

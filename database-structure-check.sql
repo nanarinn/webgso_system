@@ -79,6 +79,13 @@ SELECT 'LssPlants' AS [ObjectName], COUNT_BIG(*) AS [TotalRows] FROM dbo.LssPlan
 UNION ALL SELECT 'CollectionJobs', COUNT_BIG(*) FROM dbo.CollectionJobs
 UNION ALL SELECT 'RawApiResponses', COUNT_BIG(*) FROM dbo.RawApiResponses
 UNION ALL SELECT 'SolarApiReadings', COUNT_BIG(*) FROM dbo.SolarApiReadings
+UNION ALL SELECT 'CollectionSchedules', COUNT_BIG(*) FROM dbo.CollectionSchedules
+UNION ALL SELECT 'ValidationRules', COUNT_BIG(*) FROM dbo.ValidationRules
+UNION ALL SELECT 'DataAnomalies', COUNT_BIG(*) FROM dbo.DataAnomalies
+UNION ALL SELECT 'ReportSchedules', COUNT_BIG(*) FROM dbo.ReportSchedules
+UNION ALL SELECT 'ReportScheduleRecipients', COUNT_BIG(*) FROM dbo.ReportScheduleRecipients
+UNION ALL SELECT 'ReportDeliveryAttempts', COUNT_BIG(*) FROM dbo.ReportDeliveryAttempts
+UNION ALL SELECT 'ReportExecutions', COUNT_BIG(*) FROM dbo.ReportExecutions
 UNION ALL SELECT 'DdqApiReadings view', COUNT_BIG(*) FROM dbo.DdqApiReadings
 UNION ALL SELECT 'MmfApiReadings view', COUNT_BIG(*) FROM dbo.MmfApiReadings
 UNION ALL SELECT 'DdqRawApiResponses view', COUNT_BIG(*) FROM dbo.DdqRawApiResponses

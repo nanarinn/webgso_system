@@ -4,22 +4,53 @@
 
 <PageTitle>Data Quality | SBLSS System</PageTitle>
 
-<div class="admin-page">
-    <header class="page-heading"><div><p class="section-label">UCLSS017 and UCLSS018</p><h1>Validation Rules and Anomalies</h1><p class="page-subtitle">Manage validation thresholds and monitor detected DDQ or MMF anomalies.</p></div><button class="primary-action admin-primary" type="button" @onclick="OpenRuleDialog">+ New Rule</button></header>
-    @if (!string.IsNullOrWhiteSpace(Message)) { <p class="form-success">@Message</p> }
-    <section class="admin-summary"><div><small>Validation rules</small><strong>@Rules.Count</strong></div><div><small>Active rules</small><strong>@Rules.Count(x => x.IsActive)</strong></div><div><small>Open anomalies</small><strong>@Anomalies.Count(x => x.Status == "Open")</strong></div></section>
-    <section class="table-panel"><div class="report-table"><div class="report-row report-header"><span>Code</span><span>Data</span><span>Field</span><span>Range</span><span>Severity</span><span>Status</span></div>
-        @foreach (var rule in Rules) { <div class="report-row"><span>@rule.Code</span><span>@rule.DataType</span><span>@rule.FieldName</span><span>@FormatRange(rule)</span><span>@rule.Severity</span><button type="button" class="status-pill" @onclick="() => ToggleRuleAsync(rule)">@(rule.IsActive ? "Active" : "Inactive")</button></div> }
-    </div></section>
-    <section class="table-panel"><div class="report-table"><div class="report-row report-header"><span>Detected</span><span>Data</span><span>Field</span><span>Original</span><span>Reason</span><span>Status</span></div>
-        @if (Anomalies.Count == 0) { <div class="collection-empty"><strong>No anomalies recorded</strong><span>Anomalies will appear after the collection pipeline is connected.</span></div> }
-        @foreach (var item in Anomalies) { <div class="report-row"><span>@item.DetectedAt.ToLocalTime().ToString("dd MMM HH:mm")</span><span>@item.DataType</span><span>@item.FieldName</span><span>@(item.OriginalValue ?? "Missing")</span><span>@item.Reason</span><span>@item.Status</span></div> }
-    </div></section>
-</div>
+<div class="admin-page data-quality-page">
+    <header class="page-heading">
+        <div><p class="section-label">System data policy</p><h1>Data Quality Rules</h1><p class="page-subtitle">Review the fixed rules used by the system to detect DDQ and MMF data anomalies.</p></div>
+        <div class="system-managed-badge"><span>&#10003;</span><div><strong>System managed</strong><small>Rules are applied automatically</small></div></div>
+    </header>
 
-@if (IsRuleDialogOpen)
-{
-    <div class="modal-backdrop" @onclick="CloseRuleDialog"><section class="admin-modal" @onclick:stopPropagation="true"><h2>New validation rule</h2><div class="admin-form-grid">
-        <label><span>Code</span><input required @bind="Code" /></label><label><span>Data type</span><select @bind="DataType"><option>DDQ</option><option>MMF</option></select></label><label><span>Field</span><input required @bind="FieldName" /></label><label><span>Minimum</span><input type="number" step="any" @bind="Minimum" /></label><label><span>Maximum</span><input type="number" step="any" @bind="Maximum" /></label><label><span>Severity</span><select @bind="Severity"><option>Warning</option><option>Error</option></select></label>
-    </div><div class="modal-actions"><button type="button" @onclick="CloseRuleDialog">Cancel</button><button class="primary-action" type="button" @onclick="SaveRuleAsync">Save rule</button></div></section></div>
-}
+    <section class="admin-summary"><div><small>Detection rules</small><strong>@SystemRules.Count</strong></div><div><small>DDQ rules</small><strong>@SystemRules.Count(x => x.ApiType == "DDQ")</strong></div><div><small>MMF rules</small><strong>@SystemRules.Count(x => x.ApiType == "MMF")</strong></div><div><small>Open anomalies</small><strong>@Anomalies.Count(x => x.Status == "Open")</strong></div></section>
+
+    <nav class="report-section-tabs quality-section-tabs" aria-label="Data quality sections">
+        <button class="@(ActiveSection == "Rules" ? "active" : null)" type="button" @onclick="ShowRules">Detection rules <small>@SystemRules.Count</small></button>
+        <button class="@(ActiveSection == "History" ? "active" : null)" type="button" @onclick="ShowHistory">Anomaly history <small>@Anomalies.Count</small></button>
+    </nav>
+
+    @if (ActiveSection == "Rules")
+    {
+        <section class="table-panel quality-rule-panel">
+            <div class="admin-table-heading quality-panel-heading"><div><p class="section-label">Anomaly detection policy</p><h2>Rules applied automatically</h2></div><span>Read-only system configuration</span></div>
+            <div class="quality-inner-tabs"><span>View rules for</span><div class="api-type-switch" role="group" aria-label="Data quality API type">@foreach (var type in new[] { "DDQ", "MMF" }) { <button type="button" class="@(SelectedApiType == type ? "active" : null)" @onclick="() => SelectedApiType = type"><span class="api-switch-dot api-switch-@type.ToLowerInvariant()"></span>@type rules<small>@SystemRules.Count(x => x.ApiType == type)</small></button> }</div></div>
+            <div class="quality-list-heading"><div><p class="section-label">@SelectedApiType rules</p><strong>@VisibleRules.Count configured detection rule(s)</strong></div><span>Condition</span><span>Severity</span><span>Status</span></div>
+            <div class="quality-rule-list">
+                @foreach (var rule in VisibleRules)
+                {
+                    <article class="quality-rule-card">
+                        <div class="quality-rule-code"><span>@rule.ApiType</span><strong>@rule.Code</strong></div>
+                        <div class="quality-rule-copy"><strong>@rule.Name</strong><p>@rule.Description</p><small>Applied to: @rule.AppliesTo</small></div>
+                        <div class="quality-rule-condition"><small>Detection condition</small><strong>@rule.Condition</strong></div>
+                        <span class="quality-severity severity-@rule.Severity.ToLowerInvariant()">@rule.Severity</span>
+                        <span class="quality-active"><i></i>Active</span>
+                    </article>
+                }
+            </div>
+            <div class="quality-policy-note"><span>i</span><p><strong>How these rules work</strong>The checks run when analytics data is prepared. Any value that fails a rule is included in the anomaly report with its plant, timestamp, original value and reason.</p></div>
+        </section>
+    }
+    else
+    {
+        <section class="quality-history-overview">
+            <div><span class="quality-history-icon">!</span><p><small>Open anomalies</small><strong>@Anomalies.Count(x => x.Status == "Open")</strong></p></div>
+            <div><span class="quality-history-icon ddq">DQ</span><p><small>DDQ detected</small><strong>@Anomalies.Count(x => x.DataType == "DDQ")</strong></p></div>
+            <div><span class="quality-history-icon mmf">MF</span><p><small>MMF detected</small><strong>@Anomalies.Count(x => x.DataType == "MMF")</strong></p></div>
+        </section>
+        <section class="table-panel quality-anomaly-panel">
+            <div class="admin-table-heading"><div><p class="section-label">Detected data issues</p><h2>@SelectedApiType Anomaly History</h2></div><span>@VisibleAnomalies.Count record(s) · Latest detected first</span></div>
+            <section class="quality-history-controls"><div class="api-type-switch" role="group" aria-label="Anomaly API type">@foreach (var type in new[] { "DDQ", "MMF" }) { <button type="button" class="@(SelectedApiType == type ? "active" : null)" @onclick="() => SelectedApiType = type"><span class="api-switch-dot api-switch-@type.ToLowerInvariant()"></span>@type anomalies<small>@Anomalies.Count(x => x.DataType == type)</small></button> }</div><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search field, reason or status..." @bind="SearchTerm" @bind:event="oninput" /></label></section>
+            <div class="quality-anomaly-row quality-anomaly-header"><span>Detected</span><span>API type</span><span>Field / parameter</span><span>Original value</span><span>Detection reason</span><span>Status</span></div>
+            @if (VisibleAnomalies.Count == 0) { <div class="collection-empty"><strong>No @SelectedApiType anomalies recorded</strong><span>Detected data issues will appear here after the collection and analytics checks run.</span></div> }
+            @foreach (var item in VisibleAnomalies) { <div class="quality-anomaly-row"><time>@item.DetectedAt.ToLocalTime().ToString("dd MMM yyyy")<small>@item.DetectedAt.ToLocalTime().ToString("HH:mm:ss")</small></time><span class="quality-api-badge quality-api-@item.DataType.ToLowerInvariant()">@item.DataType</span><strong>@item.FieldName</strong><span>@(item.OriginalValue ?? "Missing")</span><span>@item.Reason</span><span class="status-pill @(item.Status == "Open" ? "status-failed" : "status-successful")">@item.Status</span></div> }
+        </section>
+    }
+</div>

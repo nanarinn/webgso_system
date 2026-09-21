@@ -26,6 +26,9 @@ public partial class LssPlants : ComponentBase
     private string TestApiEndpoint { get; set; } = string.Empty;
     private LssApiTestResult? LastTestResult { get; set; }
     private string FormError { get; set; } = string.Empty;
+    private string SuccessMessage { get; set; } = string.Empty;
+    private string SuccessTitle { get; set; } = "Successfully saved";
+    private bool IsDeleteConfirmationOpen { get; set; }
     private string NewName { get; set; } = string.Empty;
     private string NewPlantId { get; set; } = string.Empty;
     private string NewState { get; set; } = "Johor";
@@ -64,6 +67,7 @@ public partial class LssPlants : ComponentBase
         NewApiLink = string.Empty;
         NewApiLinks = [new ApiLinkInput { DataType = "Rolling 24 Hour" }];
         FormError = string.Empty;
+        IsDeleteConfirmationOpen = false;
         IsDialogOpen = true;
     }
 
@@ -81,10 +85,13 @@ public partial class LssPlants : ComponentBase
             .Select(x => new ApiLinkInput { DataType = x.DataType, ApiLink = x.ApiLink }).ToList();
         if (NewApiLinks.Count == 0) NewApiLinks.Add(new ApiLinkInput { DataType = apiType == "DDQ" ? "Rolling 24 Hour" : "MMF" });
         FormError = string.Empty;
+        IsDeleteConfirmationOpen = false;
         IsDialogOpen = true;
     }
 
     private void CloseDialog() => IsDialogOpen = false;
+    private void ShowDeleteConfirmation() => IsDeleteConfirmationOpen = true;
+    private void HideDeleteConfirmation() => IsDeleteConfirmationOpen = false;
     private void AddApiLink()
     {
         if (!CanAddApiLink) return;
@@ -140,6 +147,7 @@ public partial class LssPlants : ComponentBase
 
     private async Task SavePlantAsync()
     {
+        var wasEditing = EditingPlantId.HasValue;
         await using var database = await ContextFactory.CreateDbContextAsync();
         var plantId = NewPlantId.Trim();
         if (await database.LssPlants.AnyAsync(x => x.PlantId == plantId && x.Id != EditingPlantId))
@@ -189,6 +197,33 @@ public partial class LssPlants : ComponentBase
         await database.SaveChangesAsync();
         IsDialogOpen = false;
         await LoadPlantsAsync();
+        SelectedApiType = NewApiType;
+        SuccessMessage = $"{NewName.Trim()} {NewApiType} API configuration has been successfully {(wasEditing ? "updated" : "added")} to MS SQL.";
+        SuccessTitle = "Successfully saved";
+    }
+
+    private async Task DeletePlantAsync()
+    {
+        if (!EditingPlantId.HasValue) return;
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        var plant = await database.LssPlants.SingleOrDefaultAsync(x => x.Id == EditingPlantId.Value);
+        if (plant is null)
+        {
+            FormError = "This plant no longer exists in MS SQL.";
+            IsDeleteConfirmationOpen = false;
+            return;
+        }
+
+        var deletedName = plant.Name;
+        var deletedPlantId = plant.PlantId;
+        await database.PlantApiConfigurations.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
+        database.LssPlants.Remove(plant);
+        await database.SaveChangesAsync();
+        IsDialogOpen = false;
+        IsDeleteConfirmationOpen = false;
+        await LoadPlantsAsync();
+        SuccessTitle = "Plant deleted";
+        SuccessMessage = $"{deletedName} ({deletedPlantId}) and its API configurations have been successfully removed from MS SQL.";
     }
 
     private static string GetCode(string name) => string.Concat(

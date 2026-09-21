@@ -1,82 +1,36 @@
 @page "/admin/collection-schedules"
 @attribute [Authorize(Roles = "Administrator")]
 @rendermode InteractiveServer
-
 <PageTitle>Collection Schedules | SBLSS System</PageTitle>
 
 <div class="admin-page schedules-page">
-    <header class="page-heading">
-        <div>
-            <p class="section-label">Administration</p>
-            <h1>Collection Schedules</h1>
-            <p class="page-subtitle">Configure automated DDQ and MMF collection windows and retry rules.</p>
-        </div>
-        <button class="primary-action admin-primary" type="button" @onclick="OpenDialog">+ New Schedule</button>
-    </header>
+    <header class="page-heading"><div><p class="section-label">Administration</p><h1>Collection Schedules</h1><p class="page-subtitle">Schedule DDQ and MMF API collection for each configured plant.</p></div><button class="primary-action admin-primary" type="button" @onclick="OpenDialog">+ New Schedule</button></header>
 
-    <section class="admin-summary">
-        <div><small>Total schedules</small><strong>@Schedules.Count</strong></div>
-        <div><small>Active</small><strong>@Schedules.Count(x => x.IsActive)</strong></div>
-        <div><small>Next run</small><strong>@DateTime.Now.AddMinutes(15).ToString("HH:mm")</strong></div>
-    </section>
 
-    <section class="admin-toolbar">
-        <label class="admin-search">
-            <span>&#8981;</span>
-            <input type="search" placeholder="Search schedule, plant or source..." @bind="SearchTerm" @bind:event="oninput" />
-        </label>
-        <span class="result-count">@FilteredSchedules.Count schedule(s)</span>
-    </section>
+    @if (!string.IsNullOrWhiteSpace(SuccessMessage)) { <div class="admin-overlay success-overlay"><section class="configuration-success-dialog" role="dialog" aria-modal="true"><button class="profile-close" type="button" @onclick="() => SuccessMessage = string.Empty">&#215;</button><span class="configuration-success-icon">&#10003;</span><p class="section-label">Schedule configuration</p><h2>@SuccessTitle</h2><p>@SuccessMessage</p><button class="primary-action admin-primary success-done" type="button" @onclick="() => SuccessMessage = string.Empty">Done</button></section></div> }
+    <section class="admin-summary"><div><small>Total schedules</small><strong>@Schedules.Count</strong></div><div><small>Active schedules</small><strong>@Schedules.Count(x => x.IsActive)</strong></div><div><small>Inactive schedules</small><strong>@Schedules.Count(x => !x.IsActive)</strong></div></section>
+    <section class="admin-toolbar"><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search schedule, plant or type..." @bind="SearchTerm" @bind:event="oninput" /></label><span class="result-count">@FilteredSchedules.Count schedule(s)</span></section>
+    <div class="api-type-switch" role="group">@foreach (var type in ApiTypes) { <button type="button" class="@(SelectedApiType == type ? "active" : null)" @onclick="() => SelectedApiType = type"><span class="api-switch-dot api-switch-@type.ToLowerInvariant()"></span>@type schedules<small>@Schedules.Count(x => x.ApiType == type)</small></button> }</div>
+    <section class="table-panel admin-panel"><div class="admin-table-heading"><div><p class="section-label">@SelectedApiType automation</p><h2>@SelectedApiType Collection Schedules</h2></div><span>Timezone: Asia/Kuala_Lumpur</span></div><div class="schedule-admin-table"><div class="schedule-admin-row admin-table-header"><span>Schedule</span><span>Plant</span><span>Schedule type</span><span>Schedule time</span><span>API</span><span>Retry</span><span>Status</span><span>Action</span></div>
+    @foreach (var item in FilteredSchedules) { var plant = GetPlant(item.PlantId); <div class="schedule-admin-row"><div class="admin-entity schedule-identity"><span>SC</span><div><strong>@item.Name</strong><small>@item.ScheduleCode</small></div></div><div class="schedule-plant-cell"><strong>@plant.Name</strong><small>@plant.PlantId · @plant.State</small></div><strong class="schedule-type-cell">@item.DataType</strong><span class="schedule-time-cell">@ScheduleTime(item)</span><span class="api-type-badge api-type-@item.ApiType.ToLowerInvariant()">@item.ApiType</span><span>@item.RetryCount attempt(s)</span><span class="status-pill @(item.IsActive ? "status-successful" : "status-failed")">@(item.IsActive ? "Active" : "Inactive")</span><button class="admin-edit-action" type="button" @onclick="() => OpenEditDialog(item)">Edit</button></div> }
+    @if (FilteredSchedules.Count == 0) { <div class="api-registry-empty">No @SelectedApiType schedule matches the current search.</div> }</div></section>
 
-    <section class="table-panel admin-panel">
-        <div class="admin-table-heading">
-            <div><p class="section-label">Automation rules</p><h2>DDQ &amp; MMF schedules</h2></div>
-            <span>Timezone: Asia/Kuala_Lumpur</span>
-        </div>
-        <div class="schedule-admin-table">
-            <div class="schedule-admin-row admin-table-header">
-                <span>Schedule</span><span>Plant</span><span>Source</span><span>Interval</span>
-                <span>Run time</span><span>Retry</span><span>Status</span><span>Action</span>
-            </div>
-            @foreach (var schedule in FilteredSchedules)
-            {
-                <div class="schedule-admin-row">
-                    <div class="admin-entity"><span>SC</span><div><strong>@schedule.Name</strong><small>@schedule.ScheduleId</small></div></div>
-                    <span>@schedule.Plant</span>
-                    <span class="monitor-source source-@schedule.Source.ToLowerInvariant()">@schedule.Source</span>
-                    <span>@schedule.Interval</span>
-                    <strong>@schedule.RunTime</strong>
-                    <span>@schedule.RetryCount attempt(s)</span>
-                    <span class="status-pill @(schedule.IsActive ? "status-successful" : "status-failed")">@(schedule.IsActive ? "Active" : "Paused")</span>
-                    <button class="admin-toggle" type="button" @onclick="() => ToggleSchedule(schedule)">@(schedule.IsActive ? "Pause" : "Activate")</button>
-                </div>
-            }
-        </div>
-    </section>
 
-    @if (IsDialogOpen)
-    {
-        <div class="admin-overlay">
-            <section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="schedule-form-title">
-                <div class="admin-dialog-header">
-                    <div><p class="section-label">Automation configuration</p><h2 id="schedule-form-title">New collection schedule</h2></div>
-                    <button class="profile-close" type="button" @onclick="CloseDialog">&#215;</button>
-                </div>
-                <form @onsubmit="SaveSchedule" @onsubmit:preventDefault>
-                    <div class="admin-form-grid">
-                        <label class="wide"><span>Schedule name</span><input required @bind="NewName" /></label>
-                        <label><span>Plant</span><select @bind="NewPlant">@foreach (var plant in PlantNames) { <option>@plant</option> }</select></label>
-                        <label><span>Data source</span><select @bind="NewSource"><option>DDQ</option><option>MMF</option></select></label>
-                        <label><span>Interval</span><select @bind="NewInterval"><option>15 minutes</option><option>30 minutes</option><option>1 hour</option><option>Daily</option></select></label>
-                        <label><span>Run time (HH:mm)</span><input type="text" required pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="00:15" @bind="NewRunTime" /></label>
-                        <label><span>Retry attempts</span><input type="number" min="0" max="5" @bind="NewRetryCount" /></label>
-                    </div>
-                    <div class="profile-actions">
-                        <button class="profile-cancel" type="button" @onclick="CloseDialog">Cancel</button>
-                        <button class="primary-action admin-primary" type="submit">Save Schedule</button>
-                    </div>
-                </form>
-            </section>
+
+    @if (IsDialogOpen) { <div class="admin-overlay"><section class="admin-dialog schedule-dialog" role="dialog" aria-modal="true" aria-labelledby="schedule-editor-title"><div class="admin-dialog-header"><div><p class="section-label">@(EditingId.HasValue ? "Update automation" : "New automation")</p><h2 id="schedule-editor-title">@(EditingId.HasValue ? "Edit collection schedule" : "Add collection schedule")</h2></div><button class="profile-close" type="button" @onclick="CloseDialog">&#215;</button></div><form @onsubmit="SaveScheduleAsync" @onsubmit:preventDefault>
+        @if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }
+        <div class="admin-form-grid schedule-form-grid">
+            <label><span>Schedule type</span><select @bind="NewDataType" @bind:after="ScheduleTypeChanged" disabled="@(NewApiType == "MMF")">@if (NewApiType == "DDQ") { @foreach (var type in DdqDataTypes) { <option>@type</option> } } else { <option>MMF</option> }</select><small>Select the dataset and how often its API collection should run.</small></label>
+            <label><span>API type</span><select @bind="NewApiType" @bind:after="ApiTypeChanged"><option>DDQ</option><option>MMF</option></select><small>DDQ collects forecast data. MMF collects measurements every 15 minutes.</small></label>
+            <div class="wide schedule-plant-picker"><label><span>Plant name or ID</span><div class="schedule-plant-combobox"><input type="search" autocomplete="off" placeholder="Search plant name or Plant ID" @bind="PlantSearchTerm" @bind:event="oninput" @bind:after="ClearPlantSelection" @onfocus="() => IsPlantDropdownOpen = true" /><button type="button" aria-label="Show plant options" aria-expanded="@IsPlantDropdownOpen" @onclick="TogglePlantDropdown"><span></span></button></div><small>Type a plant name or ID, or use the arrow to view all available plants.</small></label>@if (IsPlantDropdownOpen && NewPlantId == 0) { <div class="schedule-plant-suggestions">@foreach (var plant in PlantSuggestions) { <button type="button" @onclick="() => SelectPlant(plant)"><strong>@plant.Name</strong><small>@plant.PlantId · @plant.State</small></button> }@if (!PlantSuggestions.Any()) { <p>No plant matches this search.</p> }</div> }</div>
+            @if (NewDataType == "MMF") { <label class="wide"><span>Collection frequency</span><input value="Every 15 minutes" readonly /><small>MMF data is pulled automatically every 15 minutes throughout the day.</small></label> }
+            else if (NewDataType == "Rolling 24 Hour") { <label class="wide"><span>Collection frequency</span><select @bind="NewInterval">@foreach (var interval in RollingIntervals) { <option>@interval</option> }</select><small>The system repeats the API pull at this interval, 24 hours a day.</small></label> }
+            else { @if (NewDataType == "Weekly") { <label><span>Day of week</span><select @bind="NewScheduleDay">@foreach (var day in WeekDays) { <option>@day</option> }</select><small>The API pull runs once every week on this day.</small></label> } else if (NewDataType == "4 Month") { <label><span>Day of month</span><input type="number" min="1" max="28" placeholder="1–28" @bind="NewScheduleDay" /><small>Choose day 1–28 to avoid invalid dates in shorter months.</small></label><div class="wide schedule-month-field"><span class="schedule-field-label">Run in selected months</span><div class="schedule-month-options">@foreach (var month in Months) { <button type="button" class="@(NewScheduleMonths.Contains(month.Value) ? "selected" : null)" aria-pressed="@NewScheduleMonths.Contains(month.Value)" @onclick="() => ToggleScheduleMonth(month.Value)">@month.Label</button> }</div><small>Select one or more months for this schedule.</small></div> } <label class="@(NewDataType == "Daily" ? "wide" : null)"><span>Schedule time</span><input type="text" required pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="07:00" @bind="NewRunTime" /><small>@(NewDataType == "Daily" ? "The API pull runs once every day at this Malaysia time. Example: 00:15 means 12:15 AM." : "The API pull runs at this Malaysia time on the selected day. Example: 13:30 means 1:30 PM.")</small></label> }
+            <label><span>Retry attempts</span><input type="number" min="0" max="5" @bind="NewRetryCount" /><small>Additional attempts after a failed API pull. Allowed range: 0–5.</small></label>
+            @if (EditingId.HasValue) { <div class="wide schedule-status-field"><span class="schedule-field-label">Schedule status</span><div class="schedule-status-options" role="group" aria-label="Schedule status"><button type="button" class="active-option @(NewIsActive ? "selected" : null)" aria-pressed="@NewIsActive" @onclick="() => SetScheduleStatus(true)"><span class="status-option-icon">&#10003;</span><span><strong>Active</strong><small>Automatic collection will run according to this schedule.</small></span></button><button type="button" class="inactive-option @(!NewIsActive ? "selected" : null)" aria-pressed="@(!NewIsActive)" @onclick="() => SetScheduleStatus(false)"><span class="status-option-icon">&#8212;</span><span><strong>Inactive</strong><small>Keep the schedule saved without running automatic collection.</small></span></button></div></div> }
         </div>
-    }
+        @if (IsStatusConfirmationOpen) { <div class="schedule-confirm-overlay"><section class="schedule-status-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="status-confirm-title"><button class="profile-close" type="button" aria-label="Close confirmation" @onclick="() => IsStatusConfirmationOpen = false">&#215;</button><span class="schedule-status-warning">!</span><div><p class="section-label">Schedule status</p><h3 id="status-confirm-title">Confirm status change</h3><p>This schedule will change from <b>@(OriginalIsActive ? "Active" : "Inactive")</b> to <b>@(NewIsActive ? "Active" : "Inactive")</b>. @(NewIsActive ? "Automatic collection will resume." : "Automatic collection will stop until the schedule is activated again.")</p><div><button type="button" class="profile-cancel" @onclick="() => IsStatusConfirmationOpen = false">Cancel</button><button type="button" class="confirm-status-action" @onclick="ConfirmStatusChangeAsync">Confirm Status Change</button></div></div></section></div> }
+        @if (IsDeleteConfirmationOpen) { <div class="schedule-confirm-overlay"><section class="schedule-status-confirmation delete-confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="collection-delete-title"><button class="profile-close" type="button" aria-label="Close confirmation" @onclick="() => IsDeleteConfirmationOpen = false">&#215;</button><span class="schedule-status-warning">!</span><div><p class="section-label">Delete schedule</p><h3 id="collection-delete-title">Delete this collection schedule?</h3><p>This schedule will be permanently removed from MS SQL. Automatic API collection for it will stop.</p><div><button type="button" class="profile-cancel" @onclick="() => IsDeleteConfirmationOpen = false">Keep Schedule</button><button type="button" class="confirm-delete-action" @onclick="DeleteScheduleAsync">Confirm Delete</button></div></div></section></div> }
+        <div class="profile-actions plant-form-actions">@if (EditingId.HasValue && !IsDeleteConfirmationOpen) { <button class="delete-plant-action" type="button" @onclick="() => IsDeleteConfirmationOpen = true">Delete Schedule</button> }<span></span><button class="profile-cancel" type="button" @onclick="CloseDialog">Cancel</button><button class="primary-action admin-primary" type="submit" disabled="@(IsStatusConfirmationOpen || IsDeleteConfirmationOpen)">@(EditingId.HasValue ? "Save Changes" : "Save Schedule to MS SQL")</button></div>
+    </form></section></div> }
 </div>

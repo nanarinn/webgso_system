@@ -10,7 +10,6 @@ namespace TestingSystem.Web.Components.Frontend.UseCases;
 
 public partial class DdqAnalytics : ComponentBase
 {
-    [Inject] private IStoredDataService DataStore { get; set; } = default!;
     [Inject] private IJSRuntime JavaScript { get; set; } = default!;
 
     private static readonly (string Label, int Value)[] Intervals =
@@ -217,19 +216,6 @@ public partial class DdqAnalytics : ComponentBase
         ResultDescription = $"{ResultPlants.Count} plant(s) from {location}; {SelectedDataTypes.Count} data type(s); "
             + $"{TimestampRangeDescription}; {IntervalLabel} interval.";
 
-        foreach (var dataType in SelectedDataTypes)
-        {
-            await DataStore.SaveAsync("DdqFilterResults", $"{dataType}:{DateTime.UtcNow:O}", new
-            {
-                DataType = dataType,
-                SubmissionStartDateTime,
-                SubmissionEndDateTime,
-                RangeStart,
-                RangeEnd,
-                SelectedInterval,
-                PlantIds = ResultPlants.Select(p => p.PlantId).ToArray()
-            });
-        }
     }
 
     private async Task SelectDataTypeTab(string dataType)

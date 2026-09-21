@@ -21,9 +21,12 @@ public static class SystemStatusConnector
             database = "Microsoft SQL Server",
             connected = await database.Database.CanConnectAsync(cancellationToken),
             users = await database.Users.CountAsync(cancellationToken),
-            documents = await database.SolarDocuments.CountAsync(cancellationToken),
             plants = await database.LssPlants.CountAsync(cancellationToken),
             collectionJobs = await database.CollectionJobs.CountAsync(cancellationToken),
+            readings = await database.SolarApiReadings.CountAsync(cancellationToken),
+            collectionSchedules = await database.CollectionSchedules.CountAsync(cancellationToken),
+            reportSchedules = await database.ReportSchedules.CountAsync(cancellationToken),
+            reportExecutions = await database.ReportExecutions.CountAsync(cancellationToken),
             openAnomalies = await database.DataAnomalies.CountAsync(x => x.Status == "Open", cancellationToken)
         });
     }

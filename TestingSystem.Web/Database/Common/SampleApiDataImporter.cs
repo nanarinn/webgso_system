@@ -90,8 +90,6 @@ public static partial class SampleApiDataImporter
         }
         await database.LssPlants.Where(x => x.PlantId.StartsWith("SAMPLE-"))
             .ExecuteUpdateAsync(update => update.SetProperty(x => x.IsActive, false));
-        await database.StoredDataRecords.Where(x => x.Category.StartsWith("Mmf"))
-            .ExecuteDeleteAsync();
         var ddqPlantIds = await database.SolarApiReadings.AsNoTracking()
             .Where(x => x.DataType != "MMF").Select(x => x.PlantId).Distinct().ToListAsync();
         var plants = await database.LssPlants.Where(x => x.IsActive && ddqPlantIds.Contains(x.Id)

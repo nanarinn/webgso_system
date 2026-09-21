@@ -9,7 +9,20 @@
     <main class="app-main">
         <header class="app-topbar">
             <div class="environment-badge"><span></span> Secure repository</div>
-            <ProfileMenu />
+            <div class="topbar-account">
+                <ProfileMenu />
+                <AuthorizeView>
+                    <Authorized>
+                        <form method="post" action="/account/logout" class="topbar-logout-form">
+                            <AntiforgeryToken />
+                            <button type="submit" aria-label="Sign out">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5M14 8l4 4-4 4m4-4H9" /></svg>
+                                <span>Sign out</span>
+                            </button>
+                        </form>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
         </header>
 
         <article class="app-content" id="main-content" tabindex="-1">

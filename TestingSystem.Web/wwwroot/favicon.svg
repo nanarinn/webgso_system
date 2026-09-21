@@ -1,4 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#FBD414"/>
-  <path d="M18 17h15c8 0 13 4 13 10 0 4-2 7-6 8 5 1 8 5 8 10 0 8-6 12-15 12H18V17zm14 16c4 0 6-2 6-5 0-3-2-5-6-5h-6v10h6zm1 18c5 0 7-2 7-6s-3-6-7-6h-7v12h7z" fill="#072F74"/>
+  <title>Single Buyer</title>
+  <defs>
+    <linearGradient id="navy" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b4385"/>
+      <stop offset="1" stop-color="#052d62"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#navy)"/>
+  <path d="M43 2h4L62 17v8L39 2h4Z" fill="#ffd51f"/>
+  <path d="M51 2h11v11L51 2Z" fill="#69bd45"/>
+  <text x="31" y="41" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="800" text-anchor="middle" letter-spacing="-1">SB</text>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="14.5" fill="none" stroke="#1764a6"/>
 </svg>

@@ -2,7 +2,7 @@
 
 Filenames use descriptive names without FSD numbers.
 
-All prototype records and generated sample readings are kept in `TestingSystem.Web/Demo/DemoData.cs`. Change that file when adjusting demo content; production data must come from SQL Server and approved plant APIs.
+All application records are stored in relational Microsoft SQL Server tables. `DummyApiDataSeeder.cs` creates one connected development dataset for plants, API configurations, collections, readings, schedules, anomalies, reports, recipients and deliveries.
 
 | Function | Razor frontend | C# logic | Connector | Database table |
 | --- | --- | --- | --- | --- |
@@ -10,13 +10,13 @@ All prototype records and generated sample readings are kept in `TestingSystem.W
 | Dashboard | `Dashboard.razor` | `Dashboard.cs` | `SystemStatusConnector.cs` | `DashboardDocumentTable.cs` |
 | DDQ analytics | `DdqAnalytics.razor` | `DdqAnalytics.cs` | `AnalyticsConnector.cs` | Stored operational data |
 | MMF analytics | `MmfAnalytics.razor` | `MmfAnalytics.cs` | `AnalyticsConnector.cs` | Stored operational data |
-| On-demand reports | `OnDemandReport.razor` | `OnDemandReport.cs` | `StoredDataConnector.cs` | `StoredDataTable.cs` |
-| Report history | `ReportHistory.razor` | `ReportHistory.cs` | `StoredDataConnector.cs` | `StoredDataTable.cs` |
-| Collection management | `CollectionManagement.razor` | `CollectionManagement.cs` | `PlantApiConnector.cs` | `StoredDataTable.cs` |
+| On-demand reports | `OnDemandReport.razor` | `OnDemandReport.cs` | EF Core | `ReportExecutions` |
+| Report history | `ReportHistory.razor` | `ReportHistory.cs` | EF Core | `ReportExecutions` |
+| Collection management | `CollectionManagement.razor` | `CollectionManagement.cs` | `PlantApiConnector.cs` | `CollectionJobs`, `RawApiResponses` |
 | Staff accounts | `StaffAccounts.razor` | `StaffAccounts.cs` | ASP.NET Core Identity | `UserTable.cs` |
 | LSS plants | `LssPlants.razor` | `LssPlants.cs` | `PlantApiConnector.cs` | `LssPlantTable.cs` |
-| Collection schedules | `CollectionSchedules.razor` | `CollectionSchedules.cs` | `StoredDataConnector.cs` | `StoredDataTable.cs` |
-| Scheduled reports | `ScheduledReports.razor` | `ScheduledReports.cs` | `StoredDataConnector.cs` | `StoredDataTable.cs` |
+| Collection schedules | `CollectionSchedules.razor` | `CollectionSchedules.cs` | EF Core | `CollectionSchedules` |
+| Scheduled reports | `ScheduledReports.razor` | `ScheduledReports.cs` | EF Core | `ReportSchedules`, `ReportScheduleRecipients`, `ReportDeliveryAttempts`, `ReportDeliveryRecipients` |
 | Data quality | `DataQuality.razor` | `DataQuality.cs` | `ExternalConnectors.cs` | `OperationalTables.cs` |
 | Audit logs | `AuditLogs.razor` | `AuditLogs.cs` | `AuditConnector.cs` | `AuditEventTable.cs` |
 
@@ -29,4 +29,4 @@ All prototype records and generated sample readings are kept in `TestingSystem.W
 - `DatabaseConnection.cs` maps C# entities to SQL Server.
 - `CreateTables.cs` creates and upgrades development tables.
 - `DatabaseSettings.cs` represents database configuration.
-- `StoredDataTable.cs` stores report, schedule, collection and delivery records as database-backed JSON documents.
+- Operational relationships use foreign keys; generic JSON storage is no longer used.

@@ -9,7 +9,7 @@
         <div>
             <p class="section-label">Flexible analysis</p>
             <h1>On-Demand Analysis</h1>
-            <p class="page-subtitle">Generate DDQ or MMF analysis packages and manage the resulting files.</p>
+            <p class="page-subtitle">Generate submission data for every active LSS plant and export the resulting dataset.</p>
         </div>
         <button class="primary-action generate-action" type="button" @onclick="OpenGenerateDialog">
             <span class="generate-plus">+</span> Generate
@@ -32,7 +32,7 @@
             <strong>@Results.Count(result => result.Status == "Failed")</strong>
             <span>View list</span>
         </button>
-        <p>Choose <b>Generate</b> to create a new analysis request.</p>
+        <p>Each request includes <b>all @ActivePlantCount active LSS plants</b> for one submission date.</p>
     </section>
 
     <section class="table-panel on-demand-panel">
@@ -48,7 +48,7 @@
             <div class="on-demand-row on-demand-header" role="row">
                 <span>Name</span>
                 <span>Date &amp; timestamp generated</span>
-                <span>Description</span>
+                <span>Submission data</span>
                 <span>Status</span>
                 <span>View</span>
                 <span>Export</span>
@@ -61,12 +61,10 @@
                         <strong>@result.Name</strong>
                     </div>
                     <time datetime="@result.GeneratedAt.ToString("O")">@result.GeneratedAt.ToString("dd MMM yyyy, HH:mm:ss")</time>
-                    <span class="analysis-description">@result.Description</span>
+                    <span class="analysis-description"><strong>@(string.IsNullOrWhiteSpace(result.DataSelection) ? (result.Type == "DDQ" ? "Rolling 24 Hour" : "All MMF parameters") : result.DataSelection)</strong><small>@result.SubmissionDate.ToString("dd MMM yyyy") · @(result.PlantCount > 0 ? result.PlantCount : ActivePlantCount) plant(s) · @result.RecordCount.ToString("N0") records</small></span>
                     <span><span class="status-pill status-@result.Status.ToLowerInvariant()">@result.Status</span></span>
                     <button class="table-action view-action" type="button" @onclick="() => ViewResult(result)">View</button>
-                    <a class="table-action export-action"
-                       href="@GetCsvDataUri(result)"
-                       download="@GetCsvFileName(result)">Export CSV</a>
+                    <button class="table-action export-action" type="button" disabled="@(result.Status != "Successful")" @onclick="() => ExportResultAsync(result)">Export CSV</button>
                 </div>
             }
         </div>
@@ -112,30 +110,39 @@
                 <div class="on-demand-dialog-header">
                     <div>
                         <p class="section-label">New request</p>
-                        <h2 id="generate-title">Generate analysis</h2>
+                        <h2 id="generate-title">Generate plant submission data</h2>
                     </div>
                     <button class="profile-close" type="button" @onclick="CloseGenerateDialog" aria-label="Close generate form">×</button>
                 </div>
 
                 <form @onsubmit="GenerateAnalysis" @onsubmit:preventDefault>
-                    <p>Select the analysis source and submission date. The generated result will be added to the list.</p>
+                    <p>Select an API source and submission date. The system will gather matching data from every active LSS plant.</p>
+                    @if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }
                     <InputRadioGroup @bind-Value="SelectedType" Name="analysisType" class="generation-choice">
                         <label class="analysis-choice @(SelectedType == "DDQ" ? "selected" : null)">
                             <InputRadio Value="@("DDQ")" />
                             <span>DDQ</span>
-                            <small>Data quality and power interval analysis</small>
+                            <small>Choose one DDQ forecast data type for all plants.</small>
                         </label>
                         <label class="analysis-choice @(SelectedType == "MMF" ? "selected" : null)">
                             <InputRadio Value="@("MMF")" />
                             <span>MMF</span>
-                            <small>Forecast, actual output and variance analysis</small>
+                            <small>Include every available MMF parameter for all plants.</small>
                         </label>
                     </InputRadioGroup>
 
-                    <label class="filter-field submission-field">
-                        <span>Submission date</span>
-                        <input type="date" @bind="SelectedSubmissionDate" @bind:format="yyyy-MM-dd" required />
-                    </label>
+                    <div class="on-demand-request-grid">
+                        @if (SelectedType == "DDQ")
+                        {
+                            <label class="filter-field"><span>DDQ data type</span><select @bind="SelectedDataType">@foreach (var type in DdqDataTypes) { <option value="@type">@type</option> }</select><small>Select one forecast dataset to generate.</small></label>
+                        }
+                        else
+                        {
+                            <label class="filter-field"><span>MMF data</span><input value="All MMF parameters" readonly /><small>Every available 15-minute parameter is included.</small></label>
+                        }
+                        <label class="filter-field"><span>Submission date</span><input type="date" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind="SelectedSubmissionDate" @bind:format="yyyy-MM-dd" required /><small>Generate records submitted on this date.</small></label>
+                    </div>
+                    <div class="on-demand-all-plants"><span>&#10003;</span><div><strong>All active LSS plants included</strong><small>The generated file will combine available data from @ActivePlantCount configured active plant(s).</small></div></div>
 
                     <div class="profile-actions">
                         <button class="profile-cancel" type="button" @onclick="CloseGenerateDialog">Cancel</button>
@@ -171,13 +178,13 @@
                     <dl class="result-details">
                         <div><dt>Submission date</dt><dd>@SelectedResult.SubmissionDate.ToString("dd MMM yyyy")</dd></div>
                         <div><dt>Generated at</dt><dd>@SelectedResult.GeneratedAt.ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
+                        <div><dt>Data selection</dt><dd>@(string.IsNullOrWhiteSpace(SelectedResult.DataSelection) ? (SelectedResult.Type == "DDQ" ? "Rolling 24 Hour" : "All MMF parameters") : SelectedResult.DataSelection)</dd></div>
+                        <div><dt>Plants and records</dt><dd>@(SelectedResult.PlantCount > 0 ? SelectedResult.PlantCount : ActivePlantCount) plant(s) · @SelectedResult.RecordCount.ToString("N0") record(s)</dd></div>
                         <div class="result-description-row"><dt>Description</dt><dd>@SelectedResult.Description</dd></div>
                     </dl>
                     <div class="profile-actions">
                         <button class="profile-cancel" type="button" @onclick="CloseResult">Close</button>
-                        <a class="primary-action generate-action"
-                           href="@GetCsvDataUri(SelectedResult)"
-                           download="@GetCsvFileName(SelectedResult)">Export CSV <span>↓</span></a>
+                        <button class="primary-action generate-action" type="button" disabled="@(SelectedResult.Status != "Successful")" @onclick="() => ExportResultAsync(SelectedResult)">Export CSV <span>↓</span></button>
                     </div>
                 </div>
             </section>

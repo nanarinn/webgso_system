@@ -19,7 +19,6 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(DatabaseSettings.SectionName));
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ILssDataApiClient, PrototypeLssDataApiClient>();
-builder.Services.AddScoped<IStoredDataService, StoredDataService>();
 builder.Services.AddScoped<IAuditTrailService, AuditTrailService>();
 builder.Services.AddAntiforgery();
 
@@ -79,12 +78,28 @@ if (args.Contains("--seed-dummy-api", StringComparer.OrdinalIgnoreCase))
     var jobs = await database.CollectionJobs.CountAsync(job => job.Mode == "Simulated API");
     var rawResponses = await database.RawApiResponses.CountAsync();
     var readings = await database.SolarApiReadings.CountAsync();
+    var apiConfigurations = await database.PlantApiConfigurations.CountAsync();
+    var collectionSchedules = await database.CollectionSchedules.CountAsync();
+    var reportSchedules = await database.ReportSchedules.CountAsync();
+    var reportDeliveries = await database.ReportDeliveryAttempts.CountAsync();
+    var reportExecutions = await database.ReportExecutions.CountAsync();
+    var anomalies = await database.DataAnomalies.CountAsync();
+    var auditEvents = await database.AuditEvents.CountAsync();
     Console.WriteLine();
     Console.WriteLine("Simulated API seed completed.");
     Console.WriteLine($"CollectionJobs:   {jobs:N0}");
     Console.WriteLine($"RawApiResponses:  {rawResponses:N0}");
     Console.WriteLine($"SolarApiReadings: {readings:N0}");
-    if (jobs == 0 || rawResponses == 0 || readings == 0)
+    Console.WriteLine($"API configurations: {apiConfigurations:N0}");
+    Console.WriteLine($"Collection schedules: {collectionSchedules:N0}");
+    Console.WriteLine($"Report schedules: {reportSchedules:N0}");
+    Console.WriteLine($"Report deliveries: {reportDeliveries:N0}");
+    Console.WriteLine($"Report executions: {reportExecutions:N0}");
+    Console.WriteLine($"Data anomalies: {anomalies:N0}");
+    Console.WriteLine($"Audit events: {auditEvents:N0}");
+    if (jobs == 0 || rawResponses == 0 || readings == 0 || apiConfigurations == 0
+        || collectionSchedules == 0 || reportSchedules == 0 || reportDeliveries == 0 || reportExecutions == 0
+        || anomalies == 0 || auditEvents == 0)
         throw new InvalidOperationException("Simulated API seed produced zero database rows.");
     return;
 }

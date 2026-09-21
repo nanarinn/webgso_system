@@ -1,13 +1,13 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.EntityFrameworkCore;
+using TestingSystem.Web.Data;
 using TestingSystem.Web.Demo;
-using TestingSystem.Web.Services;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
 public partial class ReportHistory : ComponentBase
 {
-    [Inject] private IStoredDataService DataStore { get; set; } = default!;
-    private const string DataCategory = "ReportHistory";
+    [Inject] private IDbContextFactory<ApplicationDbContext> ContextFactory { get; set; } = default!;
     private List<DemoReportRecord> ReportsList { get; set; } = [];
     private DemoReportRecord? SelectedReport { get; set; }
     private string SearchTerm { get; set; } = string.Empty;
@@ -26,9 +26,12 @@ public partial class ReportHistory : ComponentBase
 
     protected override async Task OnInitializedAsync()
     {
-        var seed = DemoData.ReportHistory(DateTime.Now);
-        await DataStore.SeedAsync(DataCategory, seed.Select(item => (item.ReportId, item)));
-        ReportsList = await DataStore.LoadAsync<DemoReportRecord>(DataCategory);
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        ReportsList = await database.ReportExecutions.AsNoTracking().OrderByDescending(x => x.RequestedAt)
+            .Select(x => new DemoReportRecord(x.ReportId, x.Name, x.DataType, x.ReportType,
+                x.SubmissionDate, x.RequestedAt.LocalDateTime,
+                x.GenerationStatus == "Completed" ? "Completed" : x.GenerationStatus,
+                x.RequestedBy, x.AnomalyCount, x.Description)).ToListAsync();
     }
 
     private void ViewReport(DemoReportRecord report) => SelectedReport = report;

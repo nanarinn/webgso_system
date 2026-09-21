@@ -10,7 +10,6 @@ namespace TestingSystem.Web.Components.Frontend.UseCases;
 
 public partial class MmfAnalytics : ComponentBase
 {
-    [Inject] private IStoredDataService DataStore { get; set; } = default!;
     [Inject] private IJSRuntime JavaScript { get; set; } = default!;
 
     private static readonly (string Label, int Value)[] Intervals =
@@ -140,15 +139,6 @@ public partial class MmfAnalytics : ComponentBase
             if (ReadingIndex.Count == 0)
                 ValidationMessage = "No imported MMF readings match the selected location, parameters, interval, and forecast range.";
 
-            try
-            {
-                await DataStore.SaveAsync("MmfFilterResults", DateTime.UtcNow.ToString("O"),
-                    new { ids, Parameters = SelectedParameters, start, end, SelectedInterval });
-            }
-            catch
-            {
-                // History/cache failure must not hide valid MSSQL query results.
-            }
         }
         catch (Exception exception)
         {

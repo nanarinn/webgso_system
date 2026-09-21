@@ -26,7 +26,7 @@ Development accounts are configured in `TestingSystem.Web/appsettings.Developmen
 - `TestingSystem.Web/Connectors/UseCases` - frontend/backend, API and service connectors.
 - `TestingSystem.Web/Database/UseCases` - SQL Server entity/table definitions.
 - `TestingSystem.Web/Database/Common` - database connection and table creation.
-- `TestingSystem.Web/Demo/DemoData.cs` - all prototype/demo records and generated sample values.
+- `TestingSystem.Web/Database/Common/DummyApiDataSeeder.cs` - creates the complete related development workflow in MSSQL.
 - `TestingSystem.Web/wwwroot/styles` - CSS.
 
-Operational data is stored in SQL Server. Initial development records are inserted into `StoredDataRecords` on first use and all later changes are saved back to the database.
+All operational data is stored in dedicated relational SQL Server tables. The application no longer uses generic JSON records for schedules, jobs, reports, recipients or delivery attempts.

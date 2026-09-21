@@ -8,7 +8,6 @@ namespace TestingSystem.Web.Data;
 public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
     : IdentityDbContext<ApplicationUser>(options)
 {
-    public DbSet<SolarDocument> SolarDocuments => Set<SolarDocument>();
     public DbSet<LssPlant> LssPlants => Set<LssPlant>();
     public DbSet<PlantApiConfiguration> PlantApiConfigurations => Set<PlantApiConfiguration>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
@@ -18,8 +17,11 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<DataAnomaly> DataAnomalies => Set<DataAnomaly>();
     public DbSet<CollectionSchedule> CollectionSchedules => Set<CollectionSchedule>();
     public DbSet<ReportExecution> ReportExecutions => Set<ReportExecution>();
-    public DbSet<StoredDataRecord> StoredDataRecords => Set<StoredDataRecord>();
     public DbSet<SolarApiReading> SolarApiReadings => Set<SolarApiReading>();
+    public DbSet<ReportScheduleEntity> ReportSchedules => Set<ReportScheduleEntity>();
+    public DbSet<ReportScheduleRecipient> ReportScheduleRecipients => Set<ReportScheduleRecipient>();
+    public DbSet<ReportDeliveryAttempt> ReportDeliveryAttempts => Set<ReportDeliveryAttempt>();
+    public DbSet<ReportDeliveryRecipient> ReportDeliveryRecipients => Set<ReportDeliveryRecipient>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -29,14 +31,6 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             .Property(user => user.DisplayName)
             .HasMaxLength(160);
 
-        builder.Entity<SolarDocument>(document =>
-        {
-            document.Property(item => item.ReferenceNumber).HasMaxLength(40);
-            document.Property(item => item.Title).HasMaxLength(240);
-            document.Property(item => item.Category).HasMaxLength(80);
-            document.Property(item => item.ProjectStage).HasMaxLength(80);
-            document.HasIndex(item => item.ReferenceNumber).IsUnique();
-        });
 
         builder.Entity<LssPlant>(plant =>
         {
@@ -80,7 +74,9 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.Mode).HasColumnType("nvarchar(max)");
             item.Property(x => x.Status).HasMaxLength(30);
             item.Property(x => x.ErrorMessage).HasColumnType("nvarchar(max)");
+            item.Property(x => x.ResponseMessage).HasMaxLength(1000);
             item.HasIndex(x => x.CollectionId).IsUnique();
+            item.HasOne<LssPlant>().WithMany().HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<RawApiResponse>(item =>
@@ -89,6 +85,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.Payload).HasColumnType("nvarchar(max)");
             item.Property(x => x.Sha256).HasMaxLength(64);
             item.HasIndex(x => x.CollectionJobId);
+            item.HasOne<CollectionJobEntity>().WithMany().HasForeignKey(x => x.CollectionJobId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<ValidationRule>(item =>
@@ -96,6 +93,9 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.Code).HasMaxLength(40);
             item.Property(x => x.DataType).HasMaxLength(10);
             item.Property(x => x.FieldName).HasMaxLength(100);
+            item.Property(x => x.Name).HasMaxLength(200);
+            item.Property(x => x.Description).HasMaxLength(1000);
+            item.Property(x => x.Condition).HasMaxLength(300);
             item.Property(x => x.Operator).HasMaxLength(30);
             item.Property(x => x.Severity).HasMaxLength(20);
             item.Property(x => x.MinimumValue).HasPrecision(18, 4);
@@ -111,13 +111,24 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.Reason).HasMaxLength(1000);
             item.Property(x => x.Status).HasMaxLength(30);
             item.HasIndex(x => x.DetectedAt);
+            item.HasOne<CollectionJobEntity>().WithMany().HasForeignKey(x => x.CollectionJobId).OnDelete(DeleteBehavior.Cascade);
+            item.HasOne<ValidationRule>().WithMany().HasForeignKey(x => x.ValidationRuleId).OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<CollectionSchedule>(item =>
         {
-            item.Property(x => x.DataType).HasMaxLength(10);
+            item.Property(x => x.ScheduleCode).HasMaxLength(40);
+            item.Property(x => x.Name).HasMaxLength(160);
+            item.Property(x => x.ApiType).HasMaxLength(10);
+            item.Property(x => x.DataType).HasMaxLength(40);
+            item.Property(x => x.Interval).HasMaxLength(30);
+            item.Property(x => x.RunTime).HasMaxLength(5);
+            item.Property(x => x.ScheduleDay).HasMaxLength(20);
+            item.Property(x => x.ScheduleMonths).HasMaxLength(50);
             item.Property(x => x.CronExpression).HasMaxLength(100);
             item.Property(x => x.TimeZoneId).HasMaxLength(100);
+            item.HasIndex(x => x.ScheduleCode).IsUnique();
+            item.HasOne<LssPlant>().WithMany().HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<ReportExecution>(item =>
@@ -131,14 +142,37 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.MainFilePath).HasMaxLength(500);
             item.Property(x => x.AnomalyFilePath).HasMaxLength(500);
             item.Property(x => x.ErrorMessage).HasMaxLength(1000);
+            item.Property(x => x.Name).HasMaxLength(200);
+            item.Property(x => x.DataSelection).HasMaxLength(100);
+            item.Property(x => x.Description).HasMaxLength(2000);
             item.HasIndex(x => x.ReportId).IsUnique();
         });
 
-        builder.Entity<StoredDataRecord>(item =>
+        builder.Entity<ReportScheduleEntity>(item =>
         {
-            item.Property(x => x.Category).HasMaxLength(80);
-            item.Property(x => x.RecordKey).HasMaxLength(160);
-            item.HasIndex(x => new { x.Category, x.RecordKey }).IsUnique();
+            item.Property(x => x.ScheduleCode).HasMaxLength(60); item.HasIndex(x => x.ScheduleCode).IsUnique();
+            item.Property(x => x.Name).HasMaxLength(200); item.Property(x => x.ApiType).HasMaxLength(10);
+            item.Property(x => x.DataType).HasMaxLength(50); item.Property(x => x.ScheduleType).HasMaxLength(30);
+            item.Property(x => x.ScheduleDay).HasMaxLength(20); item.Property(x => x.ScheduleMonths).HasMaxLength(50);
+            item.Property(x => x.ExecutionTime).HasMaxLength(5);
+        });
+        builder.Entity<ReportScheduleRecipient>(item =>
+        {
+            item.Property(x => x.Email).HasMaxLength(320); item.HasIndex(x => new { x.ReportScheduleId, x.Email }).IsUnique();
+            item.HasOne(x => x.ReportSchedule).WithMany(x => x.Recipients).HasForeignKey(x => x.ReportScheduleId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<ReportDeliveryAttempt>(item =>
+        {
+            item.Property(x => x.DeliveryCode).HasMaxLength(60); item.HasIndex(x => x.DeliveryCode).IsUnique();
+            item.Property(x => x.ScheduleName).HasMaxLength(200); item.Property(x => x.ApiType).HasMaxLength(10);
+            item.Property(x => x.ReportStatus).HasMaxLength(30); item.Property(x => x.EmailStatus).HasMaxLength(30);
+            item.Property(x => x.OverallStatus).HasMaxLength(30); item.Property(x => x.Message).HasMaxLength(2000);
+            item.HasOne(x => x.ReportSchedule).WithMany().HasForeignKey(x => x.ReportScheduleId).OnDelete(DeleteBehavior.SetNull);
+        });
+        builder.Entity<ReportDeliveryRecipient>(item =>
+        {
+            item.Property(x => x.Email).HasMaxLength(320);
+            item.HasOne(x => x.ReportDeliveryAttempt).WithMany(x => x.Recipients).HasForeignKey(x => x.ReportDeliveryAttemptId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<SolarApiReading>(item =>
@@ -150,6 +184,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.ErrorMessage).HasColumnType("nvarchar(max)");
             item.Property(x => x.SyntheticReason).HasColumnType("nvarchar(max)");
             item.HasIndex(x => new { x.DataType, x.PlantId, x.IntervalStart });
+            item.HasOne<CollectionJobEntity>().WithMany().HasForeignKey(x => x.CollectionJobId).OnDelete(DeleteBehavior.Cascade);
+            item.HasOne<LssPlant>().WithMany().HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

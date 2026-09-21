@@ -8,7 +8,8 @@ if ($sqlService.Status -ne 'Running') {
 }
 
 $env:ASPNETCORE_ENVIRONMENT = "Development"
-Write-Host "Resetting DDQ data and generating 10 plants through the simulated API..." -ForegroundColor Cyan
+Write-Host "Resetting the complete SBLSS development workflow in Microsoft SQL Server..." -ForegroundColor Cyan
+Write-Host "This recreates related plants, API configurations, collections, readings, schedules, anomalies, reports, recipients and deliveries." -ForegroundColor DarkCyan
 dotnet run --project .\TestingSystem.Web\TestingSystem.Web.csproj -- --seed-dummy-api
 
 if ($LASTEXITCODE -ne 0) {

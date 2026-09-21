@@ -13,27 +13,27 @@
         <Authorized>
             <nav>
                 <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                    <span class="nav-symbol">OV</span>
+                    <NavIcon Name="overview" />
                     Overview
                 </NavLink>
                 <NavLink class="nav-link" href="ddq-analytics">
-                    <span class="nav-symbol">DQ</span>
+                    <NavIcon Name="ddq" />
                     DDQ Analytics
                 </NavLink>
                 <NavLink class="nav-link" href="mmf-analytics">
-                    <span class="nav-symbol">MF</span>
+                    <NavIcon Name="mmf" />
                     MMF Analytics
                 </NavLink>
                 <NavLink class="nav-link" href="on-demand-analysis">
-                    <span class="nav-symbol">OD</span>
+                    <NavIcon Name="analysis" />
                     On-Demand Analysis
                 </NavLink>
                 <NavLink class="nav-link" href="collection-management">
-                    <span class="nav-symbol">CM</span>
+                    <NavIcon Name="collection" />
                     Collection Management
                 </NavLink>
                 <NavLink class="nav-link" href="reports">
-                    <span class="nav-symbol">RP</span>
+                    <NavIcon Name="reports" />
                     Reports
                 </NavLink>
             </nav>
@@ -46,27 +46,27 @@
                 <p class="nav-section-title">Administration</p>
                 <nav>
                     <NavLink class="nav-link admin-nav-link" href="admin/lss-plants">
-                        <span class="nav-symbol">LP</span>
+                        <NavIcon Name="plant" />
                         LSS Plant Config
                     </NavLink>
                     <NavLink class="nav-link admin-nav-link" href="admin/collection-schedules">
-                        <span class="nav-symbol">CS</span>
+                        <NavIcon Name="schedule" />
                         Collection Schedules
                     </NavLink>
                     <NavLink class="nav-link admin-nav-link" href="admin/report-automation">
-                        <span class="nav-symbol">RA</span>
+                        <NavIcon Name="automation" />
                         Report Automation
                     </NavLink>
                     <NavLink class="nav-link admin-nav-link" href="admin/users">
-                        <span class="nav-symbol">UM</span>
+                        <NavIcon Name="users" />
                         User Management
                     </NavLink>
                     <NavLink class="nav-link admin-nav-link" href="admin/audit-logs">
-                        <span class="nav-symbol">AL</span>
+                        <NavIcon Name="audit" />
                         Audit Logs
                     </NavLink>
                     <NavLink class="nav-link admin-nav-link" href="admin/data-quality">
-                        <span class="nav-symbol">DQ</span>
+                        <NavIcon Name="quality" />
                         Data Quality
                     </NavLink>
                 </nav>
@@ -78,17 +78,8 @@
 
     <div class="sidebar-status">
         <span class="status-light"></span>
-        <span><strong>MS SQL connected</strong><small>Docker network active</small></span>
+        <span><strong>SQL Server ready</strong><small>Local MSSQL · SingleBuyerLssRepository</small></span>
     </div>
-
-    <AuthorizeView>
-        <Authorized>
-            <form method="post" action="/account/logout" class="logout-form">
-                <AntiforgeryToken />
-                <button type="submit"><span>←</span> Sign out</button>
-            </form>
-        </Authorized>
-    </AuthorizeView>
 
     <SystemFooter SidebarVariant="true" />
 </div>
