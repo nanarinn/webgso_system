@@ -2,6 +2,7 @@
 @attribute [AllowAnonymous]
 @layout TestingSystem.Web.Components.Layout.LoginLayout
 @inject IHostEnvironment Environment
+@inject IConfiguration Configuration
 
 <PageTitle>Sign in | Single Buyer LSS Repository</PageTitle>
 
@@ -43,6 +44,32 @@
                     Username or password is incorrect. Please try again.
                 </div>
             }
+
+            @if (Error is "microsoft" or "microsoft-setup" or "microsoft-role" or "microsoft-consent")
+            {
+                <div class="login-alert" role="alert">
+                    @(Error switch
+                    {
+                        "microsoft-setup" => "Microsoft sign-in requires completed configuration and HTTPS.",
+                        "microsoft-role" => "This Microsoft account has not been assigned the SBLSS Administrator or Staff application role.",
+                        "microsoft-consent" => "Microsoft permission consent was not completed. Ask your tenant administrator if approval is required.",
+                        _ => "Microsoft sign-in was not completed. Ask your administrator to check the app assignment and configuration."
+                    })
+                </div>
+            }
+
+            <form method="post" action="/account/microsoft" class="login-form">
+                <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="@SafeReturnUrl" />
+                <button type="submit" class="login-button"
+                        disabled="@(!TestingSystem.Web.Connectors.UseCases.EntraAuthentication.IsReady(Configuration))">
+                    Sign in with Microsoft
+                </button>
+                @if (!TestingSystem.Web.Connectors.UseCases.EntraAuthentication.IsReady(Configuration))
+                {
+                    <small>Company sign-in setup is pending. Local login remains available.</small>
+                }
+            </form>
 
             <form method="post" action="/account/login" class="login-form">
                 <AntiforgeryToken />

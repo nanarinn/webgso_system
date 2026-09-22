@@ -39,6 +39,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
+builder.Services.AddEntraAuthentication(builder.Configuration);
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -140,6 +141,7 @@ if (mmfImportIndex >= 0)
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapLoginEndpoints();
+app.MapEntraLogin();
 app.MapSystemStatusEndpoint();
 
 app.MapHealthChecks("/health");
