@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Models;
+using TestingSystem.Web.Backend.UseCases.UCLSS027Audit;
 
 namespace TestingSystem.Web.Connectors.UseCases;
 
@@ -47,56 +48,60 @@ public static class EntraAuthentication
                 try
                 {
                     var remotePrincipal = context.Principal!;
-                    var (key, roles) = EntraAccess.Read(remotePrincipal, tenant);
+                    var identity = EntraAccess.Read(remotePrincipal, tenant);
                     var services = context.HttpContext.RequestServices;
-                    var database = services.GetRequiredService<ApplicationDbContext>();
                     var users = services.GetRequiredService<UserManager<ApplicationUser>>();
-                    var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
                     var signInManager = services.GetRequiredService<SignInManager<ApplicationUser>>();
-
-                    await database.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+                    var audit = services.GetRequiredService<IAuditTrailService>();
+                    var user = await users.FindByLoginAsync(Scheme, identity.Key);
+                    if (user is null)
                     {
-                        database.ChangeTracker.Clear();
-                        await using var transaction = await database.Database.BeginTransactionAsync();
-                        var user = await users.FindByLoginAsync(Scheme, key);
-                        if (user is null)
+                        user = new ApplicationUser
                         {
-                            var displayName = remotePrincipal.FindFirst("name")?.Value ?? "Microsoft user";
-                            user = new ApplicationUser
-                            {
-                                UserName = "entra_" + key.Replace(":", "_"),
-                                DisplayName = displayName[..Math.Min(displayName.Length, 160)],
-                                Email = remotePrincipal.FindFirst("email")?.Value
-                                    ?? remotePrincipal.FindFirst("preferred_username")?.Value
-                                    ?? remotePrincipal.FindFirst("upn")?.Value,
-                                EmailConfirmed = true
-                            };
-                            Check(await users.CreateAsync(user));
-                            Check(await users.AddLoginAsync(
-                                user, new UserLoginInfo(Scheme, key, "Microsoft")));
-                        }
+                            UserName = "entra_" + identity.ObjectId,
+                            DisplayName = identity.DisplayName[..Math.Min(identity.DisplayName.Length, 160)],
+                            Email = identity.Email,
+                            EmailConfirmed = true,
+                            IsEntraUser = true,
+                            EntraObjectId = identity.ObjectId,
+                            AccessStatus = UserAccessStatus.Pending,
+                            AccessRequestedAt = DateTimeOffset.UtcNow
+                        };
+                        Check(await users.CreateAsync(user));
+                        Check(await users.AddLoginAsync(user, new UserLoginInfo(Scheme, identity.Key, "Microsoft")));
+                        await audit.RecordAsync(identity.Email, "RequestAccess", "Pending", "ApplicationUser", user.Id,
+                            "Microsoft Entra identity verified; administrator approval is required.", context.HttpContext.TraceIdentifier);
+                    }
 
-                        if (await users.IsLockedOutAsync(user) || !await signInManager.CanSignInAsync(user))
-                            throw new InvalidOperationException("Account is unavailable.");
+                    if (await users.IsLockedOutAsync(user) || !await signInManager.CanSignInAsync(user))
+                        throw new InvalidOperationException("SBLSS_ACCESS_INACTIVE");
 
-                        foreach (var role in roles)
-                            if (!await roleManager.RoleExistsAsync(role))
-                                Check(await roleManager.CreateAsync(new IdentityRole(role)));
+                    if (user.AccessStatus != UserAccessStatus.Approved)
+                        throw new InvalidOperationException(user.AccessStatus switch
+                        {
+                            UserAccessStatus.Rejected => "SBLSS_ACCESS_REJECTED",
+                            UserAccessStatus.Inactive => "SBLSS_ACCESS_INACTIVE",
+                            _ => "SBLSS_ACCESS_PENDING"
+                        });
 
-                        var currentRoles = await users.GetRolesAsync(user);
-                        Check(await users.RemoveFromRolesAsync(user, currentRoles.Except(roles)));
-                        Check(await users.AddToRolesAsync(user, roles.Except(currentRoles)));
-                        context.Principal = await signInManager.CreateUserPrincipalAsync(user);
-                        await transaction.CommitAsync();
-                    });
+                    context.Principal = await signInManager.CreateUserPrincipalAsync(user);
                 }
                 catch (Exception exception)
                 {
                     var logger = context.HttpContext.RequestServices
                         .GetRequiredService<ILoggerFactory>()
                         .CreateLogger("MicrosoftEntraSignIn");
-                    logger.LogWarning(exception, "Microsoft Entra user provisioning failed.");
-                    context.Fail("Microsoft sign-in could not be completed.");
+                    var accessResult = exception.GetBaseException().Message;
+                    if (accessResult.StartsWith("SBLSS_ACCESS_", StringComparison.Ordinal))
+                    {
+                        logger.LogInformation("Microsoft Entra access stopped with application status {AccessStatus}.", accessResult);
+                        context.Fail(accessResult);
+                    }
+                    else
+                    {
+                        logger.LogWarning(exception, "Microsoft Entra user provisioning failed.");
+                        context.Fail("Microsoft sign-in could not be completed.");
+                    }
                 }
             };
 
@@ -107,13 +112,7 @@ public static class EntraAuthentication
                     .CreateLogger("MicrosoftEntraSignIn");
                 logger.LogWarning(context.Failure, "Microsoft Entra authentication failed.");
 
-                var error = context.Failure?.Message.Contains(
-                    "assigned application role", StringComparison.OrdinalIgnoreCase) == true
-                    ? "microsoft-role"
-                    : context.Failure?.Message.Contains(
-                        "access_denied", StringComparison.OrdinalIgnoreCase) == true
-                        ? "microsoft-consent"
-                        : "microsoft";
+                var error = EntraAccess.LoginError(context.Failure);
                 context.HandleResponse();
                 context.Response.Redirect($"/login?error={error}");
                 return Task.CompletedTask;

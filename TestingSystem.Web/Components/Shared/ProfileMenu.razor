@@ -1,6 +1,6 @@
 @rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
+@inject IServiceScopeFactory ScopeFactory
 
 @if (CurrentUser is not null)
 {
@@ -46,11 +46,6 @@
                     </label>
 
                     <label class="profile-field">
-                        <span>Username <i>Permanent</i></span>
-                        <input type="text" value="@CurrentUser.UserName" readonly />
-                    </label>
-
-                    <label class="profile-field">
                         <span>Role <i>Permanent</i></span>
                         <input type="text" value="@RoleName" readonly />
                     </label>
@@ -61,8 +56,13 @@
                     </label>
 
                     <label class="profile-field">
-                        <span>Password <i>Permanent</i></span>
-                        <input type="password" value="************" readonly />
+                        <span>Sign-in method <i>Managed</i></span>
+                        <input type="text" value="Microsoft Entra ID" readonly />
+                    </label>
+
+                    <label class="profile-field">
+                        <span>Account status <i>Managed</i></span>
+                        <input type="text" value="@CurrentUser.AccessStatus" readonly />
                     </label>
                 </div>
 
@@ -103,11 +103,16 @@
     protected override async Task OnInitializedAsync()
     {
         var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        CurrentUser = await UserManager.GetUserAsync(authenticationState.User);
+        var userId = authenticationState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(userId)) return;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
+        CurrentUser = await userManager.FindByIdAsync(userId);
 
         if (CurrentUser is not null)
         {
-            var roles = await UserManager.GetRolesAsync(CurrentUser);
+            var roles = await userManager.GetRolesAsync(CurrentUser);
             RoleName = roles.FirstOrDefault() ?? "User";
             ResetEditableFields();
         }
@@ -154,7 +159,9 @@
         IsSaving = true;
         StatusMessage = string.Empty;
 
-        var databaseUser = await UserManager.FindByIdAsync(CurrentUser.Id);
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
+        var databaseUser = await userManager.FindByIdAsync(CurrentUser.Id);
         if (databaseUser is null)
         {
             IsSaving = false;
@@ -164,7 +171,7 @@
 
         databaseUser.DisplayName = displayName;
         databaseUser.PhoneNumber = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber;
-        var result = await UserManager.UpdateAsync(databaseUser);
+        var result = await userManager.UpdateAsync(databaseUser);
         IsSaving = false;
 
         if (!result.Succeeded)

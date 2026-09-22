@@ -2,6 +2,11 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
 
+git config --local user.name "Muhammad Aiman Haziq"
+if ($LASTEXITCODE -ne 0) { throw "Unable to configure the Git author name." }
+git config --local user.email "aimn.hziq01@gmail.com"
+if ($LASTEXITCODE -ne 0) { throw "Unable to configure the Git author email." }
+
 if ((git branch --show-current) -ne "main") {
     throw "Expected branch 'main'. Switch to main before publishing."
 }
@@ -18,7 +23,7 @@ if (-not $stagedChanges) {
     exit 0
 }
 
-git commit -m "Improve plant API configuration management"
+git commit -m "Complete Microsoft Entra access and LAN sharing"
 if ($LASTEXITCODE -ne 0) { throw "Unable to create the Git commit." }
 
 git pull --rebase origin main

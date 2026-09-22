@@ -20,6 +20,7 @@ builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(Da
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ILssDataApiClient, PrototypeLssDataApiClient>();
 builder.Services.AddScoped<IAuditTrailService, AuditTrailService>();
+builder.Services.AddScoped<IUserAccessNotificationService, UserAccessNotificationService>();
 builder.Services.AddAntiforgery();
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
@@ -61,15 +62,61 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
 
-app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
 await DatabaseInitializer.InitialiseAsync(app.Services, app.Configuration);
+
+if (args.Contains("--update-database", StringComparer.OrdinalIgnoreCase))
+{
+    Console.WriteLine("Microsoft SQL Server schema is aligned with the current SBLSS system.");
+    return;
+}
+
+var superAdminIndex = Array.FindIndex(args, value => value.Equals("--set-superadmins", StringComparison.OrdinalIgnoreCase));
+if (superAdminIndex >= 0)
+{
+    var emails = args.Skip(superAdminIndex + 1)
+        .TakeWhile(value => !value.StartsWith("--", StringComparison.Ordinal))
+        .Select(value => value.Trim())
+        .Where(value => !string.IsNullOrWhiteSpace(value))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    if (emails.Length == 0)
+        throw new ArgumentException("Provide at least one account email after --set-superadmins.");
+
+    await using var scope = app.Services.CreateAsyncScope();
+    var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+    var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    if (!await roles.RoleExistsAsync(SystemRoles.SuperAdministrator))
+        EnsureIdentitySucceeded(await roles.CreateAsync(new IdentityRole(SystemRoles.SuperAdministrator)));
+
+    foreach (var email in emails)
+    {
+        var user = await users.FindByEmailAsync(email)
+            ?? throw new InvalidOperationException($"No SBLSS account was found for '{email}'. The user must sign in once before promotion.");
+        var existingRoles = await users.GetRolesAsync(user);
+        var obsoleteRoles = existingRoles.Where(role =>
+            role is SystemRoles.Administrator or SystemRoles.Staff or SystemRoles.LegacyReviewer).ToArray();
+        if (obsoleteRoles.Length > 0)
+            EnsureIdentitySucceeded(await users.RemoveFromRolesAsync(user, obsoleteRoles));
+        if (!await users.IsInRoleAsync(user, SystemRoles.SuperAdministrator))
+            EnsureIdentitySucceeded(await users.AddToRoleAsync(user, SystemRoles.SuperAdministrator));
+
+        user.AccessStatus = UserAccessStatus.Approved;
+        user.AccessReviewedAt = DateTimeOffset.UtcNow;
+        user.AccessReviewedBy = "System administration command";
+        EnsureIdentitySucceeded(await users.UpdateAsync(user));
+        EnsureIdentitySucceeded(await users.UpdateSecurityStampAsync(user));
+        Console.WriteLine($"{user.DisplayName} <{email}> is now an approved Super Admin.");
+    }
+    return;
+}
 
 if (args.Contains("--seed-dummy-api", StringComparer.OrdinalIgnoreCase))
 {
@@ -153,3 +200,9 @@ app.MapGet("/api/ping", () => Results.Ok(new
 }));
 
 app.Run();
+
+static void EnsureIdentitySucceeded(IdentityResult result)
+{
+    if (!result.Succeeded)
+        throw new InvalidOperationException(string.Join(" ", result.Errors.Select(error => error.Description)));
+}

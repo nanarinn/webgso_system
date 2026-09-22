@@ -13,11 +13,48 @@ public static class DatabaseInitializer
         var database = serviceProvider.GetRequiredService<ApplicationDbContext>();
 
         await database.Database.EnsureCreatedAsync();
+        await EnsureUserAccessSchemaAsync(database);
         await EnsurePlantTableAsync(database);
         await EnsurePlantApiConfigurationsAsync(database);
         await EnsureSolarApiReadingTableAsync(database);
         await EnsureFsdCoreTablesAsync(database);
         await SeedUsersAsync(serviceProvider, configuration);
+        if (configuration.GetValue<bool>("Authentication:MicrosoftOnly"))
+            await RemoveLocalUsersAsync(serviceProvider);
+    }
+
+    private static async Task RemoveLocalUsersAsync(IServiceProvider services)
+    {
+        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+        var localUsers = await userManager.Users.Where(user => !user.IsEntraUser).ToListAsync();
+        foreach (var user in localUsers)
+            EnsureSucceeded(await userManager.DeleteAsync(user), $"remove local account '{user.UserName}'");
+    }
+
+    private static async Task EnsureUserAccessSchemaAsync(ApplicationDbContext database)
+    {
+        await database.Database.ExecuteSqlRawAsync("""
+            IF COL_LENGTH('AspNetUsers', 'AccessStatus') IS NULL
+                ALTER TABLE [AspNetUsers] ADD [AccessStatus] nvarchar(20) NOT NULL CONSTRAINT [DF_AspNetUsers_AccessStatus] DEFAULT N'Approved';
+            IF COL_LENGTH('AspNetUsers', 'IsEntraUser') IS NULL
+                ALTER TABLE [AspNetUsers] ADD [IsEntraUser] bit NOT NULL CONSTRAINT [DF_AspNetUsers_IsEntraUser] DEFAULT 0;
+            IF COL_LENGTH('AspNetUsers', 'EntraObjectId') IS NULL ALTER TABLE [AspNetUsers] ADD [EntraObjectId] nvarchar(36) NULL;
+            IF COL_LENGTH('AspNetUsers', 'AccessRequestedAt') IS NULL ALTER TABLE [AspNetUsers] ADD [AccessRequestedAt] datetimeoffset NULL;
+            IF COL_LENGTH('AspNetUsers', 'AccessReviewedAt') IS NULL ALTER TABLE [AspNetUsers] ADD [AccessReviewedAt] datetimeoffset NULL;
+            IF COL_LENGTH('AspNetUsers', 'AccessReviewedBy') IS NULL ALTER TABLE [AspNetUsers] ADD [AccessReviewedBy] nvarchar(160) NULL;
+            IF COL_LENGTH('AspNetUsers', 'AccessReviewNote') IS NULL ALTER TABLE [AspNetUsers] ADD [AccessReviewNote] nvarchar(500) NULL;
+
+            IF OBJECT_ID(N'[UserAccessNotifications]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [UserAccessNotifications] (
+                    [Id] bigint IDENTITY PRIMARY KEY, [UserId] nvarchar(450) NOT NULL,
+                    [Email] nvarchar(320) NOT NULL, [NotificationType] nvarchar(40) NOT NULL,
+                    [Subject] nvarchar(300) NOT NULL, [Body] nvarchar(2000) NOT NULL,
+                    [DeliveryStatus] nvarchar(30) NOT NULL, [ErrorMessage] nvarchar(1000) NULL,
+                    [CreatedAt] datetimeoffset NOT NULL, [SentAt] datetimeoffset NULL);
+                CREATE INDEX [IX_UserAccessNotifications_CreatedAt] ON [UserAccessNotifications] ([CreatedAt]);
+            END
+            """);
     }
 
     private static async Task SeedUsersAsync(IServiceProvider services, IConfiguration configuration)
@@ -25,6 +62,12 @@ public static class DatabaseInitializer
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         var seedUsers = configuration.GetSection("SeedUsers").Get<List<SeedUser>>() ?? [];
+
+        foreach (var role in new[] { SystemRoles.SuperAdministrator, SystemRoles.Administrator, SystemRoles.Staff, SystemRoles.LegacyReviewer })
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+                EnsureSucceeded(await roleManager.CreateAsync(new IdentityRole(role)), $"create role '{role}'");
+        }
 
         foreach (var role in seedUsers.Select(user => user.Role).Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -44,14 +87,21 @@ public static class DatabaseInitializer
                     UserName = seedUser.UserName,
                     DisplayName = seedUser.DisplayName,
                     Email = seedUser.Email,
-                    EmailConfirmed = true
+                    EmailConfirmed = true,
+                    AccessStatus = UserAccessStatus.Approved
                 };
 
                 EnsureSucceeded(
                     await userManager.CreateAsync(user, seedUser.Password),
                     $"create user '{seedUser.UserName}'");
             }
-            else if (!await userManager.CheckPasswordAsync(user, seedUser.Password))
+
+            if (user.AccessStatus != UserAccessStatus.Approved)
+            {
+                user.AccessStatus = UserAccessStatus.Approved;
+                EnsureSucceeded(await userManager.UpdateAsync(user), $"approve seed user '{seedUser.UserName}'");
+            }
+            if (!await userManager.CheckPasswordAsync(user, seedUser.Password))
             {
                 var resetToken = await userManager.GeneratePasswordResetTokenAsync(user);
                 EnsureSucceeded(
@@ -72,6 +122,13 @@ public static class DatabaseInitializer
                     await userManager.AddToRoleAsync(user, seedUser.Role),
                     $"assign role '{seedUser.Role}'");
             }
+
+            var currentRoles = await userManager.GetRolesAsync(user);
+            var obsoleteRoles = currentRoles.Where(role =>
+                role is SystemRoles.SuperAdministrator or SystemRoles.Administrator or SystemRoles.Staff or SystemRoles.LegacyReviewer
+                && !role.Equals(seedUser.Role, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (obsoleteRoles.Length > 0)
+                EnsureSucceeded(await userManager.RemoveFromRolesAsync(user, obsoleteRoles), $"synchronise roles for '{seedUser.UserName}'");
         }
     }
 

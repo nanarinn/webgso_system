@@ -237,14 +237,85 @@ a {
     padding: 40px clamp(30px, 7vw, 120px) 132px;
     place-items: center;
     background:
+        linear-gradient(135deg, rgba(16, 104, 184, 0.035), transparent 46%),
         radial-gradient(circle at 92% 8%, rgba(251, 212, 20, 0.12), transparent 22%),
-        #fff;
+        #f8fbfe;
 }
 
 .login-card {
-    width: min(100%, 440px);
+    width: min(100%, 530px);
     animation: reveal-up 650ms 120ms ease both;
 }
+
+.login-access-card {
+    position: relative;
+    padding: clamp(30px, 4vw, 44px);
+    overflow: hidden;
+    border: 1px solid #d6e4ef;
+    border-top: 4px solid var(--sb-cyan);
+    border-radius: 22px 7px 22px 7px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 24px 65px rgba(7, 47, 116, 0.13);
+}
+
+.login-access-card::after {
+    position: absolute;
+    top: -80px;
+    right: -70px;
+    width: 190px;
+    height: 190px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(16, 104, 184, 0.09), rgba(16, 104, 184, 0));
+    content: "";
+    pointer-events: none;
+}
+
+.identity-provider {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    margin-bottom: 30px;
+    padding: 10px 13px;
+    align-items: center;
+    gap: 11px;
+    border: 1px solid #d8e5f0;
+    border-radius: 12px;
+    background: #f7fafc;
+}
+
+.identity-provider > span:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.identity-provider small {
+    color: #64748b;
+    font: 0.64rem "Aptos", "Trebuchet MS", sans-serif;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.identity-provider strong {
+    color: var(--sb-navy);
+    font-size: 0.82rem;
+}
+
+.microsoft-mark,
+.button-microsoft-mark {
+    display: grid;
+    flex: 0 0 auto;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2px;
+}
+
+.microsoft-mark { width: 22px; height: 22px; }
+.button-microsoft-mark { width: 18px; height: 18px; }
+.microsoft-mark i, .button-microsoft-mark i { display: block; }
+.microsoft-mark i:nth-child(1), .button-microsoft-mark i:nth-child(1) { background: #f25022; }
+.microsoft-mark i:nth-child(2), .button-microsoft-mark i:nth-child(2) { background: #7fba00; }
+.microsoft-mark i:nth-child(3), .button-microsoft-mark i:nth-child(3) { background: #00a4ef; }
+.microsoft-mark i:nth-child(4), .button-microsoft-mark i:nth-child(4) { background: #ffb900; }
 
 .mobile-brand {
     display: none;
@@ -262,9 +333,11 @@ a {
 }
 
 .login-intro {
-    margin: 12px 0 34px;
+    max-width: 410px;
+    margin: 12px 0 28px;
     color: var(--sb-muted);
     font-family: "Aptos", "Trebuchet MS", sans-serif;
+    line-height: 1.55;
 }
 
 .login-alert {
@@ -364,6 +437,114 @@ a {
     border-radius: 12px 4px 12px 4px;
 }
 
+.login-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    transform: none;
+}
+
+.login-arrow {
+    margin-left: auto;
+    font-size: 1.15rem;
+}
+
+.login-setup-message {
+    margin-top: 12px;
+    color: #9a6700;
+    font-family: "Aptos", "Trebuchet MS", sans-serif;
+    line-height: 1.45;
+}
+
+.access-assurance {
+    display: grid;
+    margin-top: 24px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid #dce8f1;
+    border-radius: 14px;
+    background: #f8fbfd;
+}
+
+.access-assurance > div {
+    display: flex;
+    min-width: 0;
+    padding: 15px;
+    align-items: center;
+    gap: 10px;
+}
+
+.access-assurance > div + div {
+    border-left: 1px solid #dce8f1;
+}
+
+.access-assurance > div > span:last-child {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.access-assurance strong {
+    color: var(--sb-navy);
+    font-size: 0.74rem;
+}
+
+.access-assurance small {
+    overflow: hidden;
+    color: #64748b;
+    font: 0.68rem "Aptos", "Trebuchet MS", sans-serif;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.assurance-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    color: #087a50;
+    background: #e6f8ef;
+    place-items: center;
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+
+.first-access-note {
+    display: flex;
+    margin-top: 16px;
+    padding: 13px 14px;
+    align-items: flex-start;
+    gap: 11px;
+    border-left: 3px solid var(--sb-yellow);
+    border-radius: 8px;
+    background: #fffbed;
+}
+
+.first-access-note > span {
+    display: grid;
+    flex: 0 0 auto;
+    width: 21px;
+    height: 21px;
+    border-radius: 50%;
+    color: #765a00;
+    background: #ffe97a;
+    place-items: center;
+    font-size: 0.7rem;
+    font-weight: 900;
+}
+
+.first-access-note p {
+    margin: 0;
+    color: #665820;
+    font: 0.74rem/1.45 "Aptos", "Trebuchet MS", sans-serif;
+}
+
+.first-access-note strong {
+    display: block;
+    margin-bottom: 2px;
+    color: #50420f;
+}
+
 .login-button:hover,
 .primary-action:hover {
     color: #fff;
@@ -376,7 +557,8 @@ a {
     display: flex;
     align-items: center;
     gap: 9px;
-    margin-top: 26px;
+    margin-top: 20px;
+    justify-content: center;
     color: #64748b;
     font-family: "Aptos", "Trebuchet MS", sans-serif;
     font-size: 0.78rem;
@@ -3082,6 +3264,29 @@ a {
         margin-bottom: 32px;
     }
 
+    .login-access-card {
+        padding: 26px 22px;
+        border-radius: 18px 6px 18px 6px;
+    }
+
+    .identity-provider {
+        margin-bottom: 24px;
+    }
+
+    .access-assurance {
+        grid-template-columns: 1fr;
+    }
+
+    .access-assurance > div + div {
+        border-top: 1px solid #dce8f1;
+        border-left: 0;
+    }
+
+    .security-note {
+        align-items: flex-start;
+        text-align: left;
+    }
+
     .demo-account {
         grid-template-columns: 80px 1fr;
     }
@@ -3590,12 +3795,38 @@ a {
 
 .database-source-badge { display: inline-flex; padding: 9px 13px; align-items: center; gap: 8px; border: 1px solid #acd9c6; border-radius: 10px 3px 10px 3px; color: #067647; background: #effbf5; font-size: .63rem; font-weight: 800; }
 .database-source-badge i { width: 8px; height: 8px; border-radius: 50%; background: #0bb77a; box-shadow: 0 0 0 4px rgba(11,183,122,.1); }
-.user-admin-table { min-width: 1100px; }
-.user-admin-row { display: grid; min-height: 78px; padding: 13px 21px; grid-template-columns: 220px 130px minmax(190px,1fr) 125px 110px 80px; align-items: center; gap: 14px; border-bottom: 1px solid #e6eef0; font: .69rem "Aptos", "Trebuchet MS", sans-serif; }
+.user-access-summary { grid-template-columns: repeat(4,minmax(130px,1fr)); }
+.user-admin-table { min-width: 1180px; }
+.user-admin-row { display: grid; min-height: 82px; padding: 13px 21px; grid-template-columns: 245px 175px 145px 105px 90px minmax(270px,1fr); align-items: center; gap: 14px; border-bottom: 1px solid #e6eef0; font: .69rem "Aptos", "Trebuchet MS", sans-serif; }
 .user-admin-row code { color: var(--admin-accent); font-size: .65rem; font-weight: 700; }
+.pending-user-row { background: linear-gradient(90deg,#fffdf1,#fff); box-shadow: inset 4px 0 #d7a900; }
+.identity-source { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.identity-source strong { color: var(--admin-dark); font-size: .66rem; }
+.identity-source small { overflow: hidden; color: var(--sb-muted); font-size: .56rem; text-overflow: ellipsis; white-space: nowrap; }
+.access-role-note { color: #5d747d; font-size: .66rem; }
+.access-role-note strong { color: var(--admin-dark); }
+.access-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.access-actions button { min-height: 32px; padding: 0 9px; border-radius: 8px 3px 8px 3px; cursor: pointer; font-size: .57rem; font-weight: 800; }
+.access-approve { color: #067647; border: 1px solid #91d4b5; background: #effbf5; }
+.access-approve:hover { color: #fff; background: #07945f; }
+.access-reject { color: #b42318; border: 1px solid #efb8b3; background: #fff3f2; }
+.access-reject:hover { color: #fff; background: #b42318; }
 .admin-role { display: inline-flex; width: fit-content; padding: 6px 9px; border-radius: 8px 3px 8px 3px; font-size: .59rem; font-weight: 800; }
 .role-administrator { color: #8a6800; background: #fff7d4; }
 .role-reviewer { color: #075a9f; background: #eaf4fb; }
+.role-staff { color: #075a9f; background: #eaf4fb; }
+.role-superadmin { color: #6d28a8; background: #f4ebff; }
+.role-none { color: #66747c; background: #edf2f3; }
+.access-confirm-overlay { align-items: center; }
+.access-confirm-dialog { width: min(100%,480px); }
+.access-confirm-icon { display: grid; width: 62px; height: 62px; margin: 0 auto 18px; place-items: center; border-radius: 50%; color: #fff; font-size: 1.45rem; font-weight: 900; }
+.access-confirm-icon.approve { background: #07945f; box-shadow: 0 0 0 9px #e7f8ef; }
+.access-confirm-icon.deny { background: #c6382d; box-shadow: 0 0 0 9px #fff0ee; }
+.access-confirm-actions { display: flex; justify-content: center; gap: 10px; }
+.access-confirm-actions button { min-width: 125px; min-height: 43px; }
+.access-danger { border: 0; color: #fff; background: #b42318; }
+.access-danger:hover { background: #8d1b13; }
+.status-warning { color: #8a6800; background: #fff7d4; }
 
 .admin-overlay { position: fixed; z-index: 1000; inset: 0; display: flex; overflow-y: auto; padding: 12px 24px 24px; align-items: flex-start; justify-content: center; background: rgba(3,33,48,.68); backdrop-filter: blur(6px); animation: profile-fade-in 180ms ease both; }
 .admin-overlay > .admin-dialog { flex: 0 0 auto; margin: 0 auto; }

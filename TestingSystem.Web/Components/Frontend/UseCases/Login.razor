@@ -1,7 +1,6 @@
 @page "/login"
 @attribute [AllowAnonymous]
 @layout TestingSystem.Web.Components.Layout.LoginLayout
-@inject IHostEnvironment Environment
 @inject IConfiguration Configuration
 
 <PageTitle>Sign in | Single Buyer LSS Repository</PageTitle>
@@ -34,88 +33,74 @@
                 <img class="brand-logo" src="single-buyer-logo.png" alt="Single Buyer" />
             </div>
 
-            <p class="section-label">Authorised access</p>
-            <h2>Welcome back</h2>
-            <p class="login-intro">Sign in with your assigned repository account.</p>
-
-            @if (Error == "invalid")
-            {
-                <div class="login-alert" role="alert">
-                    Username or password is incorrect. Please try again.
+            <div class="login-access-card">
+                <div class="identity-provider">
+                    <span class="microsoft-mark" aria-hidden="true">
+                        <i></i><i></i><i></i><i></i>
+                    </span>
+                    <span>
+                        <small>Secured by</small>
+                        <strong>Microsoft Entra ID</strong>
+                    </span>
                 </div>
-            }
 
-            @if (Error is "microsoft" or "microsoft-setup" or "microsoft-role" or "microsoft-consent")
-            {
-                <div class="login-alert" role="alert">
-                    @(Error switch
-                    {
-                        "microsoft-setup" => "Microsoft sign-in requires completed configuration and HTTPS.",
-                        "microsoft-role" => "This Microsoft account has not been assigned the SBLSS Administrator or Staff application role.",
-                        "microsoft-consent" => "Microsoft permission consent was not completed. Ask your tenant administrator if approval is required.",
-                        _ => "Microsoft sign-in was not completed. Ask your administrator to check the app assignment and configuration."
-                    })
-                </div>
-            }
+                <p class="section-label">Authorised access</p>
+                <h2>Welcome back</h2>
+                <p class="login-intro">Use your assigned SAE Microsoft account to access the LSS repository.</p>
 
-            <form method="post" action="/account/microsoft" class="login-form">
-                <AntiforgeryToken />
-                <input type="hidden" name="returnUrl" value="@SafeReturnUrl" />
-                <button type="submit" class="login-button"
-                        disabled="@(!TestingSystem.Web.Connectors.UseCases.EntraAuthentication.IsReady(Configuration))">
-                    Sign in with Microsoft
-                </button>
-                @if (!TestingSystem.Web.Connectors.UseCases.EntraAuthentication.IsReady(Configuration))
+                @if (Error is "microsoft" or "microsoft-setup" or "microsoft-consent" or "microsoft-pending" or "microsoft-rejected" or "microsoft-inactive" or "microsoft-assignment" or "microsoft-redirect" or "microsoft-secret" or "access-pending" or "access-rejected" or "access-inactive")
                 {
-                    <small>Company sign-in setup is pending. Local login remains available.</small>
+                    <div class="login-alert" role="alert">
+                        @(Error switch
+                        {
+                            "microsoft-setup" => "Microsoft sign-in requires completed configuration and HTTPS.",
+                            "microsoft-pending" or "access-pending" => "Your identity was verified. Your access request is waiting for administrator approval.",
+                            "microsoft-rejected" or "access-rejected" => "Your access request was not approved. Contact the system administrator if you need assistance.",
+                            "microsoft-inactive" or "access-inactive" => "This account is inactive. Contact the system administrator to restore access.",
+                            "microsoft-assignment" => "This company account is not assigned to the SBLSS Enterprise Application. Ask the Entra administrator to add the user.",
+                            "microsoft-redirect" => "The Microsoft redirect URI does not match the registered HTTPS /signin-oidc address.",
+                            "microsoft-secret" => "The Microsoft App Registration secret is invalid or expired. Run the local Entra setup with a new Client Secret Value.",
+                            "microsoft-consent" => "Microsoft permission consent was not completed. Ask your tenant administrator if approval is required.",
+                            _ => "Microsoft sign-in was not completed. Ask your administrator to check the app assignment and configuration."
+                        })
+                    </div>
                 }
-            </form>
 
-            <form method="post" action="/account/login" class="login-form">
-                <AntiforgeryToken />
-                <input type="hidden" name="returnUrl" value="@SafeReturnUrl" />
+                <form method="post" action="/account/microsoft" class="login-form">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="@SafeReturnUrl" />
+                    <button type="submit" class="login-button"
+                            disabled="@(!TestingSystem.Web.Connectors.UseCases.EntraAuthentication.IsReady(Configuration))">
+                        <span class="button-microsoft-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                        <span>Continue with Microsoft</span>
+                        <span class="login-arrow" aria-hidden="true">→</span>
+                    </button>
+                    @if (!TestingSystem.Web.Connectors.UseCases.EntraAuthentication.IsReady(Configuration))
+                    {
+                        <small class="login-setup-message">Microsoft sign-in needs the App Registration secret on this machine. Run <code>.\setup-entra-local.ps1</code> once.</small>
+                    }
+                </form>
 
-                <label for="username">Username</label>
-                <div class="input-shell">
-                    <span aria-hidden="true">ID</span>
-                    <input id="username" name="username" type="text" autocomplete="username" required autofocus />
+                <div class="access-assurance" aria-label="Access protection">
+                    <div>
+                        <span class="assurance-icon">✓</span>
+                        <span><strong>Company identity</strong><small>SAE account verification</small></span>
+                    </div>
+                    <div>
+                        <span class="assurance-icon">✓</span>
+                        <span><strong>Managed access</strong><small>Administrator approval</small></span>
+                    </div>
                 </div>
 
-                <label for="password">Password</label>
-                <div class="input-shell">
-                    <span aria-hidden="true">••</span>
-                    <input id="password" name="password" type="password" autocomplete="current-password" required />
+                <div class="first-access-note">
+                    <span aria-hidden="true">i</span>
+                    <p><strong>First time signing in?</strong> Your verified account will be sent to an administrator for access approval.</p>
                 </div>
 
-                <button type="submit" class="login-button">
-                    Sign in to repository
-                    <span aria-hidden="true">→</span>
-                </button>
-            </form>
-
-            @if (Environment.IsDevelopment())
-            {
-                <aside class="demo-accounts" aria-label="Development login accounts">
-                    <div class="demo-heading">
-                        <strong>Development accounts</strong>
-                        <span>Local use only</span>
-                    </div>
-                    <div class="demo-account">
-                        <span>Administrator</span>
-                        <code>sb.admin</code>
-                        <code>See local .env</code>
-                    </div>
-                    <div class="demo-account">
-                        <span>Reviewer</span>
-                        <code>sb.reviewer</code>
-                        <code>See local .env</code>
-                    </div>
-                </aside>
-            }
-
-            <div class="security-note">
-                <span class="security-dot"></span>
-                Protected by encrypted authentication and role-based access.
+                <div class="security-note">
+                    <span class="security-dot"></span>
+                    Protected by Microsoft Entra ID and role-based access.
+                </div>
             </div>
         </div>
 

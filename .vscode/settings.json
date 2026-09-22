@@ -1,6 +1,10 @@
 {
   "files.exclude": {
-    "**/.git": false
+    "**/.git": true,
+    "**/bin": true,
+    "**/obj": true,
+    "**/artifacts": true,
+    "**/*.log": true
   },
   "terminal.integrated.defaultProfile.windows": "PowerShell",
   "docker.composeBuild": false,

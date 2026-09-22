@@ -11,6 +11,8 @@
     <Compile Include="../../TestingSystem.Web/Connectors/UseCases/AnalyticsConnector.cs" Link="AnalyticsPlantFilter.cs" />
     <Compile Include="../../TestingSystem.Web/Connectors/UseCases/AnalyticsGraphScale.cs" Link="AnalyticsGraphScale.cs" />
     <Compile Include="../../TestingSystem.Web/Database/UseCases/MmfSensorAveraging.cs" Link="MmfSensorAveraging.cs" />
+    <Compile Include="../../TestingSystem.Web/Database/UseCases/SolarApiReadingTable.cs" Link="SolarApiReading.cs" />
+    <Compile Include="../../TestingSystem.Web/Database/UseCases/MmfLocationAveraging.cs" Link="MmfLocationAveraging.cs" />
     <Compile Include="../../TestingSystem.Web/Backend/UseCases/Exports/DdqExcelWorkbookExporter.cs" Link="DdqExcelWorkbookExporter.cs" />
   </ItemGroup>
 </Project>

@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.JSInterop;
+using TestingSystem.Web.Data;
 using TestingSystem.Web.Database.Entities;
 using TestingSystem.Web.Models;
 using TestingSystem.Web.Services;
@@ -31,8 +32,10 @@ public partial class MmfAnalytics : ComponentBase
     private TimeOnly StartTime = TimeOnly.MinValue, EndTime = new(23, 45);
     private TimeOnly DefaultStartTime = TimeOnly.MinValue, DefaultEndTime = new(23, 45);
     private int SelectedInterval = 15, AppliedInterval = 15, FilterVersion, ParameterFilterVersion;
+    private int AppliedSourcePlantCount;
     private bool HasApplied, ShowGraphCrosshair = true, IsExporting, IsLoading;
     private DateTime AppliedStart, AppliedEnd;
+    private string AppliedLocationLabel = "";
     private decimal GraphMinimumValue, GraphMaximumValue = 1;
 
     private IEnumerable<string> AvailableStates => RegisteredPlants.Select(x => x.State)
@@ -42,6 +45,7 @@ public partial class MmfAnalytics : ComponentBase
     private bool PlantFilterDisabled => SelectedState.Length > 0 || SelectedRegion.Length > 0;
     private bool StateFilterDisabled => SelectedPlantIds.Count > 0 || SelectedRegion.Length > 0;
     private bool RegionFilterDisabled => SelectedPlantIds.Count > 0 || SelectedState.Length > 0;
+    private bool IsLocationAverage => AppliedLocationLabel.Length > 0;
     private int VisibleGraphPlantCount => ResultPlants.Count(x => !HiddenGraphPlantIds.Contains(x.Id));
 
     protected override async Task OnInitializedAsync()
@@ -103,8 +107,8 @@ public partial class MmfAnalytics : ComponentBase
             return;
         }
 
-        ResultPlants = AnalyticsPlantFilter.Match(RegisteredPlants, SelectedPlantIds, SelectedState, SelectedRegion).ToList();
-        if (ResultPlants.Count == 0)
+        var matchedPlants = AnalyticsPlantFilter.Match(RegisteredPlants, SelectedPlantIds, SelectedState, SelectedRegion).ToList();
+        if (matchedPlants.Count == 0)
         {
             ValidationMessage = "No active plants match the selected plant, state, or region.";
             return;
@@ -113,7 +117,7 @@ public partial class MmfAnalytics : ComponentBase
         IsLoading = true;
         try
         {
-            var ids = ResultPlants.Select(x => x.Id).ToArray();
+            var ids = matchedPlants.Select(x => x.Id).ToArray();
             await using var db = await ContextFactory.CreateDbContextAsync();
             LoadedReadings = await db.SolarApiReadings.AsNoTracking()
                 .Where(x => x.DataType == "MMF" && ids.Contains(x.PlantId)
@@ -121,6 +125,31 @@ public partial class MmfAnalytics : ComponentBase
                     && x.IntervalStart.Second == 0 && x.IntervalStart.Minute % SelectedInterval == 0
                     && (SelectedParameters.Count == 0 || SelectedParameters.Contains(x.Parameter)))
                 .OrderByDescending(x => x.Id).ToListAsync();
+
+            AppliedSourcePlantCount = matchedPlants.Count;
+            AppliedLocationLabel = SelectedState.Length > 0 ? SelectedState
+                : SelectedRegion.Length > 0 ? SelectedRegion
+                : "";
+            if (AppliedLocationLabel.Length > 0)
+            {
+                const int aggregatePlantId = -1;
+                LoadedReadings = MmfLocationAveraging.AverageLatestByLocation(LoadedReadings, aggregatePlantId);
+                ResultPlants =
+                [
+                    new LssPlant
+                    {
+                        Id = aggregatePlantId,
+                        PlantId = SelectedState.Length > 0 ? $"STATE-{SelectedState.ToUpperInvariant()}" : $"REGION-{SelectedRegion.ToUpperInvariant()}",
+                        Name = $"{AppliedLocationLabel} average",
+                        State = SelectedState.Length > 0 ? SelectedState : $"{SelectedRegion} region",
+                        IsActive = true
+                    }
+                ];
+            }
+            else
+            {
+                ResultPlants = matchedPlants;
+            }
 
             RebuildReadingIndex();
             AppliedParameters = ReadingIndex.Values.Select(x => x.Parameter)
@@ -134,8 +163,11 @@ public partial class MmfAnalytics : ComponentBase
             LegendSearch = "";
             DisplayMode = "table";
             HasApplied = true;
-            ResultDescription = $"{ReadingIndex.Count:N0} averaged MMF reading(s), {ResultPlants.Count} plant(s), " +
-                $"{AppliedParameters.Count} parameter(s), {start:dd MMM yyyy HH:mm} to {end:dd MMM yyyy HH:mm}, {IntervalLabel}.";
+            ResultDescription = AppliedLocationLabel.Length > 0
+                ? $"{ReadingIndex.Count:N0} {AppliedLocationLabel} average MMF reading(s) calculated across {AppliedSourcePlantCount} LSS plant(s), " +
+                  $"{AppliedParameters.Count} parameter(s), {start:dd MMM yyyy HH:mm} to {end:dd MMM yyyy HH:mm}, {IntervalLabel}."
+                : $"{ReadingIndex.Count:N0} averaged MMF reading(s), {ResultPlants.Count} plant(s), " +
+                  $"{AppliedParameters.Count} parameter(s), {start:dd MMM yyyy HH:mm} to {end:dd MMM yyyy HH:mm}, {IntervalLabel}.";
             if (ReadingIndex.Count == 0)
                 ValidationMessage = "No imported MMF readings match the selected location, parameters, interval, and forecast range.";
 
@@ -247,7 +279,11 @@ public partial class MmfAnalytics : ComponentBase
             {
                 var times = ReadingIndex.Values.Where(x => x.Parameter.Equals(parameter, StringComparison.OrdinalIgnoreCase))
                     .Select(x => x.IntervalStart).Distinct().OrderBy(x => x).ToList();
-                var headers = new List<string> { "Plant Name", "Plant ID / Code" };
+                var headers = new List<string>
+                {
+                    IsLocationAverage ? "Location Average" : "Plant Name",
+                    IsLocationAverage ? "Scope" : "Plant ID / Code"
+                };
                 headers.AddRange(times.Select(TimeHeading));
                 var rows = new List<IReadOnlyList<object?>>();
                 foreach (var plant in ResultPlants)
@@ -279,6 +315,7 @@ public partial class MmfAnalytics : ComponentBase
 
     private (string Label, string Value)[] Metadata(string parameter) =>
         [("Parameter", parameter), ("Data Interval", IntervalLabel),
+         ("Result Scope", IsLocationAverage ? $"{AppliedLocationLabel} average across {AppliedSourcePlantCount} LSS plant(s)" : $"{ResultPlants.Count} selected LSS plant(s)"),
          ("Date Range", $"{AppliedStart:dd/MM/yyyy HH:mm} - {AppliedEnd:dd/MM/yyyy HH:mm}")];
 
     private void RestoreDefaultRange()
@@ -302,6 +339,7 @@ public partial class MmfAnalytics : ComponentBase
     {
         ResultDescription = ""; HasApplied = false; ResultPlants = []; LoadedReadings = [];
         AppliedParameters = []; TimeColumns = []; ReadingIndex = []; ActiveParameter = "";
+        AppliedLocationLabel = ""; AppliedSourcePlantCount = 0;
         DisplayMode = "table"; HiddenGraphPlantIds.Clear(); LegendSearch = "";
     }
 

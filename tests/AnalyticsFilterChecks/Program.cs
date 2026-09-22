@@ -1,6 +1,7 @@
 using TestingSystem.Web.Models;
 using TestingSystem.Web.Services;
 using TestingSystem.Web.Data;
+using TestingSystem.Web.Database.Entities;
 using TestingSystem.Web.Components.Frontend.UseCases;
 using System.IO.Compression;
 
@@ -32,6 +33,17 @@ if (MmfSensorAveraging.AverageNonZero([0m, 0m, 0m]) != 0m)
 if (MmfSensorAveraging.AverageNonZero([1.1234567m, 2.1234567m]) != 1.623457m)
     throw new Exception("MMF averaging must round normalized values to six decimals");
 Console.WriteLine("PASS: MMF multi-sensor averaging and zero-placeholder rules");
+var locationTimestamp = new DateTime(2026, 9, 22, 12, 0, 0);
+var locationReadings = new[]
+{
+    new SolarApiReading { Id = 1, PlantId = 10, DataType = "MMF", Parameter = "GHI", Unit = "W/m²", IntervalStart = locationTimestamp, Value = 400m },
+    new SolarApiReading { Id = 2, PlantId = 10, DataType = "MMF", Parameter = "GHI", Unit = "W/m²", IntervalStart = locationTimestamp, Value = 500m },
+    new SolarApiReading { Id = 3, PlantId = 20, DataType = "MMF", Parameter = "GHI", Unit = "W/m²", IntervalStart = locationTimestamp, Value = 700m }
+};
+var locationAverage = MmfLocationAveraging.AverageLatestByLocation(locationReadings, -1);
+if (locationAverage.Count != 1 || locationAverage[0].PlantId != -1 || locationAverage[0].Value != 600m)
+    throw new Exception("MMF state and region aggregation must average the latest reading from each plant");
+Console.WriteLine("PASS: MMF state and region averages use the latest reading from each plant");
 var workbookBytes = DdqExcelWorkbookExporter.Build([
     new DdqWorkbookSheet("AmbientTemp", "AMBIENT TEMP", [("Data Interval", "15 minutes")],
         ["Plant Name", "Plant ID / Code", "14/09 00:00"],

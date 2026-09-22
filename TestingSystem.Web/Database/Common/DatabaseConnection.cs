@@ -22,6 +22,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ReportScheduleRecipient> ReportScheduleRecipients => Set<ReportScheduleRecipient>();
     public DbSet<ReportDeliveryAttempt> ReportDeliveryAttempts => Set<ReportDeliveryAttempt>();
     public DbSet<ReportDeliveryRecipient> ReportDeliveryRecipients => Set<ReportDeliveryRecipient>();
+    public DbSet<UserAccessNotification> UserAccessNotifications => Set<UserAccessNotification>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -30,6 +31,22 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         builder.Entity<ApplicationUser>()
             .Property(user => user.DisplayName)
             .HasMaxLength(160);
+        builder.Entity<ApplicationUser>().Property(user => user.AccessStatus).HasMaxLength(20);
+        builder.Entity<ApplicationUser>().Property(user => user.EntraObjectId).HasMaxLength(36);
+        builder.Entity<ApplicationUser>().Property(user => user.AccessReviewedBy).HasMaxLength(160);
+        builder.Entity<ApplicationUser>().Property(user => user.AccessReviewNote).HasMaxLength(500);
+
+        builder.Entity<UserAccessNotification>(item =>
+        {
+            item.Property(x => x.UserId).HasMaxLength(450);
+            item.Property(x => x.Email).HasMaxLength(320);
+            item.Property(x => x.NotificationType).HasMaxLength(40);
+            item.Property(x => x.Subject).HasMaxLength(300);
+            item.Property(x => x.Body).HasMaxLength(2000);
+            item.Property(x => x.DeliveryStatus).HasMaxLength(30);
+            item.Property(x => x.ErrorMessage).HasMaxLength(1000);
+            item.HasIndex(x => x.CreatedAt);
+        });
 
 
         builder.Entity<LssPlant>(plant =>

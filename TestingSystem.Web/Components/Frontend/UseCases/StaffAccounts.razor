@@ -1,32 +1,82 @@
 @page "/admin/users"
-@attribute [Authorize(Roles = "Administrator")]
+@attribute [Authorize(Roles = "SuperAdministrator,Administrator")]
 @rendermode InteractiveServer
 
-<PageTitle>User Management | SBLSS System</PageTitle>
+<PageTitle>User Access | SBLSS System</PageTitle>
 
 <div class="admin-page users-admin-page">
-    <header class="page-heading"><div><p class="section-label">Administration</p><h1>User Management</h1><p class="page-subtitle">Manage authorised Staff and Administrator accounts stored in Microsoft SQL Server.</p></div><button class="primary-action admin-primary" type="button" @onclick="OpenDialog">+ Add User</button></header>
-    <section class="admin-summary"><div><small>Total users</small><strong>@Users.Count</strong></div><div><small>Administrators</small><strong>@Users.Count(x => x.Role == "Administrator")</strong></div><div><small>Staff</small><strong>@Users.Count(x => x.Role != "Administrator")</strong></div></section>
-    @if (!string.IsNullOrWhiteSpace(SuccessMessage)) { <div class="admin-alert success">@SuccessMessage</div> }
-    <section class="admin-toolbar"><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search name, username, email or role..." @bind="SearchTerm" @bind:event="oninput" /></label><span class="database-source-badge"><i></i> Live from MS SQL</span></section>
-    <section class="table-panel admin-panel"><div class="admin-table-heading"><div><p class="section-label">Authorised accounts</p><h2>System users</h2></div><span>@FilteredUsers.Count user(s)</span></div>
-        <div class="user-admin-table"><div class="user-admin-row admin-table-header"><span>User</span><span>Username</span><span>Email</span><span>Phone</span><span>Role</span><span>Status</span></div>
+    <header class="page-heading">
+        <div><p class="section-label">Identity and access</p><h1>User Management</h1><p class="page-subtitle">Review Microsoft Entra access requests and control repository roles stored in MS SQL.</p></div>
+        <span class="database-source-badge"><i></i> Entra identity + MS SQL access</span>
+    </header>
+
+    <section class="admin-summary user-access-summary">
+        <div><small>Pending approval</small><strong>@Users.Count(x => x.Status == UserAccessStatus.Pending)</strong></div>
+        <div><small>Approved</small><strong>@Users.Count(x => x.Status == UserAccessStatus.Approved)</strong></div>
+        <div><small>Inactive</small><strong>@Users.Count(x => x.Status == UserAccessStatus.Inactive)</strong></div>
+        <div><small>Rejected</small><strong>@Users.Count(x => x.Status == UserAccessStatus.Rejected)</strong></div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(Message)) { <div class="admin-alert @(IsError ? "error" : "success")">@Message</div> }
+    <section class="admin-toolbar">
+        <label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search name, email, role or status..." @bind="SearchTerm" @bind:event="oninput" /></label>
+        <span class="access-role-note">Signed in as <strong>@CurrentRoleLabel</strong></span>
+    </section>
+
+    <section class="table-panel admin-panel">
+        <div class="admin-table-heading"><div><p class="section-label">Access register</p><h2>Account requests and users</h2></div><span>@FilteredUsers.Count account(s)</span></div>
+        <div class="user-admin-table">
+            <div class="user-admin-row admin-table-header"><span>User</span><span>Identity source</span><span>Requested</span><span>Role</span><span>Status</span><span>Action</span></div>
             @foreach (var user in FilteredUsers)
             {
-                <div class="user-admin-row"><div class="admin-entity"><span>@GetInitials(user.DisplayName)</span><div><strong>@user.DisplayName</strong><small>Identity ID: @user.Id[..8]</small></div></div><code>@user.UserName</code><span>@user.Email</span><span>@(string.IsNullOrWhiteSpace(user.PhoneNumber) ? "Not set" : user.PhoneNumber)</span><span class="admin-role role-@user.Role.ToLowerInvariant()">@GetRoleLabel(user.Role)</span><span class="status-pill @(user.IsLocked ? "status-failed" : "status-successful")">@(user.IsLocked ? "Locked" : "Active")</span></div>
+                <div class="user-admin-row @(user.Status == UserAccessStatus.Pending ? "pending-user-row" : "")">
+                    <div class="admin-entity"><span>@GetInitials(user.DisplayName)</span><div><strong>@user.DisplayName</strong><small>@user.Email</small></div></div>
+                    <div class="identity-source"><strong>@(user.IsEntraUser ? "Microsoft Entra" : "Local account")</strong><small>@(user.IsEntraUser ? user.EntraObjectId : user.UserName)</small></div>
+                    <span>@FormatDate(user.RequestedAt)</span>
+                    <span class="admin-role role-@RoleCss(user.Role)">@RoleLabel(user.Role)</span>
+                    <span class="status-pill @StatusCss(user.Status)">@user.Status</span>
+                    <div class="access-actions">
+                        @if (user.Status is UserAccessStatus.Pending or UserAccessStatus.Rejected)
+                        {
+                            <button class="access-approve" type="button" @onclick="() => AskDecision(user, UserAccessStatus.Approved, SystemRoles.Staff)">Approve Staff</button>
+                            @if (IsSuperAdministrator)
+                            {
+                                <button class="admin-edit-action" type="button" @onclick="() => AskDecision(user, UserAccessStatus.Approved, SystemRoles.Administrator)">Approve Admin</button>
+                            }
+                            <button class="access-reject" type="button" @onclick="() => AskDecision(user, UserAccessStatus.Rejected, string.Empty)">Reject</button>
+                        }
+                        else if (user.Status == UserAccessStatus.Approved && CanManage(user))
+                        {
+                            @if (IsSuperAdministrator && user.Role == SystemRoles.Staff)
+                            {
+                                <button class="admin-edit-action" type="button" @onclick="() => AskDecision(user, UserAccessStatus.Approved, SystemRoles.Administrator)">Make Admin</button>
+                            }
+                            else if (IsSuperAdministrator && user.Role == SystemRoles.Administrator)
+                            {
+                                <button class="admin-edit-action" type="button" @onclick="() => AskDecision(user, UserAccessStatus.Approved, SystemRoles.Staff)">Make Staff</button>
+                            }
+                            <button class="access-reject" type="button" @onclick="() => AskDecision(user, UserAccessStatus.Inactive, user.Role)">Deactivate</button>
+                        }
+                        else if (user.Status == UserAccessStatus.Inactive && CanManage(user))
+                        {
+                            <button class="access-approve" type="button" @onclick="() => AskDecision(user, UserAccessStatus.Approved, ReactivateRole(user))">Reactivate</button>
+                        }
+                    </div>
+                </div>
             }
         </div>
     </section>
 
-    @if (IsDialogOpen)
+    @if (DecisionUser is not null)
     {
-        <div class="admin-overlay"><section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="user-form-title"><div class="admin-dialog-header"><div><p class="section-label">New authorised account</p><h2 id="user-form-title">Add system user</h2></div><button class="profile-close" type="button" @onclick="CloseDialog">&#215;</button></div>
-            <form @onsubmit="SaveUserAsync" @onsubmit:preventDefault>
-                @if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }
-                <div class="admin-form-grid"><label><span>Full name</span><input required @bind="NewDisplayName" /></label><label><span>Username</span><input required autocomplete="off" @bind="NewUserName" /></label><label><span>Email</span><input type="email" required @bind="NewEmail" /></label><label><span>Phone number</span><input type="tel" @bind="NewPhone" /></label><label><span>Role</span><select @bind="NewRole"><option value="Reviewer">Staff</option><option value="Administrator">Administrator</option></select></label><label><span>Temporary password</span><input type="password" required minlength="12" autocomplete="new-password" @bind="NewPassword" /></label></div>
-                <p class="password-policy">Minimum 12 characters with uppercase, lowercase, number and special character.</p>
-                <div class="profile-actions"><button class="profile-cancel" type="button" @onclick="CloseDialog">Cancel</button><button class="primary-action admin-primary" type="submit" disabled="@IsSaving">@(IsSaving ? "Creating..." : "Create User")</button></div>
-            </form>
-        </section></div>
+        <div class="admin-overlay access-confirm-overlay">
+            <section class="configuration-success-dialog access-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="access-confirm-title">
+                <span class="access-confirm-icon @DecisionIconCss">@DecisionIcon</span>
+                <p class="section-label">Confirm access change</p>
+                <h2 id="access-confirm-title">@DecisionTitle</h2>
+                <p>@DecisionDescription</p>
+                <div class="access-confirm-actions"><button class="profile-cancel" type="button" @onclick="CancelDecision">Cancel</button><button class="primary-action @DecisionButtonCss" type="button" disabled="@IsSaving" @onclick="ConfirmDecisionAsync">@(IsSaving ? "Saving..." : "Confirm")</button></div>
+            </section>
+        </div>
     }
 </div>
