@@ -19,6 +19,7 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(DatabaseSettings.SectionName));
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ILssDataApiClient, PrototypeLssDataApiClient>();
+builder.Services.AddHostedService<ScheduledCollectionWorker>();
 builder.Services.AddScoped<IAuditTrailService, AuditTrailService>();
 builder.Services.AddScoped<IUserAccessNotificationService, UserAccessNotificationService>();
 builder.Services.AddAntiforgery();

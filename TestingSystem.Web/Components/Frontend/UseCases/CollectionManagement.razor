@@ -8,14 +8,22 @@
 <div class="collection-page">
     <header class="page-heading">
         <div>
-            <p class="section-label">DDQ data operations</p>
+            <p class="section-label">API data operations</p>
             <h1>Collection Management</h1>
-            <p class="page-subtitle">Monitor automated collections and run DDQ plant collection manually.</p>
+            <p class="page-subtitle">Monitor DDQ and MMF API collection, translation and validation for every LSS plant.</p>
         </div>
-        <button class="primary-action collection-run-action" type="button" @onclick="OpenRunDialog">
+        <button class="primary-action collection-run-action" type="button" @onclick="OpenRunDialog" disabled="@(Plants.Count == 0)">
             <span class="collection-run-icon">&#9654;</span> Run Manual
         </button>
     </header>
+
+    @if (!string.IsNullOrWhiteSpace(LoadErrorMessage))
+    {
+        <section class="collection-load-error" role="alert">
+            <div><strong>Collection Management is temporarily unavailable</strong><span>@LoadErrorMessage</span></div>
+            <button type="button" @onclick="RetryLoadAsync" disabled="@IsLoadingJobs">@(IsLoadingJobs ? "Loading..." : "Try again")</button>
+        </section>
+    }
 
     <section class="collection-summary" aria-label="Collection summary">
         <button type="button" class="summary-stat" @onclick="OpenAllSummary">
@@ -27,7 +35,7 @@
         <button type="button" class="summary-stat" @onclick="OpenFailedSummary">
             <small>Failed</small><strong>@Jobs.Count(job => job.Status == "Failed")</strong><span>View plants</span>
         </button>
-        <p><span class="live-dot"></span> DDQ collection monitoring is active</p>
+        <p><span class="live-dot"></span> Scheduled API collection monitoring is active</p>
     </section>
 
     <section class="collection-toolbar">
@@ -42,16 +50,16 @@
     <section class="table-panel collection-panel">
         <div class="collection-table-heading">
             <div>
-                <p class="section-label">DDQ collection jobs</p>
+                <p class="section-label">Plant API collection jobs</p>
                 <h2>Collection history</h2>
             </div>
             <span>Latest activity shown first</span>
         </div>
 
-        <div class="collection-table" role="table" aria-label="DDQ collection job history">
+        <div class="collection-table" role="table" aria-label="Plant API collection job history">
             <div class="collection-row collection-header" role="row">
-                <span>Plant name</span><span>Mode</span><span>Collection</span>
-                <span>Submission date</span><span>Run timestamp</span><span>Status</span>
+                <span>Plant</span><span>API / data type</span><span>Schedule / mode</span>
+                <span>Collection result</span><span>Run timestamp</span><span>Status</span>
             </div>
             @if (FilteredJobs.Count == 0)
             {
@@ -69,16 +77,73 @@
                             <span>@GetPlantCode(job.PlantName)</span>
                             <div><strong>@job.PlantName</strong><small>@job.State</small></div>
                         </div>
-                        <span><span class="collection-mode mode-@job.Mode.ToLowerInvariant()">@job.Mode</span></span>
-                        <div class="collection-reference"><strong>@job.CollectionId</strong><small>@job.Description</small></div>
-                        <time datetime="@job.SubmissionDate.ToString("O")">@job.SubmissionDate.ToString("dd MMM yyyy")</time>
+                        <div class="collection-data-type">
+                            <span class="api-type-badge api-type-@job.ApiType.ToLowerInvariant()">@job.ApiType</span>
+                            <strong>@(string.IsNullOrWhiteSpace(job.DataType) ? "General data" : job.DataType)</strong>
+                        </div>
+                        <div class="collection-schedule">
+                            <strong>@job.Mode</strong>
+                            <small>@job.SubmissionDate.ToString("dd MMM yyyy")</small>
+                        </div>
+                        <div class="collection-reference">
+                            <strong>@job.CollectionId</strong>
+                            <small>@job.Description</small>
+                        </div>
                         <time datetime="@job.RunAt.ToString("O")">@job.RunAt.ToString("dd MMM yyyy, HH:mm:ss")</time>
-                        <span><span class="status-pill status-@job.Status.ToLowerInvariant()">@job.Status</span></span>
+                        <span>
+                            <button class="collection-status-button" type="button" @onclick="() => OpenJobDetail(job)"
+                                    aria-label="View @job.Status collection details">
+                                <span class="status-pill status-@job.Status.ToLowerInvariant()">@job.Status</span>
+                            </button>
+                        </span>
                     </div>
                 }
             }
         </div>
     </section>
+
+    @if (IsJobDetailOpen && SelectedJob is not null)
+    {
+        <div class="collection-overlay" role="presentation">
+            <section class="collection-dialog collection-job-dialog" role="dialog" aria-modal="true" aria-labelledby="job-detail-title">
+                <div class="collection-dialog-header">
+                    <div>
+                        <p class="section-label">Collection job details</p>
+                        <h2 id="job-detail-title">@SelectedJob.CollectionId</h2>
+                    </div>
+                    <button class="profile-close" type="button" @onclick="CloseJobDetail" aria-label="Close collection details">&#215;</button>
+                </div>
+                <div class="collection-dialog-body">
+                    <div class="job-detail-lead">
+                        <div class="collection-plant">
+                            <span>@GetPlantCode(SelectedJob.PlantName)</span>
+                            <div><strong>@SelectedJob.PlantName</strong><small>@SelectedJob.State, Malaysia</small></div>
+                        </div>
+                        <span class="status-pill status-@SelectedJob.Status.ToLowerInvariant()">@SelectedJob.Status</span>
+                    </div>
+                    <dl class="job-detail-grid">
+                        <div><dt>API type</dt><dd>@SelectedJob.ApiType</dd></div>
+                        <div><dt>Data type</dt><dd>@(string.IsNullOrWhiteSpace(SelectedJob.DataType) ? "General data" : SelectedJob.DataType)</dd></div>
+                        <div><dt>Mode</dt><dd>@SelectedJob.Mode</dd></div>
+                        <div><dt>Submission date</dt><dd>@SelectedJob.SubmissionDate.ToString("dd MMM yyyy")</dd></div>
+                        <div><dt>Run timestamp</dt><dd>@SelectedJob.RunAt.ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
+                        <div><dt>Duration</dt><dd>@SelectedJob.DurationSeconds.ToString("0.00") seconds</dd></div>
+                    </dl>
+                    <section class="job-message @(SelectedJob.Status == "Failed" ? "job-message-failed" : "")">
+                        <strong>@(SelectedJob.Status == "Failed" ? "Why this collection failed" : "Processing result")</strong>
+                        <p>@(string.IsNullOrWhiteSpace(SelectedJob.ErrorMessage) ? SelectedJob.ResponseMessage : SelectedJob.ErrorMessage)</p>
+                        @if (!string.IsNullOrWhiteSpace(SelectedJob.ResponseMessage) && SelectedJob.ResponseMessage != SelectedJob.ErrorMessage)
+                        {
+                            <small>@SelectedJob.ResponseMessage</small>
+                        }
+                    </section>
+                    <div class="profile-actions">
+                        <button class="primary-action collection-close-action" type="button" @onclick="CloseJobDetail">Close</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    }
 
     @if (IsSummaryDialogOpen)
     {
@@ -86,7 +151,7 @@
             <section class="summary-list-dialog collection-summary-dialog" role="dialog" aria-modal="true" aria-labelledby="collection-summary-title">
                 <div class="summary-list-header">
                     <div>
-                        <p class="section-label">DDQ collection plants</p>
+                        <p class="section-label">Plant API collection jobs</p>
                         <h2 id="collection-summary-title">@SummaryDialogTitle</h2>
                     </div>
                     <button class="profile-close" type="button" @onclick="CloseSummaryDialog" aria-label="Close plant list">&#215;</button>

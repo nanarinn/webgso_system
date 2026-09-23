@@ -14,5 +14,7 @@
     <Compile Include="../../TestingSystem.Web/Database/UseCases/SolarApiReadingTable.cs" Link="SolarApiReading.cs" />
     <Compile Include="../../TestingSystem.Web/Database/UseCases/MmfLocationAveraging.cs" Link="MmfLocationAveraging.cs" />
     <Compile Include="../../TestingSystem.Web/Backend/UseCases/Exports/DdqExcelWorkbookExporter.cs" Link="DdqExcelWorkbookExporter.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/CollectionSchedulePolicy.cs" Link="CollectionSchedulePolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/ScheduledApiPayloadTranslator.cs" Link="ScheduledApiPayloadTranslator.cs" />
   </ItemGroup>
 </Project>

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Database.Entities;
 using TestingSystem.Web.Models;
+using TestingSystem.Web.Services;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
@@ -51,7 +52,9 @@ public partial class CollectionSchedules : ComponentBase
         Schedules = await db.CollectionSchedules.OrderBy(x => x.Name).ToListAsync();
     }
     private LssPlant GetPlant(int id) => Plants.FirstOrDefault(x => x.Id == id) ?? new LssPlant { Name = "Unknown plant", PlantId = "-" };
-    private IEnumerable<LssPlant> AvailablePlants => Plants.Where(x => x.IsActive && x.ApiConfigurations.Any(a => a.ApiType == NewApiType));
+    private string RequiredApiDataType => CollectionSchedulePolicy.ApiDataType(NewApiType, NewDataType);
+    private IEnumerable<LssPlant> AvailablePlants => Plants.Where(x => x.IsActive && x.ApiConfigurations.Any(a =>
+        a.ApiType == NewApiType && a.DataType == RequiredApiDataType && !string.IsNullOrWhiteSpace(a.ApiLink)));
     private IEnumerable<LssPlant> PlantSuggestions => AvailablePlants.Where(x => NewPlantId == 0 && (string.IsNullOrWhiteSpace(PlantSearchTerm) || x.Name.Contains(PlantSearchTerm, StringComparison.OrdinalIgnoreCase) || x.PlantId.Contains(PlantSearchTerm, StringComparison.OrdinalIgnoreCase))).Take(8);
     private void SelectPlant(LssPlant plant) { NewPlantId = plant.Id; PlantSearchTerm = $"{plant.Name} ({plant.PlantId})"; IsPlantDropdownOpen = false; }
     private void ClearPlantSelection() { NewPlantId = 0; IsPlantDropdownOpen = true; }
@@ -73,6 +76,8 @@ public partial class CollectionSchedules : ComponentBase
         NewScheduleDay = NewDataType switch { "Weekly" => "Monday", "4 Month" => "1", _ => string.Empty };
         NewScheduleMonths = [];
         if (NewDataType is "Rolling 24 Hour" or "MMF") NewInterval = "15 minutes";
+        NewPlantId = 0;
+        PlantSearchTerm = string.Empty;
     }
     private string ScheduleTime(CollectionSchedule item) => item.DataType switch { "Rolling 24 Hour" or "MMF" => $"Every {item.Interval}", "Weekly" => $"{item.ScheduleDay} at {item.RunTime}", "4 Month" => $"Day {item.ScheduleDay} · {MonthLabels(ParseMonths(item.ScheduleMonths))} · {item.RunTime}", _ => $"Daily at {item.RunTime}" };
     private void ToggleScheduleMonth(int month) { if (!NewScheduleMonths.Add(month)) NewScheduleMonths.Remove(month); }
@@ -83,10 +88,13 @@ public partial class CollectionSchedules : ComponentBase
     private async Task ConfirmStatusChangeAsync() { StatusChangeConfirmed = true; IsStatusConfirmationOpen = false; await SaveScheduleAsync(); }
     private async Task SaveScheduleAsync()
     {
-        if (NewPlantId == 0) { FormError = $"No active plant with a configured {NewApiType} API is available."; return; }
+        if (NewPlantId == 0) { FormError = $"Select an active plant with a configured {NewApiType} {RequiredApiDataType} API."; return; }
         if (NewDataType == "4 Month" && NewScheduleMonths.Count == 0) { FormError = "Select at least one month for the 4 Month schedule."; return; }
         if (EditingId.HasValue && NewIsActive != OriginalIsActive && !StatusChangeConfirmed) { IsStatusConfirmationOpen = true; return; }
         await using var db = await ContextFactory.CreateDbContextAsync();
+        var hasEndpoint = await db.PlantApiConfigurations.AnyAsync(x => x.PlantId == NewPlantId
+            && x.ApiType == NewApiType && x.DataType == RequiredApiDataType && x.ApiLink != string.Empty);
+        if (!hasEndpoint) { FormError = $"The selected plant does not have a {NewApiType} {RequiredApiDataType} API endpoint."; return; }
         var item = EditingId.HasValue ? await db.CollectionSchedules.SingleAsync(x => x.Id == EditingId) : new CollectionSchedule { ScheduleCode = $"SCH-{NewApiType}-{DateTime.UtcNow:yyyyMMddHHmmss}" };
         if (NewApiType == "MMF") { NewDataType = "MMF"; NewInterval = "15 minutes"; NewScheduleDay = string.Empty; }
         var plant = GetPlant(NewPlantId); item.Name = $"{plant.Name} - {NewDataType}"; item.PlantId = NewPlantId; item.ApiType = NewApiType; item.DataType = NewDataType;

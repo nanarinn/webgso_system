@@ -33,13 +33,15 @@ public sealed class PrototypeLssDataApiClient(IHttpClientFactory httpClientFacto
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(8));
-            using var request = new HttpRequestMessage(HttpMethod.Head, uri);
-            using var response = await httpClientFactory.CreateClient().SendAsync(request, timeout.Token);
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Accept.ParseAdd("application/json, application/xml, text/xml, text/csv, text/plain; q=0.8, */*; q=0.5");
+            using var response = await httpClientFactory.CreateClient().SendAsync(
+                request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             startedAt.Stop();
-            var connected = (int)response.StatusCode < 500;
+            var connected = response.IsSuccessStatusCode;
             var message = connected
-                ? $"Endpoint reached successfully with HTTP {(int)response.StatusCode}."
-                : $"Endpoint responded with HTTP {(int)response.StatusCode}.";
+                ? $"API GET succeeded with HTTP {(int)response.StatusCode}; scheduled collection can reach this endpoint."
+                : $"API GET returned HTTP {(int)response.StatusCode}; scheduled collection will record this response as failed.";
             return new(connected, message, (int)response.StatusCode, startedAt.ElapsedMilliseconds);
         }
         catch (OperationCanceledException)

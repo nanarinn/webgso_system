@@ -7,7 +7,7 @@ using TestingSystem.Web.Database.Entities;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
-public partial class CollectionManagement : ComponentBase
+public partial class CollectionManagement : ComponentBase, IAsyncDisposable
 {
     [Inject] private IDbContextFactory<ApplicationDbContext> ContextFactory { get; set; } = default!;
     [Inject] private ILssDataApiClient ApiClient { get; set; } = default!;
@@ -19,9 +19,15 @@ public partial class CollectionManagement : ComponentBase
     private string SelectedPlantName { get; set; } = string.Empty;
     private bool IsRunDialogOpen { get; set; }
     private bool IsSummaryDialogOpen { get; set; }
+    private bool IsJobDetailOpen { get; set; }
+    private DemoCollectionJob? SelectedJob { get; set; }
     private string SummaryFilter { get; set; } = "All";
     private DemoCollectionJob? RunResult { get; set; }
+    private string LoadErrorMessage { get; set; } = string.Empty;
+    private bool IsLoadingJobs { get; set; }
     private int Sequence { get; set; } = 6;
+    private readonly CancellationTokenSource RefreshCancellation = new();
+    private Task? RefreshTask { get; set; }
 
     private List<DemoCollectionJob> SummaryJobs => SummaryFilter == "All"
         ? Jobs
@@ -45,20 +51,116 @@ public partial class CollectionManagement : ComponentBase
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadPageAsync();
+        RefreshTask = RefreshJobsAsync(RefreshCancellation.Token);
+    }
+
+    private async Task LoadPageAsync()
+    {
+        IsLoadingJobs = true;
+        LoadErrorMessage = string.Empty;
+        try
+        {
+            await using var database = await ContextFactory.CreateDbContextAsync();
+            Plants = await database.LssPlants.AsNoTracking()
+                .Where(plant => plant.IsActive)
+                .OrderBy(plant => plant.Name)
+                .Select(plant => new PlantConnection(plant.Id, plant.PlantId, plant.Name, plant.State, plant.DdqApiEndpoint))
+                .ToListAsync();
+            SelectedPlantName = Plants.FirstOrDefault()?.Name ?? string.Empty;
+            await LoadJobsAsync();
+        }
+        catch (Exception exception)
+        {
+            Jobs = [];
+            LoadErrorMessage = $"Collection history could not be loaded: {exception.GetBaseException().Message}";
+        }
+        finally
+        {
+            IsLoadingJobs = false;
+        }
+    }
+
+    private async Task RetryLoadAsync()
+    {
+        await LoadPageAsync();
+    }
+
+    private async Task LoadJobsAsync()
+    {
         await using var database = await ContextFactory.CreateDbContextAsync();
-        Plants = await database.LssPlants
-            .Where(plant => plant.IsActive)
-            .OrderBy(plant => plant.Name)
-            .Select(plant => new PlantConnection(plant.Id, plant.PlantId, plant.Name, plant.State, plant.DdqApiEndpoint))
-            .ToListAsync();
-        SelectedPlantName = Plants.FirstOrDefault()?.Name ?? string.Empty;
         Jobs = await database.CollectionJobs.AsNoTracking().OrderByDescending(x => x.StartedAt)
             .Join(database.LssPlants, job => job.PlantId, plant => plant.Id, (job, plant) => new { job, plant })
-            .Select(x => new DemoCollectionJob(x.job.CollectionId, x.plant.Name, x.plant.State, x.job.Mode,
-                x.job.SubmissionDate.ToDateTime(TimeOnly.MinValue), x.job.CompletedAt.HasValue ? x.job.CompletedAt.Value.LocalDateTime : x.job.StartedAt.LocalDateTime,
-                x.job.Status == "Completed" ? "Successful" : x.job.Status, x.job.Status == "Completed" ? "API data collected and stored in MS SQL." : (x.job.ErrorMessage ?? "Collection failed."),
-                x.job.ResponseMessage, x.job.DurationSeconds)).Take(500).ToListAsync();
+            .Select(x => new DemoCollectionJob(
+                x.job.CollectionId,
+                x.plant.Name,
+                x.plant.State,
+                x.job.Mode,
+                x.job.SubmissionDate.ToDateTime(TimeOnly.MinValue),
+                x.job.CompletedAt.HasValue ? x.job.CompletedAt.Value.LocalDateTime : x.job.StartedAt.LocalDateTime,
+                x.job.Status == "Completed" ? "Successful" : x.job.Status,
+                x.job.Status == "Completed" ? "API data collected and stored in MS SQL." : (x.job.ErrorMessage ?? "Collection is still being processed."),
+                x.job.ResponseMessage,
+                x.job.DurationSeconds,
+                x.job.Mode.Contains("MMF") || x.job.DataType == "MMF" ? "MMF" : "DDQ",
+                x.job.DataType,
+                "",
+                0,
+                0,
+                null,
+                "",
+                x.job.Id,
+                x.job.ErrorMessage ?? string.Empty))
+            .Take(500)
+            .ToListAsync();
         Sequence = Math.Max(Sequence, Jobs.Count);
+    }
+
+    private void OpenJobDetail(DemoCollectionJob job)
+    {
+        SelectedJob = job;
+        IsJobDetailOpen = true;
+    }
+
+    private void CloseJobDetail()
+    {
+        IsJobDetailOpen = false;
+        SelectedJob = null;
+    }
+
+    private async Task RefreshJobsAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await LoadJobsAsync();
+                        LoadErrorMessage = string.Empty;
+                    }
+                    catch (Exception exception)
+                    {
+                        LoadErrorMessage = $"Automatic refresh failed: {exception.GetBaseException().Message}";
+                    }
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        RefreshCancellation.Cancel();
+        if (RefreshTask is not null)
+            try { await RefreshTask; } catch (OperationCanceledException) { }
+        RefreshCancellation.Dispose();
     }
 
     private void OpenRunDialog()

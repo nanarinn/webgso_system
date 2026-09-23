@@ -74,3 +74,47 @@ var irradianceBounds = AnalyticsGraphScale.Bounds([0m, 450m, 930m]);
 if (irradianceBounds.Minimum != 0 || irradianceBounds.Maximum < 930m)
     throw new Exception("MMF graph bounds must keep a zero baseline for irradiance");
 Console.WriteLine("PASS: MMF dynamic graph bounds for atmospheric and zero-based parameters");
+if (CollectionSchedulePolicy.ApiDataType("DDQ", "Daily") != "Day Ahead"
+    || CollectionSchedulePolicy.ApiDataType("DDQ", "Weekly") != "Week Ahead"
+    || CollectionSchedulePolicy.ApiDataType("DDQ", "4 Month") != "4 Month Ahead"
+    || CollectionSchedulePolicy.ApiDataType("MMF", "MMF") != "MMF")
+    throw new Exception("Collection schedule API data-type mapping failed");
+var scheduleNow = new DateTime(2026, 9, 23, 10, 30, 0);
+if (!CollectionSchedulePolicy.IsDue("Rolling 24 Hour", "15 minutes", "00:15", "", "", scheduleNow, scheduleNow.AddMinutes(-15))
+    || CollectionSchedulePolicy.IsDue("Rolling 24 Hour", "15 minutes", "00:15", "", "", scheduleNow, scheduleNow.AddMinutes(-14)))
+    throw new Exception("Interval collection schedule timing failed");
+if (!CollectionSchedulePolicy.IsDue("Daily", "15 minutes", "10:00", "", "", scheduleNow, null)
+    || CollectionSchedulePolicy.IsDue("Daily", "15 minutes", "11:00", "", "", scheduleNow, null))
+    throw new Exception("Daily collection schedule timing failed");
+if (!CollectionSchedulePolicy.IsDue("4 Month", "15 minutes", "10:00", "23", "1,5,9", scheduleNow, null))
+    throw new Exception("Four-month collection schedule timing failed");
+Console.WriteLine("PASS: Collection schedule timing and API endpoint mapping");
+var translatedDdq = ScheduledApiPayloadTranslator.Translate(
+    """{"submissionDateTime":"2026-09-23T10:00:00+08:00","forecastData":[{"startTime":"2026-09-24T00:00:00+08:00","endTime":"2026-09-24T00:15:00+08:00","forecastValue":12.5,"valueUnit":"MW"}]}""",
+    "DDQ", "Day Ahead", 1, 100, scheduleNow, 15);
+if (translatedDdq.Readings.Count != 1 || translatedDdq.Readings[0].Value != 12.5m
+    || translatedDdq.Readings[0].Parameter != "forecastValue")
+    throw new Exception("Scheduled DDQ payload translation failed");
+var translatedMmf = ScheduledApiPayloadTranslator.Translate(
+    """{"sensorReadings":[{"timestamp":"2026-09-23T10:00:00+08:00","parameter":"GHI","value":400,"unit":"W/m²"},{"timestamp":"2026-09-23T10:00:00+08:00","parameter":"GHI","value":500,"unit":"W/m²"}]}""",
+    "MMF", "MMF", 1, 101, scheduleNow, 15);
+if (translatedMmf.Readings.Count != 1 || translatedMmf.Readings[0].Value != 450m
+    || translatedMmf.Readings[0].Parameter != "GHI")
+    throw new Exception("Scheduled MMF sensor averaging failed");
+var translatedXml = ScheduledApiPayloadTranslator.Translate(
+    """<response><reading><timestamp>2026-09-23T10:00:00+08:00</timestamp><parameter>GHI</parameter><value>725.5</value><unit>W/m2</unit></reading></response>""",
+    "MMF", "MMF", 1, 102, scheduleNow, 15, "application/xml");
+if (translatedXml.PayloadFormat != "XML" || translatedXml.Readings.Count != 1 || translatedXml.Readings[0].Value != 725.5m)
+    throw new Exception("Scheduled XML payload translation failed");
+var translatedCsv = ScheduledApiPayloadTranslator.Translate(
+    "timestamp,forecastValue,valueUnit\n2026-09-23T10:00:00+08:00,18.75,MW",
+    "DDQ", "Day Ahead", 1, 103, scheduleNow, 15, "text/csv");
+if (translatedCsv.PayloadFormat != "CSV" || translatedCsv.Readings.Count != 1 || translatedCsv.Readings[0].Value != 18.75m)
+    throw new Exception("Scheduled CSV payload translation failed");
+try
+{
+    ScheduledApiPayloadTranslator.Translate("<html><body>Sign in</body></html>", "DDQ", "Day Ahead", 1, 104, scheduleNow, 15, "text/html");
+    throw new Exception("HTML API response should not be accepted as measurement data");
+}
+catch (FormatException exception) when (exception.Message.Contains("HTML page")) { }
+Console.WriteLine("PASS: Scheduled JSON, XML and CSV payload translation with clear HTML rejection");

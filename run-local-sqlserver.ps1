@@ -58,6 +58,22 @@ if ($ShareEntra) {
 }
 $entraReady = $httpsReady -and $entraEnabled -and $entraSecretConfigured
 
+# A previous dotnet watch process can survive after its web child is stopped and
+# immediately start another SBLSS instance. Remove only watchers that target this
+# project before synchronising the database and opening the ports again.
+$staleWatchers = @(Get-CimInstance Win32_Process -Filter "Name = 'dotnet.exe'" -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.CommandLine -match '(?i)\bwatch\b' -and
+        $_.CommandLine -match '(?i)TestingSystem\.Web'
+    })
+if ($staleWatchers.Count -gt 0) {
+    Write-Host "Stopping $($staleWatchers.Count) previous SBLSS development watcher(s)..." -ForegroundColor Yellow
+    foreach ($watcher in $staleWatchers) {
+        Stop-Process -Id $watcher.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Milliseconds 700
+}
+
 $runningInstances = @(Get-Process -Name "TestingSystem.Web" -ErrorAction SilentlyContinue)
 if ($runningInstances.Count -gt 0) {
     Write-Host "Stopping previous SBLSS instance..." -ForegroundColor Yellow
@@ -180,4 +196,10 @@ $applicationUrls = if ($httpsReady) {
 else {
     "http://0.0.0.0:$port"
 }
-dotnet watch --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-hot-reload run --no-launch-profile --urls $applicationUrls
+$watchLogPath = Join-Path $projectRoot ".sblss-watch.log"
+dotnet watch --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-hot-reload run --no-launch-profile --urls `
+    $applicationUrls 2>&1 | Tee-Object -FilePath $watchLogPath
+$watchExitCode = $LASTEXITCODE
+if ($watchExitCode -ne 0) {
+    throw "SBLSS stopped with exit code $watchExitCode. Startup details were saved to $watchLogPath"
+}

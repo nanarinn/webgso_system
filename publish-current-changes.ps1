@@ -23,7 +23,7 @@ if (-not $stagedChanges) {
     exit 0
 }
 
-git commit -m "Complete Microsoft Entra access and LAN sharing"
+git commit -m "Fix scheduled API collection workflow"
 if ($LASTEXITCODE -ne 0) { throw "Unable to create the Git commit." }
 
 git pull --rebase origin main

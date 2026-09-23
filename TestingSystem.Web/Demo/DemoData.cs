@@ -22,7 +22,10 @@ public static class DemoData
     }
 }
 
-public sealed record DemoCollectionJob(string CollectionId, string PlantName, string State, string Mode, DateTime SubmissionDate, DateTime RunAt, string Status, string Description, string ResponseMessage, double DurationSeconds);
+public sealed record DemoCollectionJob(string CollectionId, string PlantName, string State, string Mode, DateTime SubmissionDate, DateTime RunAt,
+    string Status, string Description, string ResponseMessage, double DurationSeconds, string ApiType = "DDQ", string DataType = "",
+    string ScheduleName = "", int ReadingCount = 0, int AnomalyCount = 0, int? HttpStatusCode = null, string ContentType = "",
+    long DatabaseId = 0, string ErrorMessage = "");
 public sealed record DemoAnalysisResult(string Reference, string Name, string Type, DateTime SubmissionDate, DateTime GeneratedAt,
     string Description, string Status, string DataSelection = "", int PlantCount = 0, int RecordCount = 0);
 public sealed record DemoReportRecord(string ReportId, string Name, string Source, string Type, DateTime SubmissionDate, DateTime GeneratedAt, string Status, string RequestedBy, int AnomalyCount, string Description);
