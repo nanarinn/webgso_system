@@ -70,7 +70,7 @@
             }
             else
             {
-                @foreach (var job in FilteredJobs)
+                @foreach (var job in TablePaging.Slice(FilteredJobs, CollectionPage))
                 {
                     <div class="collection-row" role="row">
                         <div class="collection-plant">
@@ -100,6 +100,7 @@
                 }
             }
         </div>
+        <TablePagination TotalItems="@FilteredJobs.Count" @bind-Page="CollectionPage" />
     </section>
 
     @if (IsJobDetailOpen && SelectedJob is not null)
@@ -158,7 +159,7 @@
                 </div>
                 <div class="summary-list-body">
                     <p class="summary-list-count">@SummaryJobs.Count collection job(s)</p>
-                    @foreach (var job in SummaryJobs)
+                    @foreach (var job in TablePaging.Slice(SummaryJobs, CollectionSummaryPage))
                     {
                         <article class="summary-list-item">
                             <span class="summary-plant-code">@GetPlantCode(job.PlantName)</span>
@@ -171,6 +172,7 @@
                         </article>
                     }
                 </div>
+                <TablePagination TotalItems="@SummaryJobs.Count" @bind-Page="CollectionSummaryPage" />
                 <div class="summary-list-footer">
                     <button class="profile-cancel" type="button" @onclick="CloseSummaryDialog">Close</button>
                 </div>
@@ -190,39 +192,59 @@
                 <div class="collection-dialog-body">
                     @if (RunResult is null)
                     {
-                        <p class="collection-dialog-intro">Select a plant to verify its configured connection before starting the collection.</p>
-                        <label class="filter-field collection-plant-select">
-                            <span>Plant name</span>
-                            <select @bind="SelectedPlantName">
-                                @foreach (var plant in Plants)
-                                {
-                                    <option value="@plant.Name">@plant.Name</option>
-                                }
-                            </select>
-                        </label>
+                        <p class="collection-dialog-intro">Select a plant and DDQ data type. Rolling 24 Hour can only be collected by its configured schedule.</p>
+                        @if (!string.IsNullOrWhiteSpace(ManualCollectionError))
+                        {
+                            <div class="admin-alert error">@ManualCollectionError</div>
+                        }
+                        <div class="manual-collection-selectors">
+                            <label class="filter-field collection-plant-select">
+                                <span>Plant name</span>
+                                <select @bind="SelectedPlantId">
+                                    @foreach (var plant in Plants)
+                                    {
+                                        <option value="@plant.DatabaseId">@plant.Name (@plant.PlantId)</option>
+                                    }
+                                </select>
+                            </label>
+                            <label class="filter-field collection-plant-select">
+                                <span>DDQ data type</span>
+                                <select @bind="SelectedManualDataType">
+                                    @foreach (var dataType in ManualDdqDataTypes)
+                                    {
+                                        <option value="@dataType">@dataType</option>
+                                    }
+                                </select>
+                            </label>
+                        </div>
 
+                        @if (SelectedPlant is not null)
+                        {
                         <section class="plant-connection-card">
                             <div class="plant-connection-title">
                                 <span>@GetPlantCode(SelectedPlant.Name)</span>
                                 <div><strong>@SelectedPlant.Name</strong><small>@SelectedPlant.State, Malaysia</small></div>
-                                <span class="connection-ready"><i></i> Ready</span>
+                                <span class="connection-ready"><i></i> @(string.IsNullOrWhiteSpace(SelectedManualEndpoint) ? "Endpoint required" : "Ready")</span>
                             </div>
                             <dl class="plant-information">
                                 <div><dt>Plant ID</dt><dd>@SelectedPlant.PlantId</dd></div>
-                                <div><dt>Collection type</dt><dd>DDQ interval data</dd></div>
+                                <div><dt>Collection type</dt><dd>DDQ @SelectedManualDataType</dd></div>
                                 <div><dt>Submission date</dt><dd>@DateTime.Today.ToString("dd MMM yyyy")</dd></div>
                                 <div><dt>Authentication</dt><dd>API key</dd></div>
                             </dl>
                             <div class="api-endpoint">
                                 <div><span>Configured API endpoint</span><small>Managed in Admin Configuration</small></div>
-                                <code>@SelectedPlant.ApiUrl</code>
+                                <code>@(string.IsNullOrWhiteSpace(SelectedManualEndpoint) ? $"No {SelectedManualDataType} endpoint configured" : SelectedManualEndpoint)</code>
                             </div>
                         </section>
+                        }
 
                         <div class="profile-actions">
-                            <button class="profile-cancel" type="button" @onclick="CloseRunDialog">Cancel</button>
-                            <button class="primary-action collection-run-action" type="button" @onclick="RunCollection">
-                                <span class="collection-run-icon">&#9654;</span> Run Collection
+                            <button class="profile-cancel" type="button" disabled="@IsRunningManualCollection" @onclick="CloseRunDialog">Cancel</button>
+                            <button class="primary-action collection-run-action" type="button"
+                                    disabled="@(IsRunningManualCollection || SelectedPlant is null || string.IsNullOrWhiteSpace(SelectedManualEndpoint))"
+                                    @onclick="RequestManualCollectionAsync">
+                                <span class="collection-run-icon">&#9654;</span> @(IsRunningManualCollection ? "Collecting..." : "Run Collection")
                             </button>
                         </div>
                     }
@@ -235,6 +257,7 @@
                             <p>@RunResult.ResponseMessage</p>
                             <dl>
                                 <div><dt>Plant</dt><dd>@RunResult.PlantName</dd></div>
+                                <div><dt>Data type</dt><dd>@RunResult.DataType</dd></div>
                                 <div><dt>Collection ID</dt><dd>@RunResult.CollectionId</dd></div>
                                 <div><dt>Completed at</dt><dd>@RunResult.RunAt.ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
                                 <div><dt>Duration</dt><dd>@RunResult.DurationSeconds.ToString("0.0") seconds</dd></div>
@@ -248,4 +271,28 @@
             </section>
         </div>
     }
+
+    @if (IsReplaceConfirmationOpen && SelectedPlant is not null)
+    {
+        <div class="schedule-confirm-overlay">
+            <section class="schedule-status-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="manual-replace-title">
+                <button class="profile-close" type="button" aria-label="Close confirmation" @onclick="CancelReplacement">&#215;</button>
+                <span class="schedule-status-warning">!</span>
+                <div>
+                    <p class="section-label">Existing scheduled collection</p>
+                    <h3 id="manual-replace-title">Confirm manual replacement</h3>
+                    <p>@ReplaceConfirmationMessage</p>
+                    <div>
+                        <button type="button" class="profile-cancel" @onclick="CancelReplacement">Keep Existing Data</button>
+                        <button type="button" class="primary-action collection-run-action" @onclick="ConfirmReplacementAsync">Confirm &amp; Run Manual</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    }
 </div>
+
+@code {
+    private int CollectionPage { get; set; } = 1;
+    private int CollectionSummaryPage { get; set; } = 1;
+}

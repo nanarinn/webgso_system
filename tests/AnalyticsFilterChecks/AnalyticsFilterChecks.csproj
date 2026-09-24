@@ -15,6 +15,13 @@
     <Compile Include="../../TestingSystem.Web/Database/UseCases/MmfLocationAveraging.cs" Link="MmfLocationAveraging.cs" />
     <Compile Include="../../TestingSystem.Web/Backend/UseCases/Exports/DdqExcelWorkbookExporter.cs" Link="DdqExcelWorkbookExporter.cs" />
     <Compile Include="../../TestingSystem.Web/Services/CollectionSchedulePolicy.cs" Link="CollectionSchedulePolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/DdqDatasetPolicy.cs" Link="DdqDatasetPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/ScheduledApiPayloadTranslator.cs" Link="ScheduledApiPayloadTranslator.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/MmfTestApiPayload.cs" Link="MmfTestApiPayload.cs" />
+    <Compile Include="../../TestingSystem.Web/Components/Shared/TablePaging.cs" Link="TablePaging.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/OnDemandReportReference.cs" Link="OnDemandReportReference.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/OnDemandCsvExporter.cs" Link="OnDemandCsvExporter.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/ManualDdqCollectionPolicy.cs" Link="ManualDdqCollectionPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/OnDemandReportOwnership.cs" Link="OnDemandReportOwnership.cs" />
   </ItemGroup>
 </Project>

@@ -85,6 +85,9 @@ public static class EntraAuthentication
                         });
 
                     context.Principal = await signInManager.CreateUserPrincipalAsync(user);
+                    await audit.RecordAsync(AuditTrailService.FormatActor(user.DisplayName, user.Email),
+                        "Login", "Success", "Authentication", user.Id,
+                        "Signed in with Microsoft Entra ID.", context.HttpContext.TraceIdentifier);
                 }
                 catch (Exception exception)
                 {

@@ -52,8 +52,9 @@
                 <span>Status</span>
                 <span>View</span>
                 <span>Export</span>
+                <span>Anomaly report</span>
             </div>
-            @foreach (var result in Results)
+            @foreach (var result in TablePaging.Slice(Results, AnalysisPage))
             {
                 <div class="on-demand-row" role="row">
                     <div class="analysis-name">
@@ -65,9 +66,11 @@
                     <span><span class="status-pill status-@result.Status.ToLowerInvariant()">@result.Status</span></span>
                     <button class="table-action view-action" type="button" @onclick="() => ViewResult(result)">View</button>
                     <button class="table-action export-action" type="button" disabled="@(result.Status != "Successful")" @onclick="() => ExportResultAsync(result)">Export CSV</button>
+                    <button class="table-action anomaly-download" type="button" disabled="@(result.Status != "Successful")" @onclick="() => ExportAnomalyResultAsync(result)">Anomaly (@result.AnomalyCount)</button>
                 </div>
             }
         </div>
+        <TablePagination TotalItems="@Results.Count" @bind-Page="AnalysisPage" />
     </section>
 
     @if (IsSummaryDialogOpen)
@@ -83,7 +86,7 @@
                 </div>
                 <div class="summary-list-body">
                     <p class="summary-list-count">@SummaryResults.Count request(s)</p>
-                    @foreach (var result in SummaryResults)
+                    @foreach (var result in TablePaging.Slice(SummaryResults, AnalysisSummaryPage))
                     {
                         <article class="summary-list-item">
                             <span class="analysis-type analysis-type-@result.Type.ToLowerInvariant()">@result.Type</span>
@@ -96,6 +99,7 @@
                         </article>
                     }
                 </div>
+                <TablePagination TotalItems="@SummaryResults.Count" @bind-Page="AnalysisSummaryPage" />
                 <div class="summary-list-footer">
                     <button class="profile-cancel" type="button" @onclick="CloseSummaryDialog">Close</button>
                 </div>
@@ -145,9 +149,9 @@
                     <div class="on-demand-all-plants"><span>&#10003;</span><div><strong>All active LSS plants included</strong><small>The generated file will combine available data from @ActivePlantCount configured active plant(s).</small></div></div>
 
                     <div class="profile-actions">
-                        <button class="profile-cancel" type="button" @onclick="CloseGenerateDialog">Cancel</button>
-                        <button class="primary-action generate-action" type="submit">
-                            Generate Analysis <span>→</span>
+                        <button class="profile-cancel" type="button" disabled="@IsGenerating" @onclick="CloseGenerateDialog">Cancel</button>
+                        <button class="primary-action generate-action" type="submit" disabled="@IsGenerating">
+                            @(IsGenerating ? "Generating..." : "Generate Analysis") <span>→</span>
                         </button>
                     </div>
                 </form>
@@ -180,10 +184,12 @@
                         <div><dt>Generated at</dt><dd>@SelectedResult.GeneratedAt.ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
                         <div><dt>Data selection</dt><dd>@(string.IsNullOrWhiteSpace(SelectedResult.DataSelection) ? (SelectedResult.Type == "DDQ" ? "Rolling 24 Hour" : "All MMF parameters") : SelectedResult.DataSelection)</dd></div>
                         <div><dt>Plants and records</dt><dd>@(SelectedResult.PlantCount > 0 ? SelectedResult.PlantCount : ActivePlantCount) plant(s) · @SelectedResult.RecordCount.ToString("N0") record(s)</dd></div>
+                        <div><dt>Anomalies found</dt><dd>@SelectedResult.AnomalyCount.ToString("N0")</dd></div>
                         <div class="result-description-row"><dt>Description</dt><dd>@SelectedResult.Description</dd></div>
                     </dl>
                     <div class="profile-actions">
                         <button class="profile-cancel" type="button" @onclick="CloseResult">Close</button>
+                        <button class="table-action anomaly-download" type="button" disabled="@(SelectedResult.Status != "Successful")" @onclick="() => ExportAnomalyResultAsync(SelectedResult)">Download Anomaly CSV (@SelectedResult.AnomalyCount)</button>
                         <button class="primary-action generate-action" type="button" disabled="@(SelectedResult.Status != "Successful")" @onclick="() => ExportResultAsync(SelectedResult)">Export CSV <span>↓</span></button>
                     </div>
                 </div>
@@ -191,3 +197,8 @@
         </div>
     }
 </div>
+
+@code {
+    private int AnalysisPage { get; set; } = 1;
+    private int AnalysisSummaryPage { get; set; } = 1;
+}

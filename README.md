@@ -27,6 +27,12 @@ The `-Pull` option stops if uncommitted local changes are present, preventing a 
 
 Open `http://localhost:5186/login`.
 
+For local MMF collection testing, register an MMF API link such as:
+
+`http://localhost:5186/api/test-data/mmf/LSS1?interval=15`
+
+The optional query parameters are `date=yyyy-MM-dd` and `interval=15`, `30`, or `60`. The endpoint returns the 13 MMF parameters represented by the supplied MMF sample, with five sensor readings per parameter and timestamp.
+
 ### Share on the same local network
 
 Run PowerShell or the VS Code terminal as Administrator, then start the system with:

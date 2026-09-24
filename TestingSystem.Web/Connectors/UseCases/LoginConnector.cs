@@ -20,7 +20,7 @@ public static class LoginConnector
         IAntiforgery antiforgery)
     {
         await antiforgery.ValidateRequestAsync(context);
-        var actor = context.User.Identity?.Name ?? "Unknown";
+        var actor = context.User;
         await signInManager.SignOutAsync();
         await auditTrail.RecordAsync(actor, "Logout", "Success",
             correlationId: context.TraceIdentifier);

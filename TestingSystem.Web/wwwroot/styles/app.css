@@ -2766,13 +2766,13 @@ a {
 }
 
 .on-demand-panel {
-    overflow-x: auto;
+    overflow: hidden;
     border-top: 4px solid var(--od-accent);
 }
 
 .on-demand-heading {
     display: flex;
-    min-width: 1120px;
+    min-width: 0;
     padding: 22px 24px 18px;
     align-items: center;
     justify-content: space-between;
@@ -2786,19 +2786,34 @@ a {
 }
 
 .on-demand-table {
-    min-width: 1120px;
+    width: 100%;
+    min-width: 0;
 }
 
 .on-demand-row {
     display: grid;
     min-height: 78px;
-    padding: 13px 22px;
-    grid-template-columns: 230px 160px minmax(260px, 1fr) 100px 70px 100px;
+    padding: 13px 16px;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1.18fr) minmax(0, 2.25fr) minmax(76px, .72fr) minmax(62px, .58fr) minmax(88px, .82fr) minmax(105px, .95fr);
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     border-bottom: 1px solid #edf1f5;
     font-family: "Aptos", "Trebuchet MS", sans-serif;
     font-size: 0.74rem;
+}
+
+.on-demand-row > * {
+    min-width: 0;
+}
+
+.on-demand-row .table-action {
+    width: 100%;
+    padding-inline: 10px;
+    white-space: nowrap;
+}
+
+.on-demand-header > span {
+    line-height: 1.35;
 }
 
 .on-demand-row:last-child {

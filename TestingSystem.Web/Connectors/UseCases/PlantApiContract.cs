@@ -16,7 +16,10 @@ public interface ILssDataApiClient
 public sealed record LssApiCollectionResult(
     bool IsSuccessful,
     int RecordsReceived,
-    string Message);
+    string Message,
+    int? HttpStatusCode = null,
+    string ContentType = "",
+    string Payload = "");
 
 public sealed record LssApiTestResult(
     bool IsConnected,

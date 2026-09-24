@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Database.Entities;
 
@@ -24,6 +25,38 @@ public sealed class AuditTrailService(IDbContextFactory<ApplicationDbContext> co
             CorrelationId = Limit(correlationId, 100)
         });
         await database.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RecordAsync(ClaimsPrincipal actor, string action, string result, string? entityType = null,
+        string? entityReference = null, string? detail = null, string? correlationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var actorName = actor.Identity?.Name;
+        var userId = actor.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            await using var database = await contextFactory.CreateDbContextAsync(cancellationToken);
+            var user = await database.Users.AsNoTracking()
+                .Where(item => item.Id == userId)
+                .Select(item => new { item.DisplayName, item.Email })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (user is not null)
+                actorName = FormatActor(user.DisplayName, user.Email);
+        }
+
+        await RecordAsync(actorName ?? "Unknown user", action, result, entityType, entityReference,
+            detail, correlationId, cancellationToken);
+    }
+
+    public static string FormatActor(string? displayName, string? email)
+    {
+        var name = displayName?.Trim();
+        var address = email?.Trim();
+        if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(address))
+            return $"{name} <{address}>";
+        return !string.IsNullOrWhiteSpace(name) ? name
+            : !string.IsNullOrWhiteSpace(address) ? address
+            : "Unknown user";
     }
 
     private static string? Redact(string? value)

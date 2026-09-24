@@ -8,26 +8,33 @@
     <header class="page-heading">
         <div><p class="section-label">UCLSS019</p><h1>Audit and Operational Events</h1>
             <p class="page-subtitle">Search security, administration and automated-system events stored in SQL Server.</p></div>
-        <a class="primary-action admin-primary" href="@ExportDataUri" download="sblss-audit-log.csv">Export CSV</a>
     </header>
     <section class="admin-summary" aria-label="Audit summary">
         <div><small>Total events</small><strong>@Events.Count</strong></div>
         <div><small>Successful</small><strong>@Events.Count(x => x.Result == "Success")</strong></div>
         <div><small>Failed</small><strong>@Events.Count(x => x.Result == "Failed")</strong></div>
     </section>
-    <section class="admin-toolbar">
-        <label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search actor, action, record or result..." @bind="SearchTerm" @bind:event="oninput" /></label>
-        <label class="report-filter"><span>Result</span><select @bind="ResultFilter"><option value="All">All results</option><option value="Success">Success</option><option value="Failed">Failed</option></select></label>
+    <section class="admin-toolbar audit-toolbar">
+        <label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search actor, action, reference or detail..." @bind="SearchTerm" @bind:event="oninput" @bind:after="ResetAuditPage" /></label>
+        <label class="report-filter"><span>Actor</span><select @bind="ActorFilter" @bind:after="ResetAuditPage"><option value="All">All actors</option>@foreach (var actor in AvailableActors) { <option value="@actor">@actor</option> }</select></label>
+        <label class="report-filter"><span>Event / action</span><select @bind="ActionFilter" @bind:after="ResetAuditPage"><option value="All">All events</option>@foreach (var action in AvailableActions) { <option value="@action">@action</option> }</select></label>
+        <label class="report-filter"><span>Result</span><select @bind="ResultFilter" @bind:after="ResetAuditPage"><option value="All">All results</option><option value="Success">Success</option><option value="Failed">Failed</option><option value="Warning">Warning</option><option value="Pending">Pending</option></select></label>
+        <label class="report-filter"><span>From date</span><input type="date" @bind="FromDate" @bind:after="ResetAuditPage" /></label>
+        <label class="report-filter"><span>To date</span><input type="date" @bind="ToDate" @bind:after="ResetAuditPage" /></label>
+        <button type="button" class="audit-clear" @onclick="ClearFilters">Clear filters</button>
         <span class="result-count">@FilteredEvents.Count record(s)</span>
     </section>
     <section class="table-panel">
         <div class="report-table" role="table" aria-label="Audit events">
             <div class="report-row report-header" role="row"><span>Timestamp</span><span>Actor</span><span>Action</span><span>Reference</span><span>Result</span><span>Detail</span></div>
             @if (FilteredEvents.Count == 0) { <div class="collection-empty"><strong>No audit events found</strong><span>Change the search or result filter.</span></div> }
-            @foreach (var item in FilteredEvents)
+            @foreach (var item in TablePaging.Slice(FilteredEvents, AuditPage))
             {
                 <div class="report-row" role="row"><span>@item.OccurredAt.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")</span><span>@item.Actor</span><span>@item.Action</span><span>@(item.EntityReference ?? "-")</span><span class="status-pill status-@item.Result.ToLowerInvariant()">@item.Result</span><span>@(item.Detail ?? "-")</span></div>
             }
         </div>
+        <TablePagination TotalItems="@FilteredEvents.Count" @bind-Page="AuditPage" />
     </section>
 </div>
+
+@code { private int AuditPage { get; set; } = 1; }

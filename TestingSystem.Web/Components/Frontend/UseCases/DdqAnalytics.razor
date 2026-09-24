@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @inject IDbContextFactory<ApplicationDbContext> ContextFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject TestingSystem.Web.Backend.UseCases.UCLSS027Audit.IAuditTrailService AuditTrail
 @using TestingSystem.Web.Services
 
 <PageTitle>DDQ Analytics | SBLSS System</PageTitle>
@@ -28,54 +30,65 @@
             <div class="compact-filter-layout">
             <div class="filter-section location-section">
                 <div class="filter-section-heading"><span>1</span><div><strong>Plant or location</strong><small>Leave empty for all active plants.</small></div></div>
-            <PlantFilter @key="FilterVersion"
-                         Plants="RegisteredPlants"
-                         SelectedIds="SelectedPlantIds"
-                         SelectedIdsChanged="OnPlantsChanged"
-                         Disabled="PlantFilterDisabled" />
+            <div class="location-selector-stack">
+                <section class="location-selector-card @(SelectedPlantIds.Count > 0 ? "selected" : null) @(PlantFilterDisabled ? "disabled" : null)">
+                    <div class="location-selector-heading">
+                        <span class="location-selector-number">A</span>
+                        <div><strong>Plant</strong><small>Select one or more individual LSS plants.</small></div>
+                    </div>
+                    <PlantFilter @key="FilterVersion"
+                                 Plants="RegisteredPlants"
+                                 SelectedIds="SelectedPlantIds"
+                                 SelectedIdsChanged="OnPlantsChanged"
+                                 Disabled="PlantFilterDisabled" />
+                </section>
 
-            <div class="location-divider"><span>or filter by one location</span></div>
-            <div class="location-alternatives">
-                <label class="filter-field">
-                    <span>State</span>
-                    <select value="@SelectedState" @onchange="OnStateChanged" disabled="@StateFilterDisabled">
-                        <option value="">Choose a state</option>
-                        @foreach (var state in AvailableStates) { <option value="@state">@state</option> }
-                    </select>
-                    @if (StateFilterDisabled) { <small>Unavailable while Plants or Region is selected.</small> }
-                </label>
-                <div class="location-or">OR</div>
-                <label class="filter-field">
-                    <span>Region</span>
-                    <select value="@SelectedRegion" @onchange="OnRegionChanged" disabled="@RegionFilterDisabled">
-                        <option value="">Choose a region</option>
-                        @foreach (var region in AvailableRegions) { <option value="@region">@region</option> }
-                    </select>
-                    @if (RegionFilterDisabled) { <small>Unavailable while Plants or State is selected.</small> }
-                </label>
+                <section class="location-selector-card @(SelectedStates.Count > 0 ? "selected" : null) @(StateFilterDisabled ? "disabled" : null)">
+                    <div class="location-selector-heading">
+                        <span class="location-selector-number">B</span>
+                        <div><strong>States</strong><small>Select one or more states.</small></div>
+                    </div>
+                    <StringMultiFilter Label="States" Items="AvailableStates" SelectedValues="SelectedStates"
+                                       SelectedValuesChanged="OnStatesChanged" Disabled="StateFilterDisabled" />
+                </section>
+
+                <section class="location-selector-card @(SelectedRegions.Count > 0 ? "selected" : null) @(RegionFilterDisabled ? "disabled" : null)">
+                    <div class="location-selector-heading">
+                        <span class="location-selector-number">C</span>
+                        <div><strong>Regions</strong><small>Select one or more regions.</small></div>
+                    </div>
+                    <StringMultiFilter Label="Regions" Items="AvailableRegions" SelectedValues="SelectedRegions"
+                                       SelectedValuesChanged="OnRegionsChanged" Disabled="RegionFilterDisabled" />
+                </section>
             </div>
             </div>
 
             <div class="compact-filter-right">
             <div class="filter-section data-type-section">
-                <div class="filter-section-heading"><span>2</span><div><strong>Data type and interval</strong><small>Select the datasets and interval to display.</small></div></div>
+                <div class="filter-section-heading"><span>2</span><div><strong>Data type</strong><small>Select the datasets to display. The system keeps the interval supplied by each API.</small></div></div>
                 <div class="data-type-and-interval">
-                    <div class="data-type-checks">
+                    <div class="data-type-checks data-type-interval-checks">
                         @foreach (var dataType in DataTypes)
                         {
-                            <label>
-                                <input type="checkbox" checked="@SelectedDataTypes.Contains(dataType)"
-                                       @onchange="args => ToggleDataType(dataType, args.Value)" />
-                                <span>@dataType</span>
-                            </label>
+                            <div class="data-type-interval-card @(SelectedDataTypes.Contains(dataType) ? "selected" : null)">
+                                <label class="data-type-toggle">
+                                    <input type="checkbox" checked="@SelectedDataTypes.Contains(dataType)"
+                                           @onchange="args => ToggleDataType(dataType, args.Value)" />
+                                    <span>@DataTypeLabel(dataType)</span>
+                                </label>
+                                <label class="data-type-interval-select">
+                                    <span>Interval</span>
+                                    <select value="@IntervalFor(dataType)" disabled="@(!SelectedDataTypes.Contains(dataType))"
+                                            @onchange="args => OnDataTypeIntervalChanged(dataType, args)">
+                                        @foreach (var interval in Intervals)
+                                        {
+                                            <option value="@interval.Value">@interval.Label</option>
+                                        }
+                                    </select>
+                                </label>
+                            </div>
                         }
                     </div>
-                    <label class="filter-field interval-control">
-                        <span>Data interval</span>
-                        <select @bind="SelectedInterval">
-                            @foreach (var interval in Intervals) { <option value="@interval.Value">@interval.Label</option> }
-                        </select>
-                    </label>
                 </div>
             </div>
 
@@ -169,7 +182,7 @@
                             role="tab"
                             aria-selected="@(ActiveDataType == dataType)"
                             class="@(ActiveDataType == dataType ? "active" : null)"
-                            @onclick="() => SelectDataTypeTab(dataType)">@dataType</button>
+                            @onclick="() => SelectDataTypeTab(dataType)">@DataTypeLabel(dataType)</button>
                 }
             </div>
 
@@ -182,11 +195,12 @@
                 <div class="excel-sheet-heading">
                     <div class="excel-sheet-title">SOLAR DATA SUBMISSION / DATA MONITORING</div>
                     <div class="excel-sheet-meta">
-                        <span><small>Data type</small><strong>@ActiveDataType</strong></span>
+                        <span><small>Data type</small><strong>@DataTypeLabel(ActiveDataType)</strong></span>
                         <span><small>Submission period</small><strong>@SubmissionPeriodLabel</strong></span>
-                        <span><small>Data interval</small><strong>@IntervalLabel</strong></span>
+                        <span><small>Data interval</small><strong>@SelectedIntervalLabel</strong></span>
                         <span><small>Data timestamp range</small><strong>@TimestampRangeLabel</strong></span>
                     </div>
+                    <p class="data-horizon-note">@DataTypeHorizon(ActiveDataType)</p>
                 </div>
                 @if (DisplayMode == "graph")
                 {
@@ -289,23 +303,14 @@
                     <table class="template-data-table">
                         <thead>
                             <tr>
-                                <th class="excel-row-number">#</th>
-                                <th rowspan="2" class="sticky-submission">Submission Date &amp; Time</th>
-                                <th rowspan="2" class="sticky-timestamp">Data Timestamp</th>
-                                <th rowspan="2">Year</th>
-                                <th rowspan="2">Month</th>
-                                <th rowspan="2">Day</th>
-                                <th rowspan="2" title="15-minute period; resets to 1 at midnight">Period</th>
+                                <th class="sticky-ddq sticky-ddq-submission">Submission Date</th>
+                                <th class="sticky-ddq sticky-ddq-year">Year</th>
+                                <th class="sticky-ddq sticky-ddq-month">Month</th>
+                                <th class="sticky-ddq sticky-ddq-day">Day</th>
+                                <th class="sticky-ddq sticky-ddq-period" title="Period follows the selected data-type interval and resets to 1 at midnight">Period</th>
                                 @foreach (var plant in ResultPlants)
                                 {
-                                    <th title="@plant.PlantId">@plant.Name</th>
-                                }
-                            </tr>
-                            <tr class="plant-code-row">
-                                <th class="excel-row-number"></th>
-                                @foreach (var plant in ResultPlants)
-                                {
-                                    <th>@plant.PlantId · MW</th>
+                                    <th title="@plant.Name · @plant.PlantId · MW">@TemplatePlantCode(plant.PlantId)</th>
                                 }
                             </tr>
                         </thead>
@@ -314,13 +319,11 @@
                             {
                                 var row = TableRows[rowIndex];
                                 <tr>
-                                    <th class="excel-row-number">@(rowIndex + 1)</th>
-                                    <td class="submission-cell sticky-submission">@SubmissionTableLabel</td>
-                                    <td class="sticky-timestamp">@row.Timestamp.ToString("dd/MM/yyyy HH:mm")</td>
-                                    <td>@row.Timestamp.Year</td>
-                                    <td>@row.Timestamp.Month</td>
-                                    <td>@row.Timestamp.Day</td>
-                                    <td title="@row.Timestamp.ToString("HH:mm:ss")">@PeriodNumber(row.Timestamp)</td>
+                                    <td class="sticky-ddq sticky-ddq-submission">@row.SubmissionDateTime.ToString("dd/MM/yyyy")</td>
+                                    <td class="sticky-ddq sticky-ddq-year">@row.Timestamp.Year</td>
+                                    <td class="sticky-ddq sticky-ddq-month">@row.Timestamp.Month</td>
+                                    <td class="sticky-ddq sticky-ddq-day">@row.Timestamp.Day</td>
+                                    <td class="sticky-ddq sticky-ddq-period" title="@($"{row.Timestamp:HH:mm:ss} · {row.IntervalMinutes} minute selected interval")">@PeriodNumber(row.Timestamp, row.IntervalMinutes)</td>
                                     @foreach (var plant in ResultPlants)
                                     {
                                         if (row.PlantValues.TryGetValue(plant.Id, out var plantValue))
@@ -337,10 +340,6 @@
                         </tbody>
                     </table>
                 </div>
-                @if (TableRows.Count == 500)
-                {
-                    <p class="table-limit-note">Showing the first 500 intervals for browser performance.</p>
-                }
                 }
             }
         </section>

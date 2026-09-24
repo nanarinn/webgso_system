@@ -75,7 +75,7 @@ public partial class CollectionSchedules : ComponentBase
     {
         NewScheduleDay = NewDataType switch { "Weekly" => "Monday", "4 Month" => "1", _ => string.Empty };
         NewScheduleMonths = [];
-        if (NewDataType is "Rolling 24 Hour" or "MMF") NewInterval = "15 minutes";
+        NewInterval = "15 minutes";
         NewPlantId = 0;
         PlantSearchTerm = string.Empty;
     }
@@ -107,4 +107,5 @@ public partial class CollectionSchedules : ComponentBase
         if (!EditingId.HasValue) return; await using var db = await ContextFactory.CreateDbContextAsync(); var item = await db.CollectionSchedules.SingleAsync(x => x.Id == EditingId);
         var name = item.Name; db.CollectionSchedules.Remove(item); await db.SaveChangesAsync(); IsDialogOpen = false; await LoadAsync(); SuccessTitle = "Schedule deleted"; SuccessMessage = $"{name} has been removed from MS SQL.";
     }
+
 }

@@ -87,6 +87,28 @@ if ($LASTEXITCODE -ne 0) {
     throw "Database schema synchronisation failed. The system was not started."
 }
 
+$clearCollectionRequestPath = Join-Path $projectRoot ".clear-collection-data-on-next-start"
+$resetWorkflowRequestPath = Join-Path $projectRoot ".reset-workflow-data-on-next-start"
+if (Test-Path -LiteralPath $resetWorkflowRequestPath) {
+    Write-Host "Resetting SBLSS operational workflow data..." -ForegroundColor Yellow
+    dotnet run --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-launch-profile --no-build -- --reset-workflow-data
+    if ($LASTEXITCODE -ne 0) {
+        throw "SBLSS workflow reset failed. The reset request was kept for the next start."
+    }
+    Remove-Item -LiteralPath $resetWorkflowRequestPath -Force
+    Remove-Item -LiteralPath $clearCollectionRequestPath -Force -ErrorAction SilentlyContinue
+    Write-Host "SBLSS is ready for testing from plant registration." -ForegroundColor Green
+}
+elseif (Test-Path -LiteralPath $clearCollectionRequestPath) {
+    Write-Host "Clearing Collection Management test data..." -ForegroundColor Yellow
+    dotnet run --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-launch-profile --no-build -- --clear-collection-data
+    if ($LASTEXITCODE -ne 0) {
+        throw "Collection Management data reset failed. The reset request was kept for the next start."
+    }
+    Remove-Item -LiteralPath $clearCollectionRequestPath -Force
+    Write-Host "Collection Management is ready for a fresh API test." -ForegroundColor Green
+}
+
 $availableNetworkInterfaces = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Where-Object {
         $_.IPAddress -ne '127.0.0.1' -and

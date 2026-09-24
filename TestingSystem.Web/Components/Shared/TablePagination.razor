@@ -1,0 +1,41 @@
+@if (TotalItems > 0)
+{
+    <nav class="table-pagination" aria-label="Table pages">
+        <span class="table-pagination-summary">Showing @FirstItem–@LastItem of @TotalItems</span>
+        <div class="table-pagination-actions">
+            <button type="button" disabled="@(EffectivePage == 1)" @onclick="() => SelectPage(1)" aria-label="First page">«</button>
+            <button type="button" disabled="@(EffectivePage == 1)" @onclick="() => SelectPage(EffectivePage - 1)">Previous</button>
+            @foreach (var pageNumber in VisiblePages)
+            {
+                <button type="button" class="@(pageNumber == EffectivePage ? "active" : null)"
+                        aria-current="@(pageNumber == EffectivePage ? "page" : null)"
+                        @onclick="() => SelectPage(pageNumber)">@pageNumber</button>
+            }
+            <button type="button" disabled="@(EffectivePage == TotalPages)" @onclick="() => SelectPage(EffectivePage + 1)">Next</button>
+            <button type="button" disabled="@(EffectivePage == TotalPages)" @onclick="() => SelectPage(TotalPages)" aria-label="Last page">»</button>
+        </div>
+        <span class="table-pagination-page">Page @EffectivePage of @TotalPages</span>
+    </nav>
+}
+
+@code {
+    [Parameter] public int TotalItems { get; set; }
+    [Parameter] public int PageSize { get; set; } = TablePaging.DefaultPageSize;
+    [Parameter] public int Page { get; set; } = 1;
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalItems / (double)Math.Max(1, PageSize)));
+    private int EffectivePage => Math.Clamp(Page, 1, TotalPages);
+    private int FirstItem => TotalItems == 0 ? 0 : ((EffectivePage - 1) * PageSize) + 1;
+    private int LastItem => Math.Min(EffectivePage * PageSize, TotalItems);
+    private IEnumerable<int> VisiblePages => Enumerable.Range(
+        Math.Max(1, Math.Min(EffectivePage - 2, TotalPages - 4)),
+        Math.Min(5, TotalPages));
+
+    private async Task SelectPage(int page)
+    {
+        var selected = Math.Clamp(page, 1, TotalPages);
+        Page = selected;
+        await PageChanged.InvokeAsync(selected);
+    }
+}

@@ -32,7 +32,8 @@ public static class CollectionSchedulePolicy
             || TimeOnly.FromDateTime(localNow) < scheduledTime)
             return false;
 
-        if (lastRunLocal?.Date == localNow.Date)
+        if (lastRunLocal?.Date == localNow.Date
+            && TimeOnly.FromDateTime(lastRunLocal.Value) >= scheduledTime)
             return false;
 
         if (dataType == "Weekly")
@@ -58,4 +59,9 @@ public static class CollectionSchedulePolicy
         "1 hour" => 60,
         _ => 15
     };
+
+    public static int ApiIntervalMinutes(string apiType, string apiDataType, string configuredInterval) =>
+        apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase)
+            ? 15
+            : DdqDatasetPolicy.SourceIntervalMinutes(apiDataType, ParseIntervalMinutes(configuredInterval));
 }

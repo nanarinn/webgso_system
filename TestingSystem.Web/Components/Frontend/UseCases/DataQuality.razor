@@ -24,7 +24,7 @@
             <div class="quality-inner-tabs"><span>View rules for</span><div class="api-type-switch" role="group" aria-label="Data quality API type">@foreach (var type in new[] { "DDQ", "MMF" }) { <button type="button" class="@(SelectedApiType == type ? "active" : null)" @onclick="() => SelectedApiType = type"><span class="api-switch-dot api-switch-@type.ToLowerInvariant()"></span>@type rules<small>@SystemRules.Count(x => x.ApiType == type)</small></button> }</div></div>
             <div class="quality-list-heading"><div><p class="section-label">@SelectedApiType rules</p><strong>@VisibleRules.Count configured detection rule(s)</strong></div><span>Condition</span><span>Severity</span><span>Status</span></div>
             <div class="quality-rule-list">
-                @foreach (var rule in VisibleRules)
+                @foreach (var rule in TablePaging.Slice(VisibleRules, RulePage))
                 {
                     <article class="quality-rule-card">
                         <div class="quality-rule-code"><span>@rule.ApiType</span><strong>@rule.Code</strong></div>
@@ -35,6 +35,7 @@
                     </article>
                 }
             </div>
+            <TablePagination TotalItems="@VisibleRules.Count" @bind-Page="RulePage" />
             <div class="quality-policy-note"><span>i</span><p><strong>How these rules work</strong>The checks run when analytics data is prepared. Any value that fails a rule is included in the anomaly report with its plant, timestamp, original value and reason.</p></div>
         </section>
     }
@@ -50,7 +51,13 @@
             <section class="quality-history-controls"><div class="api-type-switch" role="group" aria-label="Anomaly API type">@foreach (var type in new[] { "DDQ", "MMF" }) { <button type="button" class="@(SelectedApiType == type ? "active" : null)" @onclick="() => SelectedApiType = type"><span class="api-switch-dot api-switch-@type.ToLowerInvariant()"></span>@type anomalies<small>@Anomalies.Count(x => x.DataType == type)</small></button> }</div><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search field, reason or status..." @bind="SearchTerm" @bind:event="oninput" /></label></section>
             <div class="quality-anomaly-row quality-anomaly-header"><span>Detected</span><span>API type</span><span>Field / parameter</span><span>Original value</span><span>Detection reason</span><span>Status</span></div>
             @if (VisibleAnomalies.Count == 0) { <div class="collection-empty"><strong>No @SelectedApiType anomalies recorded</strong><span>Detected data issues will appear here after the collection and analytics checks run.</span></div> }
-            @foreach (var item in VisibleAnomalies) { <div class="quality-anomaly-row"><time>@item.DetectedAt.ToLocalTime().ToString("dd MMM yyyy")<small>@item.DetectedAt.ToLocalTime().ToString("HH:mm:ss")</small></time><span class="quality-api-badge quality-api-@item.DataType.ToLowerInvariant()">@item.DataType</span><strong>@item.FieldName</strong><span>@(item.OriginalValue ?? "Missing")</span><span>@item.Reason</span><span class="status-pill @(item.Status == "Open" ? "status-failed" : "status-successful")">@item.Status</span></div> }
+            @foreach (var item in TablePaging.Slice(VisibleAnomalies, AnomalyPage)) { <div class="quality-anomaly-row"><time>@item.DetectedAt.ToLocalTime().ToString("dd MMM yyyy")<small>@item.DetectedAt.ToLocalTime().ToString("HH:mm:ss")</small></time><span class="quality-api-badge quality-api-@item.DataType.ToLowerInvariant()">@item.DataType</span><strong>@item.FieldName</strong><span>@(item.OriginalValue ?? "Missing")</span><span>@item.Reason</span><span class="status-pill @(item.Status == "Open" ? "status-failed" : "status-successful")">@item.Status</span></div> }
+            <TablePagination TotalItems="@VisibleAnomalies.Count" @bind-Page="AnomalyPage" />
         </section>
     }
 </div>
+
+@code {
+    private int RulePage { get; set; } = 1;
+    private int AnomalyPage { get; set; } = 1;
+}

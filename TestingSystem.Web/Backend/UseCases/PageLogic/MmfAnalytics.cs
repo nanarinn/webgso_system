@@ -22,10 +22,12 @@ public partial class MmfAnalytics : ComponentBase
     private List<string> AvailableParameters = [], AppliedParameters = [];
     private HashSet<int> SelectedPlantIds = [], HiddenGraphPlantIds = [];
     private HashSet<string> SelectedParameters = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> SelectedStates = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> SelectedRegions = new(StringComparer.OrdinalIgnoreCase);
     private List<SolarApiReading> LoadedReadings = [];
     private List<DateTime> TimeColumns = [];
     private Dictionary<ReadingKey, SolarApiReading> ReadingIndex = [];
-    private string SelectedState = "", SelectedRegion = "", ActiveParameter = "", ValidationMessage = "";
+    private string ActiveParameter = "", ValidationMessage = "";
     private string ResultDescription = "", DisplayMode = "table", LegendSearch = "";
     private DateTime StartDate = DateTime.Today, EndDate = DateTime.Today;
     private DateTime DefaultStartDate = DateTime.Today, DefaultEndDate = DateTime.Today;
@@ -36,16 +38,17 @@ public partial class MmfAnalytics : ComponentBase
     private bool HasApplied, ShowGraphCrosshair = true, IsExporting, IsLoading;
     private DateTime AppliedStart, AppliedEnd;
     private string AppliedLocationLabel = "";
+    private string AppliedScope = "Plant";
     private decimal GraphMinimumValue, GraphMaximumValue = 1;
 
     private IEnumerable<string> AvailableStates => RegisteredPlants.Select(x => x.State)
         .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x);
     private IEnumerable<string> AvailableRegions => RegisteredPlants.Select(x => AnalyticsPlantFilter.RegionFor(x.State))
         .Where(x => x != "Not assigned").Distinct().OrderBy(x => x);
-    private bool PlantFilterDisabled => SelectedState.Length > 0 || SelectedRegion.Length > 0;
-    private bool StateFilterDisabled => SelectedPlantIds.Count > 0 || SelectedRegion.Length > 0;
-    private bool RegionFilterDisabled => SelectedPlantIds.Count > 0 || SelectedState.Length > 0;
-    private bool IsLocationAverage => AppliedLocationLabel.Length > 0;
+    private bool PlantFilterDisabled => SelectedStates.Count > 0 || SelectedRegions.Count > 0;
+    private bool StateFilterDisabled => SelectedPlantIds.Count > 0 || SelectedRegions.Count > 0;
+    private bool RegionFilterDisabled => SelectedPlantIds.Count > 0 || SelectedStates.Count > 0;
+    private bool IsLocationAverage => AppliedScope is "State" or "Region";
     private int VisibleGraphPlantCount => ResultPlants.Count(x => !HiddenGraphPlantIds.Contains(x.Id));
 
     protected override async Task OnInitializedAsync()
@@ -54,20 +57,7 @@ public partial class MmfAnalytics : ComponentBase
         {
             await using var db = await ContextFactory.CreateDbContextAsync();
             RegisteredPlants = await db.LssPlants.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
-            var parameterValues = await db.SolarApiReadings.AsNoTracking()
-                .Where(x => x.DataType == "MMF" && x.Parameter != "").Select(x => x.Parameter).ToListAsync();
-            AvailableParameters = parameterValues.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
-            var window = await db.SolarApiReadings.AsNoTracking().Where(x => x.DataType == "MMF").GroupBy(_ => 1)
-                .Select(g => new { Start = g.Min(x => x.IntervalStart), End = g.Max(x => x.IntervalStart) }).FirstOrDefaultAsync();
-            if (window is not null)
-            {
-                DefaultStartDate = window.Start.Date;
-                DefaultStartTime = TimeOnly.FromDateTime(window.Start);
-                DefaultEndDate = window.End.Date;
-                DefaultEndTime = TimeOnly.FromDateTime(window.End);
-                RestoreDefaultRange();
-            }
-            else ValidationMessage = "No MMF readings are available yet. Run the MMF API import before applying a filter.";
+            await RefreshSourceMetadataAsync(db, true);
         }
         catch (Exception exception)
         {
@@ -78,20 +68,22 @@ public partial class MmfAnalytics : ComponentBase
     private Task OnPlantsChanged(HashSet<int> ids)
     {
         SelectedPlantIds = ids;
-        if (ids.Count > 0) { SelectedState = ""; SelectedRegion = ""; }
+        if (ids.Count > 0) { SelectedStates.Clear(); SelectedRegions.Clear(); }
         return Task.CompletedTask;
     }
 
-    private void OnStateChanged(ChangeEventArgs e)
+    private Task OnStatesChanged(HashSet<string> states)
     {
-        SelectedState = e.Value?.ToString() ?? "";
-        if (SelectedState.Length > 0) { SelectedRegion = ""; SelectedPlantIds = []; FilterVersion++; }
+        SelectedStates = states;
+        if (states.Count > 0) { SelectedRegions.Clear(); SelectedPlantIds = []; FilterVersion++; }
+        return Task.CompletedTask;
     }
 
-    private void OnRegionChanged(ChangeEventArgs e)
+    private Task OnRegionsChanged(HashSet<string> regions)
     {
-        SelectedRegion = e.Value?.ToString() ?? "";
-        if (SelectedRegion.Length > 0) { SelectedState = ""; SelectedPlantIds = []; FilterVersion++; }
+        SelectedRegions = regions;
+        if (regions.Count > 0) { SelectedStates.Clear(); SelectedPlantIds = []; FilterVersion++; }
+        return Task.CompletedTask;
     }
 
     private async Task ApplyFilters()
@@ -99,6 +91,8 @@ public partial class MmfAnalytics : ComponentBase
         if (IsLoading) return;
         ValidationMessage = "";
         HasApplied = false;
+        await using (var metadataDb = await ContextFactory.CreateDbContextAsync())
+            await RefreshSourceMetadataAsync(metadataDb, false);
         var start = StartDate.Date.Add(StartTime.ToTimeSpan());
         var end = EndDate.Date.Add(EndTime.ToTimeSpan());
         if (end <= start)
@@ -107,7 +101,8 @@ public partial class MmfAnalytics : ComponentBase
             return;
         }
 
-        var matchedPlants = AnalyticsPlantFilter.Match(RegisteredPlants, SelectedPlantIds, SelectedState, SelectedRegion).ToList();
+        var matchedPlants = AnalyticsPlantFilter.Match(
+            RegisteredPlants, SelectedPlantIds, SelectedStates, SelectedRegions).ToList();
         if (matchedPlants.Count == 0)
         {
             ValidationMessage = "No active plants match the selected plant, state, or region.";
@@ -127,27 +122,25 @@ public partial class MmfAnalytics : ComponentBase
                 .OrderByDescending(x => x.Id).ToListAsync();
 
             AppliedSourcePlantCount = matchedPlants.Count;
-            AppliedLocationLabel = SelectedState.Length > 0 ? SelectedState
-                : SelectedRegion.Length > 0 ? SelectedRegion
-                : "";
-            if (AppliedLocationLabel.Length > 0)
+            if (SelectedStates.Count > 0)
             {
-                const int aggregatePlantId = -1;
-                LoadedReadings = MmfLocationAveraging.AverageLatestByLocation(LoadedReadings, aggregatePlantId);
-                ResultPlants =
-                [
-                    new LssPlant
-                    {
-                        Id = aggregatePlantId,
-                        PlantId = SelectedState.Length > 0 ? $"STATE-{SelectedState.ToUpperInvariant()}" : $"REGION-{SelectedRegion.ToUpperInvariant()}",
-                        Name = $"{AppliedLocationLabel} average",
-                        State = SelectedState.Length > 0 ? SelectedState : $"{SelectedRegion} region",
-                        IsActive = true
-                    }
-                ];
+                AppliedScope = "State";
+                AppliedLocationLabel = string.Join(", ", SelectedStates.OrderBy(value => value));
+                BuildLocationAverages(matchedPlants, SelectedStates.OrderBy(value => value), "STATE",
+                    (plant, location) => plant.State.Equals(location, StringComparison.OrdinalIgnoreCase));
+            }
+            else if (SelectedRegions.Count > 0)
+            {
+                AppliedScope = "Region";
+                AppliedLocationLabel = string.Join(", ", SelectedRegions.OrderBy(value => value));
+                BuildLocationAverages(matchedPlants, SelectedRegions.OrderBy(value => value), "REGION",
+                    (plant, location) => AnalyticsPlantFilter.RegionFor(plant.State)
+                        .Equals(location, StringComparison.OrdinalIgnoreCase));
             }
             else
             {
+                AppliedScope = "Plant";
+                AppliedLocationLabel = "";
                 ResultPlants = matchedPlants;
             }
 
@@ -163,8 +156,8 @@ public partial class MmfAnalytics : ComponentBase
             LegendSearch = "";
             DisplayMode = "table";
             HasApplied = true;
-            ResultDescription = AppliedLocationLabel.Length > 0
-                ? $"{ReadingIndex.Count:N0} {AppliedLocationLabel} average MMF reading(s) calculated across {AppliedSourcePlantCount} LSS plant(s), " +
+            ResultDescription = IsLocationAverage
+                ? $"{ReadingIndex.Count:N0} MMF reading(s) across {ResultPlants.Count} {AppliedScope.ToLowerInvariant()} average(s), calculated from {AppliedSourcePlantCount} LSS plant(s), " +
                   $"{AppliedParameters.Count} parameter(s), {start:dd MMM yyyy HH:mm} to {end:dd MMM yyyy HH:mm}, {IntervalLabel}."
                 : $"{ReadingIndex.Count:N0} averaged MMF reading(s), {ResultPlants.Count} plant(s), " +
                   $"{AppliedParameters.Count} parameter(s), {start:dd MMM yyyy HH:mm} to {end:dd MMM yyyy HH:mm}, {IntervalLabel}.";
@@ -178,6 +171,60 @@ public partial class MmfAnalytics : ComponentBase
             ValidationMessage = $"The MMF query could not be completed: {exception.GetBaseException().Message}";
         }
         finally { IsLoading = false; }
+    }
+
+    private void BuildLocationAverages(List<LssPlant> matchedPlants, IEnumerable<string> locations,
+        string codePrefix, Func<LssPlant, string, bool> belongsToLocation)
+    {
+        var sourceReadings = LoadedReadings;
+        var averagedReadings = new List<SolarApiReading>();
+        var locationRows = new List<LssPlant>();
+        var index = 0;
+        foreach (var location in locations)
+        {
+            var aggregatePlantId = -(++index);
+            var plantIds = matchedPlants.Where(plant => belongsToLocation(plant, location))
+                .Select(plant => plant.Id).ToHashSet();
+            averagedReadings.AddRange(MmfLocationAveraging.AverageLatestByLocation(
+                sourceReadings.Where(reading => plantIds.Contains(reading.PlantId)), aggregatePlantId));
+            locationRows.Add(new LssPlant
+            {
+                Id = aggregatePlantId,
+                PlantId = $"{codePrefix}-{NormalizeCode(location)}",
+                Name = location,
+                State = AppliedScope == "State" ? location : $"{location} region",
+                IsActive = true
+            });
+        }
+        LoadedReadings = averagedReadings;
+        ResultPlants = locationRows;
+    }
+
+    private async Task RefreshSourceMetadataAsync(ApplicationDbContext db, bool initializeRange)
+    {
+        var previousDefaultStart = DefaultStartDate.Date.Add(DefaultStartTime.ToTimeSpan());
+        var previousDefaultEnd = DefaultEndDate.Date.Add(DefaultEndTime.ToTimeSpan());
+        var currentStart = StartDate.Date.Add(StartTime.ToTimeSpan());
+        var currentEnd = EndDate.Date.Add(EndTime.ToTimeSpan());
+        var wasUsingDefaults = currentStart == previousDefaultStart && currentEnd == previousDefaultEnd;
+
+        var parameterValues = await db.SolarApiReadings.AsNoTracking()
+            .Where(x => x.DataType == "MMF" && x.Parameter != "")
+            .Select(x => x.Parameter).ToListAsync();
+        AvailableParameters = parameterValues.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+        var window = await db.SolarApiReadings.AsNoTracking().Where(x => x.DataType == "MMF").GroupBy(_ => 1)
+            .Select(g => new { Start = g.Min(x => x.IntervalStart), End = g.Max(x => x.IntervalStart) }).FirstOrDefaultAsync();
+        if (window is null)
+        {
+            ValidationMessage = "No MMF readings are available yet. Run a successful MMF collection before applying a filter.";
+            return;
+        }
+
+        DefaultStartDate = window.Start.Date;
+        DefaultStartTime = TimeOnly.FromDateTime(window.Start);
+        DefaultEndDate = window.End.Date;
+        DefaultEndTime = TimeOnly.FromDateTime(window.End);
+        if (initializeRange || wasUsingDefaults) RestoreDefaultRange();
     }
 
     private void RebuildReadingIndex()
@@ -201,6 +248,7 @@ public partial class MmfAnalytics : ComponentBase
     private decimal? ValueFor(int plantId, DateTime timestamp) => ReadingFor(ActiveParameter, plantId, timestamp)?.Value;
     private string UnitForParameter => ReadingIndex.Values.FirstOrDefault(x => x.Parameter.Equals(ActiveParameter, StringComparison.OrdinalIgnoreCase))?.Unit ?? "";
     private string TimeHeading(DateTime value) => AppliedStart.Date == AppliedEnd.Date ? value.ToString("HH:mm") : value.ToString("dd/MM HH:mm");
+    private static string HourHeading(int index) => $"HR{index + 1}";
     private void ToggleGraphPlant(int id) { if (!HiddenGraphPlantIds.Add(id)) HiddenGraphPlantIds.Remove(id); RecalculateGraphBounds(); }
     private void ShowAllGraphPlants() { HiddenGraphPlantIds.Clear(); RecalculateGraphBounds(); }
     private void HideAllGraphPlants() { HiddenGraphPlantIds = ResultPlants.Select(x => x.Id).ToHashSet(); RecalculateGraphBounds(); }
@@ -279,16 +327,12 @@ public partial class MmfAnalytics : ComponentBase
             {
                 var times = ReadingIndex.Values.Where(x => x.Parameter.Equals(parameter, StringComparison.OrdinalIgnoreCase))
                     .Select(x => x.IntervalStart).Distinct().OrderBy(x => x).ToList();
-                var headers = new List<string>
-                {
-                    IsLocationAverage ? "Location Average" : "Plant Name",
-                    IsLocationAverage ? "Scope" : "Plant ID / Code"
-                };
-                headers.AddRange(times.Select(TimeHeading));
+                var headers = new List<string> { ScopeColumnHeading };
+                headers.AddRange(times.Select((_, index) => HourHeading(index)));
                 var rows = new List<IReadOnlyList<object?>>();
                 foreach (var plant in ResultPlants)
                 {
-                    var values = new List<object?> { plant.Name, plant.PlantId };
+                    var values = new List<object?> { ResultRowLabel(plant) };
                     foreach (var time in times)
                     {
                         var reading = ReadingFor(parameter, plant.Id, time);
@@ -298,13 +342,18 @@ public partial class MmfAnalytics : ComponentBase
                     }
                     rows.Add(values);
                 }
-                sheets.Add(new(parameter, parameter.ToUpperInvariant(), Metadata(parameter), headers, rows, 2));
+                sheets.Add(new(parameter, parameter.ToUpperInvariant(), Metadata(parameter), headers, rows, 1));
             }
             sheets.Add(new("Anomaly Report", "ANOMALY REPORT", Metadata("All selected parameters"),
                 ["Parameter", "Data Timestamp", "Plant ID", "Plant Name", "Anomaly Type", "Value", "Reason"], anomalies));
             var bytes = DdqExcelWorkbookExporter.Build(sheets);
-            await JavaScript.InvokeVoidAsync("sblssDownloadBase64", "SBLSS-MMF-Filtered-Data.xlsx",
+            const string fileName = "SBLSS-MMF-Filtered-Data.xlsx";
+            await JavaScript.InvokeVoidAsync("sblssDownloadBase64", fileName,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+            var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            await AuditTrail.RecordAsync(authenticationState.User, "Download MMF analytics", "Success",
+                "Download", fileName,
+                $"Downloaded {AppliedParameters.Count} parameter(s); {AppliedScope} scope; {ResultPlants.Count} result row(s); data interval {IntervalLabel}.");
         }
         catch (Exception exception)
         {
@@ -315,7 +364,7 @@ public partial class MmfAnalytics : ComponentBase
 
     private (string Label, string Value)[] Metadata(string parameter) =>
         [("Parameter", parameter), ("Data Interval", IntervalLabel),
-         ("Result Scope", IsLocationAverage ? $"{AppliedLocationLabel} average across {AppliedSourcePlantCount} LSS plant(s)" : $"{ResultPlants.Count} selected LSS plant(s)"),
+         ("Result Scope", IsLocationAverage ? $"{ResultPlants.Count} {AppliedScope.ToLowerInvariant()} average(s) across {AppliedSourcePlantCount} LSS plant(s)" : $"{ResultPlants.Count} selected LSS plant(s)"),
          ("Date Range", $"{AppliedStart:dd/MM/yyyy HH:mm} - {AppliedEnd:dd/MM/yyyy HH:mm}")];
 
     private void RestoreDefaultRange()
@@ -328,7 +377,9 @@ public partial class MmfAnalytics : ComponentBase
     {
         SelectedPlantIds = [];
         SelectedParameters = new(StringComparer.OrdinalIgnoreCase);
-        SelectedState = ""; SelectedRegion = ""; SelectedInterval = 15;
+        SelectedStates = new(StringComparer.OrdinalIgnoreCase);
+        SelectedRegions = new(StringComparer.OrdinalIgnoreCase);
+        SelectedInterval = 15;
         RestoreDefaultRange();
         FilterVersion++; ParameterFilterVersion++;
         ValidationMessage = "";
@@ -339,11 +390,22 @@ public partial class MmfAnalytics : ComponentBase
     {
         ResultDescription = ""; HasApplied = false; ResultPlants = []; LoadedReadings = [];
         AppliedParameters = []; TimeColumns = []; ReadingIndex = []; ActiveParameter = "";
-        AppliedLocationLabel = ""; AppliedSourcePlantCount = 0;
+        AppliedLocationLabel = ""; AppliedScope = "Plant"; AppliedSourcePlantCount = 0;
         DisplayMode = "table"; HiddenGraphPlantIds.Clear(); LegendSearch = "";
     }
 
     private string IntervalLabel => Intervals.First(x => x.Value == (HasApplied ? AppliedInterval : SelectedInterval)).Label;
+    private string ScopeColumnHeading => AppliedScope switch { "State" => "State", "Region" => "Region", _ => "LSS" };
+    private string ResultRowLabel(LssPlant plant) => IsLocationAverage ? plant.Name : TemplatePlantCode(plant.PlantId);
+    private static string TemplatePlantCode(string plantId)
+    {
+        var normalized = new string(plantId.Where(char.IsLetterOrDigit).ToArray());
+        if (normalized.StartsWith("LSS", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(normalized[3..], out var number)) return $"LSS{number}";
+        return plantId;
+    }
+    private static string NormalizeCode(string value) =>
+        new(value.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
     private readonly record struct ReadingKey(string Parameter, int PlantId, DateTime Timestamp);
     private sealed record GraphPoint(double X, double Y, DateTime Timestamp, decimal Value);
 }

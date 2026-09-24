@@ -147,9 +147,12 @@ public sealed class ScheduledCollectionWorker(
             if (download.StatusCode is < HttpStatusCode.OK or >= HttpStatusCode.MultipleChoices)
                 throw new InvalidOperationException(lastError?.Message ?? $"API returned HTTP {(int)download.StatusCode}.");
 
-            var intervalMinutes = CollectionSchedulePolicy.ParseIntervalMinutes(schedule.Interval);
+            var intervalMinutes = CollectionSchedulePolicy.ApiIntervalMinutes(schedule.ApiType, apiDataType, schedule.Interval);
             var translated = ScheduledApiPayloadTranslator.Translate(download.Payload, schedule.ApiType,
                 apiDataType, plant.Id, job.Id, localNow, intervalMinutes, download.ContentType);
+            if (translated.Readings.Count == 0)
+                throw new InvalidOperationException(
+                    $"The API returned a {translated.PayloadFormat} response, but it did not contain any numeric {schedule.ApiType} readings that can be filtered.");
             database.SolarApiReadings.AddRange(translated.Readings);
             await AddAnomaliesAsync(database, job, plant, schedule.ApiType, translated, cancellationToken);
 

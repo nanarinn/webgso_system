@@ -205,25 +205,48 @@ public partial class LssPlants : ComponentBase
     private async Task DeletePlantAsync()
     {
         if (!EditingPlantId.HasValue) return;
-        await using var database = await ContextFactory.CreateDbContextAsync();
-        var plant = await database.LssPlants.SingleOrDefaultAsync(x => x.Id == EditingPlantId.Value);
-        if (plant is null)
+        FormError = string.Empty;
+        try
         {
-            FormError = "This plant no longer exists in MS SQL.";
-            IsDeleteConfirmationOpen = false;
-            return;
-        }
+            await using var database = await ContextFactory.CreateDbContextAsync();
+            var plant = await database.LssPlants.SingleOrDefaultAsync(x => x.Id == EditingPlantId.Value);
+            if (plant is null)
+            {
+                FormError = "This plant no longer exists in MS SQL.";
+                IsDeleteConfirmationOpen = false;
+                return;
+            }
 
-        var deletedName = plant.Name;
-        var deletedPlantId = plant.PlantId;
-        await database.PlantApiConfigurations.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
-        database.LssPlants.Remove(plant);
-        await database.SaveChangesAsync();
-        IsDialogOpen = false;
-        IsDeleteConfirmationOpen = false;
-        await LoadPlantsAsync();
-        SuccessTitle = "Plant deleted";
-        SuccessMessage = $"{deletedName} ({deletedPlantId}) and its API configurations have been successfully removed from MS SQL.";
+            var deletedName = plant.Name;
+            var deletedPlantId = plant.PlantId;
+            var strategy = database.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await database.Database.BeginTransactionAsync();
+                var plantJobIds = database.CollectionJobs.Where(x => x.PlantId == plant.Id).Select(x => x.Id);
+                await database.DataAnomalies.Where(x => plantJobIds.Contains(x.CollectionJobId)).ExecuteDeleteAsync();
+                await database.SolarApiReadings.Where(x => plantJobIds.Contains(x.CollectionJobId)).ExecuteDeleteAsync();
+                await database.RawApiResponses.Where(x => plantJobIds.Contains(x.CollectionJobId)).ExecuteDeleteAsync();
+                await database.CollectionJobs.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
+                await database.SolarApiReadings.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
+                await database.CollectionSchedules.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
+                await database.PlantApiConfigurations.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
+                database.LssPlants.Remove(plant);
+                await database.SaveChangesAsync();
+                await transaction.CommitAsync();
+            });
+
+            IsDialogOpen = false;
+            IsDeleteConfirmationOpen = false;
+            await LoadPlantsAsync();
+            SuccessTitle = "Plant deleted";
+            SuccessMessage = $"{deletedName} ({deletedPlantId}) and all related collection data have been successfully removed from MS SQL.";
+        }
+        catch (Exception exception)
+        {
+            IsDeleteConfirmationOpen = false;
+            FormError = $"The plant could not be deleted: {exception.GetBaseException().Message}";
+        }
     }
 
     private static string GetCode(string name) => string.Concat(

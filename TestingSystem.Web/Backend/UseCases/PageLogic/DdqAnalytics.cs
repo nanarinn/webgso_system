@@ -12,15 +12,10 @@ public partial class DdqAnalytics : ComponentBase
 {
     [Inject] private IJSRuntime JavaScript { get; set; } = default!;
 
-    private static readonly (string Label, int Value)[] Intervals =
-    [
-        ("15 minutes", 15),
-        ("30 minutes", 30),
-        ("1 hour", 60)
-    ];
-
     private static readonly string[] DataTypes =
         ["Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month Ahead"];
+    private static readonly (string Label, int Value)[] Intervals =
+        [("15 minutes", 15), ("30 minutes", 30), ("1 hour", 60)];
 
     private IEnumerable<string> AvailableStates => RegisteredPlants.Select(x => x.State)
         .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x);
@@ -31,6 +26,10 @@ public partial class DdqAnalytics : ComponentBase
     private List<LssPlant> ResultPlants = [];
     private HashSet<int> SelectedPlantIds = [];
     private HashSet<string> SelectedDataTypes = ["Rolling 24 Hour"];
+    private HashSet<string> SelectedStates = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> SelectedRegions = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, int> SelectedIntervals = DataTypes.ToDictionary(
+        dataType => dataType, dataType => DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes);
     private List<DdqTableRow> TableRows = [];
     private List<SolarApiReading> LoadedReadings = [];
     private DateTime? ImportedRangeStart;
@@ -40,9 +39,6 @@ public partial class DdqAnalytics : ComponentBase
     private DateTime? RangeEnd { get; set; }
     private DateOnly? SubmissionStartDate { get; set; }
     private DateOnly? SubmissionEndDate { get; set; }
-    private int SelectedInterval { get; set; } = 15;
-    private string SelectedState { get; set; } = string.Empty;
-    private string SelectedRegion { get; set; } = string.Empty;
     private string ActiveDataType { get; set; } = "Rolling 24 Hour";
     private string ValidationMessage { get; set; } = string.Empty;
     private string ResultDescription { get; set; } = string.Empty;
@@ -55,12 +51,9 @@ public partial class DdqAnalytics : ComponentBase
     private static readonly string[] GraphColours =
         ["#0875c9", "#00a56a", "#f2a900", "#d64545", "#7656d6", "#00a6a6", "#e06c00", "#c13f87", "#54708f", "#4c9b35"];
 
-    private bool PlantFilterDisabled => !string.IsNullOrWhiteSpace(SelectedState)
-        || !string.IsNullOrWhiteSpace(SelectedRegion);
-    private bool StateFilterDisabled => SelectedPlantIds.Count > 0
-        || !string.IsNullOrWhiteSpace(SelectedRegion);
-    private bool RegionFilterDisabled => SelectedPlantIds.Count > 0
-        || !string.IsNullOrWhiteSpace(SelectedState);
+    private bool PlantFilterDisabled => SelectedStates.Count > 0 || SelectedRegions.Count > 0;
+    private bool StateFilterDisabled => SelectedPlantIds.Count > 0 || SelectedRegions.Count > 0;
+    private bool RegionFilterDisabled => SelectedPlantIds.Count > 0 || SelectedStates.Count > 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -70,7 +63,7 @@ public partial class DdqAnalytics : ComponentBase
             .OrderBy(p => p.Name)
             .ToListAsync();
         var importedWindow = await database.SolarApiReadings.AsNoTracking()
-            .Where(x => x.DataType == "Rolling 24 Hour")
+            .Where(x => DataTypes.Contains(x.DataType))
             .GroupBy(_ => 1)
             .Select(group => new
             {
@@ -83,6 +76,8 @@ public partial class DdqAnalytics : ComponentBase
         {
             ImportedRangeStart = importedWindow.Start;
             ImportedRangeEnd = importedWindow.End;
+            SubmissionStartDate = DateOnly.FromDateTime(importedWindow.Submission);
+            SubmissionEndDate = SubmissionStartDate;
         }
     }
 
@@ -91,32 +86,34 @@ public partial class DdqAnalytics : ComponentBase
         SelectedPlantIds = plantIds;
         if (plantIds.Count > 0)
         {
-            SelectedState = string.Empty;
-            SelectedRegion = string.Empty;
+            SelectedStates.Clear();
+            SelectedRegions.Clear();
         }
         return Task.CompletedTask;
     }
 
-    private void OnStateChanged(ChangeEventArgs args)
+    private Task OnStatesChanged(HashSet<string> states)
     {
-        SelectedState = args.Value?.ToString() ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(SelectedState))
+        SelectedStates = states;
+        if (states.Count > 0)
         {
-            SelectedRegion = string.Empty;
+            SelectedRegions.Clear();
             SelectedPlantIds = [];
             FilterVersion++;
         }
+        return Task.CompletedTask;
     }
 
-    private void OnRegionChanged(ChangeEventArgs args)
+    private Task OnRegionsChanged(HashSet<string> regions)
     {
-        SelectedRegion = args.Value?.ToString() ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(SelectedRegion))
+        SelectedRegions = regions;
+        if (regions.Count > 0)
         {
-            SelectedState = string.Empty;
+            SelectedStates.Clear();
             SelectedPlantIds = [];
             FilterVersion++;
         }
+        return Task.CompletedTask;
     }
 
     private void ToggleDataType(string dataType, object? value)
@@ -124,6 +121,16 @@ public partial class DdqAnalytics : ComponentBase
         if (value is true) SelectedDataTypes.Add(dataType);
         else SelectedDataTypes.Remove(dataType);
     }
+
+    private void OnDataTypeIntervalChanged(string dataType, ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var interval)
+            && Intervals.Any(item => item.Value == interval))
+            SelectedIntervals[dataType] = interval;
+    }
+
+    private int IntervalFor(string dataType) => SelectedIntervals.GetValueOrDefault(dataType,
+        DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes);
 
     private void OnRangeStartDateChanged(ChangeEventArgs args) => RangeStart = WithOptionalDate(RangeStart, args.Value?.ToString());
     private void OnRangeStartTimeChanged(ChangeEventArgs args) => RangeStart = WithOptionalTime(RangeStart, args.Value?.ToString());
@@ -196,7 +203,7 @@ public partial class DdqAnalytics : ComponentBase
         }
 
         ResultPlants = AnalyticsPlantFilter.Match(
-            RegisteredPlants, SelectedPlantIds, SelectedState, SelectedRegion).ToList();
+            RegisteredPlants, SelectedPlantIds, SelectedStates, SelectedRegions).ToList();
         if (ResultPlants.Count == 0)
         {
             ValidationMessage = "No active plants match the selected plant, state, or region.";
@@ -210,11 +217,13 @@ public partial class DdqAnalytics : ComponentBase
         HasApplied = true;
 
         var location = SelectedPlantIds.Count > 0 ? $"{SelectedPlantIds.Count} selected plant(s)"
-            : !string.IsNullOrWhiteSpace(SelectedState) ? $"state {SelectedState}"
-            : !string.IsNullOrWhiteSpace(SelectedRegion) ? $"region {SelectedRegion}"
+            : SelectedStates.Count > 0 ? $"{SelectedStates.Count} selected state(s)"
+            : SelectedRegions.Count > 0 ? $"{SelectedRegions.Count} selected region(s)"
             : "all active plants";
+        var intervals = string.Join(", ", DataTypes.Where(SelectedDataTypes.Contains)
+            .Select(dataType => $"{DataTypeLabel(dataType)}: {IntervalText(IntervalFor(dataType))}"));
         ResultDescription = $"{ResultPlants.Count} plant(s) from {location}; {SelectedDataTypes.Count} data type(s); "
-            + $"{TimestampRangeDescription}; {IntervalLabel} interval.";
+            + $"{TimestampRangeDescription}; {intervals}.";
 
     }
 
@@ -230,6 +239,7 @@ public partial class DdqAnalytics : ComponentBase
         var plantIds = ResultPlants.Select(x => x.Id).ToArray();
         var submissionStart = SubmissionStartDateTime;
         var submissionEnd = SubmissionEndDateTime?.AddDays(1);
+        var selectedInterval = IntervalFor(ActiveDataType);
         await using var database = await ContextFactory.CreateDbContextAsync();
         var timestamps = await database.SolarApiReadings.AsNoTracking()
             .Where(x => x.DataType == ActiveDataType && plantIds.Contains(x.PlantId)
@@ -237,8 +247,8 @@ public partial class DdqAnalytics : ComponentBase
                         && (!RangeEnd.HasValue || x.IntervalStart <= RangeEnd.Value)
                         && (!submissionStart.HasValue || x.SubmissionDateTime >= submissionStart.Value)
                         && (!submissionEnd.HasValue || x.SubmissionDateTime < submissionEnd.Value)
-                        && x.IntervalStart.Minute % SelectedInterval == 0)
-            .Select(x => x.IntervalStart).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                        && (x.IntervalStart.Hour * 60 + x.IntervalStart.Minute) % selectedInterval == 0)
+            .Select(x => x.IntervalStart).Distinct().OrderBy(x => x).ToListAsync();
         if (timestamps.Count == 0)
         {
             TableRows = [];
@@ -252,11 +262,15 @@ public partial class DdqAnalytics : ComponentBase
                         && x.IntervalStart >= timestamps[0] && x.IntervalStart <= lastTimestamp
                         && (!submissionStart.HasValue || x.SubmissionDateTime >= submissionStart.Value)
                         && (!submissionEnd.HasValue || x.SubmissionDateTime < submissionEnd.Value)
-                        && x.IntervalStart.Minute % SelectedInterval == 0)
+                        && (x.IntervalStart.Hour * 60 + x.IntervalStart.Minute) % selectedInterval == 0)
             .OrderByDescending(x => x.Id).ToListAsync();
-        TableRows = timestamps.Select(timestamp => new DdqTableRow(timestamp,
-            LoadedReadings.Where(x => x.IntervalStart == timestamp)
-                .GroupBy(x => x.PlantId).ToDictionary(x => x.Key, x => x.First().Value))).ToList();
+        TableRows = timestamps.Select(timestamp =>
+        {
+            var timestampReadings = LoadedReadings.Where(x => x.IntervalStart == timestamp).ToList();
+            return new DdqTableRow(timestampReadings.Max(reading => reading.SubmissionDateTime), timestamp,
+                timestampReadings.GroupBy(x => x.PlantId)
+                    .ToDictionary(x => x.Key, x => x.First().Value), selectedInterval);
+        }).ToList();
     }
 
     private void ResetFilters()
@@ -265,11 +279,12 @@ public partial class DdqAnalytics : ComponentBase
         RangeEnd = null;
         SubmissionStartDate = null;
         SubmissionEndDate = null;
-        SelectedInterval = 15;
-        SelectedState = string.Empty;
-        SelectedRegion = string.Empty;
+        SelectedStates = new(StringComparer.OrdinalIgnoreCase);
+        SelectedRegions = new(StringComparer.OrdinalIgnoreCase);
         SelectedPlantIds = [];
         SelectedDataTypes = ["Rolling 24 Hour"];
+        SelectedIntervals = DataTypes.ToDictionary(
+            dataType => dataType, dataType => DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes);
         ActiveDataType = "Rolling 24 Hour";
         FilterVersion++;
         ValidationMessage = string.Empty;
@@ -283,13 +298,10 @@ public partial class DdqAnalytics : ComponentBase
         LegendSearch = string.Empty;
     }
 
-    private string IntervalLabel => Intervals.First(interval => interval.Value == SelectedInterval).Label;
+    private string SelectedIntervalLabel => IntervalText(IntervalFor(ActiveDataType));
     private string SubmissionPeriodLabel => SubmissionStartDate.HasValue && SubmissionEndDate.HasValue
         ? $"{SubmissionStartDate:dd/MM/yyyy} - {SubmissionEndDate:dd/MM/yyyy}"
         : "All available submissions";
-    private string SubmissionTableLabel => SubmissionStartDate.HasValue
-        ? $"{SubmissionStartDate:dd/MM/yyyy}"
-        : LoadedReadings.FirstOrDefault()?.SubmissionDateTime.ToString("dd/MM/yyyy HH:mm") ?? "-";
     private string TimestampRangeLabel => RangeStart.HasValue && RangeEnd.HasValue
         ? $"{RangeStart:dd/MM/yyyy HH:mm} - {RangeEnd:dd/MM/yyyy HH:mm}"
         : "All available timestamps";
@@ -312,21 +324,19 @@ public partial class DdqAnalytics : ComponentBase
 
             foreach (var dataType in DataTypes.Where(SelectedDataTypes.Contains))
             {
+                var selectedInterval = IntervalFor(dataType);
                 var readings = await database.SolarApiReadings.AsNoTracking()
                     .Where(reading => reading.DataType == dataType && plantIds.Contains(reading.PlantId)
                         && (!RangeStart.HasValue || reading.IntervalStart >= RangeStart.Value)
                         && (!RangeEnd.HasValue || reading.IntervalStart <= RangeEnd.Value)
                         && (!submissionStart.HasValue || reading.SubmissionDateTime >= submissionStart.Value)
                         && (!submissionEnd.HasValue || reading.SubmissionDateTime < submissionEnd.Value)
-                        && reading.IntervalStart.Minute % SelectedInterval == 0)
+                        && (reading.IntervalStart.Hour * 60 + reading.IntervalStart.Minute) % selectedInterval == 0)
                     .OrderByDescending(reading => reading.Id)
                     .ToListAsync();
 
-                var headers = new List<string>
-                {
-                    "#", "Submission Date & Time", "Data Timestamp", "Year", "Month", "Day", "Period"
-                };
-                headers.AddRange(ResultPlants.Select(plant => $"{plant.Name} ({plant.PlantId}) MW"));
+                var headers = new List<string> { "Submission Date", "Year", "Month", "Day", "Period" };
+                headers.AddRange(ResultPlants.Select(plant => TemplatePlantCode(plant.PlantId)));
                 var sheetRows = new List<IReadOnlyList<object?>>();
                 var groupedReadings = readings.GroupBy(reading => reading.IntervalStart)
                     .OrderBy(group => group.Key).ToList();
@@ -338,10 +348,9 @@ public partial class DdqAnalytics : ComponentBase
                         .ToDictionary(items => items.Key, items => items.First());
                     var values = new List<object?>
                     {
-                        rowIndex + 1,
-                        group.Max(reading => reading.SubmissionDateTime).ToString("dd/MM/yyyy HH:mm"),
-                        group.Key.ToString("dd/MM/yyyy HH:mm"),
-                        group.Key.Year, group.Key.Month, group.Key.Day, PeriodNumber(group.Key)
+                        group.Max(reading => reading.SubmissionDateTime).ToString("dd/MM/yyyy"),
+                        group.Key.Year, group.Key.Month, group.Key.Day,
+                        PeriodNumber(group.Key, selectedInterval)
                     };
                     foreach (var plant in ResultPlants)
                     {
@@ -370,11 +379,11 @@ public partial class DdqAnalytics : ComponentBase
                 {
                     ("Data Type", dataType),
                     ("Submission Period", SubmissionPeriodLabel),
-                    ("Data Interval", IntervalLabel),
+                    ("Data Interval", IntervalText(selectedInterval)),
                     ("Data Timestamp Range", TimestampRangeLabel)
                 };
                 workbookSheets.Add(new DdqWorkbookSheet(dataType,
-                    "SOLAR DATA SUBMISSION / DATA MONITORING", metadata, headers, sheetRows));
+                    "SOLAR DATA SUBMISSION / DATA MONITORING", metadata, headers, sheetRows, 5));
             }
 
             var anomalyHeaders = new[]
@@ -386,14 +395,20 @@ public partial class DdqAnalytics : ComponentBase
             {
                 ("Data Type", string.Join(", ", DataTypes.Where(SelectedDataTypes.Contains))),
                 ("Submission Period", SubmissionPeriodLabel),
-                ("Data Interval", IntervalLabel),
+                ("Data Interval", string.Join(", ", DataTypes.Where(SelectedDataTypes.Contains)
+                    .Select(dataType => $"{DataTypeLabel(dataType)}: {IntervalText(IntervalFor(dataType))}"))),
                 ("Data Timestamp Range", TimestampRangeLabel)
             };
             workbookSheets.Add(new DdqWorkbookSheet("Anomaly Report", "ANOMALY REPORT",
                 anomalyMetadata, anomalyHeaders, anomalyRows));
             var bytes = DdqExcelWorkbookExporter.Build(workbookSheets);
-            await JavaScript.InvokeVoidAsync("sblssDownloadBase64", "SBLSS-Filtered-Data.xlsx",
+            const string fileName = "SBLSS-Filtered-Data.xlsx";
+            await JavaScript.InvokeVoidAsync("sblssDownloadBase64", fileName,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+            var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            await AuditTrail.RecordAsync(authenticationState.User, "Download DDQ analytics", "Success",
+                "Download", fileName,
+                $"Downloaded {string.Join(", ", DataTypes.Where(SelectedDataTypes.Contains))}; {ResultPlants.Count} plant(s); submission period {SubmissionPeriodLabel}.");
         }
         finally
         {
@@ -411,8 +426,23 @@ public partial class DdqAnalytics : ComponentBase
             plant.PlantId, plant.Name, anomalyType, value, plant.CapacityMw, reason
         };
 
-    private static int PeriodNumber(DateTime timestamp) =>
-        (timestamp.Hour * 60 + timestamp.Minute) / 15 + 1;
+    private static int PeriodNumber(DateTime timestamp, int intervalMinutes) =>
+        (timestamp.Hour * 60 + timestamp.Minute) / Math.Max(1, intervalMinutes) + 1;
+
+    private static string IntervalText(int value) => value == 60 ? "1 hour" : $"{value} minutes";
+
+    private static string TemplatePlantCode(string plantId)
+    {
+        var normalized = new string(plantId.Where(char.IsLetterOrDigit).ToArray());
+        if (normalized.StartsWith("LSS", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(normalized[3..], out var number))
+            return $"LSS{number}";
+        return plantId;
+    }
+
+    private static string DataTypeLabel(string dataType) => DdqDatasetPolicy.Get(dataType).DisplayName;
+
+    private static string DataTypeHorizon(string dataType) => DdqDatasetPolicy.Get(dataType).HorizonDescription;
 
     private void SetDisplayMode(string mode) => DisplayMode = mode;
 
@@ -494,6 +524,7 @@ public partial class DdqAnalytics : ComponentBase
         }
     }
 
-    private sealed record DdqTableRow(DateTime Timestamp, Dictionary<int, decimal> PlantValues);
+    private sealed record DdqTableRow(DateTime SubmissionDateTime, DateTime Timestamp, Dictionary<int, decimal> PlantValues,
+        int IntervalMinutes);
     private sealed record GraphPoint(double X, double Y, DateTime Timestamp, decimal Value);
 }

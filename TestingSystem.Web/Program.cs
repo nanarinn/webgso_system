@@ -79,6 +79,65 @@ if (args.Contains("--update-database", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
+if (args.Contains("--clear-collection-data", StringComparer.OrdinalIgnoreCase))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var jobs = await database.CollectionJobs.CountAsync();
+    var responses = await database.RawApiResponses.CountAsync();
+    var readings = await database.SolarApiReadings.CountAsync();
+    var anomalies = await database.DataAnomalies.CountAsync();
+
+    var strategy = database.Database.CreateExecutionStrategy();
+    await strategy.ExecuteAsync(async () =>
+    {
+        await using var transaction = await database.Database.BeginTransactionAsync();
+        await database.DataAnomalies.ExecuteDeleteAsync();
+        await database.SolarApiReadings.ExecuteDeleteAsync();
+        await database.RawApiResponses.ExecuteDeleteAsync();
+        await database.CollectionJobs.ExecuteDeleteAsync();
+        await transaction.CommitAsync();
+    });
+
+    Console.WriteLine("Collection Management test data cleared.");
+    Console.WriteLine($"CollectionJobs deleted:   {jobs:N0}");
+    Console.WriteLine($"RawApiResponses deleted:  {responses:N0}");
+    Console.WriteLine($"SolarApiReadings deleted: {readings:N0}");
+    Console.WriteLine($"DataAnomalies deleted:    {anomalies:N0}");
+    Console.WriteLine("Plants, API configurations, collection schedules and user accounts were retained.");
+    return;
+}
+
+if (args.Contains("--reset-workflow-data", StringComparer.OrdinalIgnoreCase))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var strategy = database.Database.CreateExecutionStrategy();
+    await strategy.ExecuteAsync(async () =>
+    {
+        await using var transaction = await database.Database.BeginTransactionAsync();
+        await database.ReportDeliveryRecipients.ExecuteDeleteAsync();
+        await database.ReportDeliveryAttempts.ExecuteDeleteAsync();
+        await database.ReportScheduleRecipients.ExecuteDeleteAsync();
+        await database.ReportSchedules.ExecuteDeleteAsync();
+        await database.ReportExecutions.ExecuteDeleteAsync();
+        await database.DataAnomalies.ExecuteDeleteAsync();
+        await database.SolarApiReadings.ExecuteDeleteAsync();
+        await database.RawApiResponses.ExecuteDeleteAsync();
+        await database.CollectionJobs.ExecuteDeleteAsync();
+        await database.CollectionSchedules.ExecuteDeleteAsync();
+        await database.PlantApiConfigurations.ExecuteDeleteAsync();
+        await database.LssPlants.ExecuteDeleteAsync();
+        await database.AuditEvents.ExecuteDeleteAsync();
+        await transaction.CommitAsync();
+    });
+
+    Console.WriteLine("SBLSS operational workflow data was reset.");
+    Console.WriteLine("Removed: plants, API configurations, collection schedules/history, readings, anomalies, reports and audit events.");
+    Console.WriteLine("Retained: Microsoft Entra accounts, roles, access approvals and system validation rules.");
+    return;
+}
+
 var superAdminIndex = Array.FindIndex(args, value => value.Equals("--set-superadmins", StringComparison.OrdinalIgnoreCase));
 if (superAdminIndex >= 0)
 {
@@ -199,6 +258,14 @@ app.MapGet("/api/ping", () => Results.Ok(new
     stack = ".NET 8 Blazor",
     date = DateTimeOffset.UtcNow
 }));
+app.MapGet("/api/test-data/mmf/{plantCode}", (string plantCode, DateOnly? date, int? interval) =>
+{
+    var selectedInterval = interval ?? 15;
+    if (selectedInterval is not (15 or 30 or 60))
+        return Results.BadRequest(new { message = "MMF test interval must be 15, 30 or 60 minutes." });
+    var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+    return Results.Ok(MmfTestApiPayload.Build(plantCode, selectedDate, selectedInterval));
+});
 
 app.Run();
 

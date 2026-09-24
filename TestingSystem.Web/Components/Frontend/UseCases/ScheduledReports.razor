@@ -42,7 +42,7 @@
             <div class="admin-table-heading"><div><p class="section-label">@SelectedReportApi automation</p><h2>@SelectedReportApi Report Schedules</h2></div><span>Timezone: Asia/Kuala_Lumpur</span></div>
             <div class="report-simple-table">
                 <div class="report-simple-row admin-table-header"><span>Schedule</span><span>Plants</span><span>Report data</span><span>Send schedule</span><span>Recipients</span><span>Status</span><span>Action</span></div>
-                @foreach (var schedule in FilteredSchedules)
+                @foreach (var schedule in TablePaging.Slice(FilteredSchedules, ReportSchedulePage))
                 {
                     <div class="report-simple-row">
                         <div class="admin-entity schedule-identity"><span>RS</span><div><strong>@schedule.Name</strong><small>@schedule.Id</small></div></div>
@@ -56,6 +56,7 @@
                 }
                 @if (FilteredSchedules.Count == 0) { <div class="api-registry-empty">No @SelectedReportApi report schedule matches the current search.</div> }
             </div>
+            <TablePagination TotalItems="@FilteredSchedules.Count" @bind-Page="ReportSchedulePage" />
         </section>
     }
     else
@@ -65,7 +66,7 @@
             <div class="automation-heading"><div><p class="section-label">Scheduled report delivery</p><h2>Email report delivery monitor</h2></div><span>Latest delivery attempts shown first · Asia/Kuala_Lumpur</span></div>
             <div class="delivery-table">
                 <div class="delivery-row delivery-modern-row automation-table-header"><span>Report delivery</span><span>Report data</span><span>Send schedule</span><span>Generated</span><span>Recipients</span><span>Report</span><span>Email</span><span>Overall</span><span>Action</span></div>
-                @foreach (var delivery in FilteredDeliveries)
+                @foreach (var delivery in TablePaging.Slice(FilteredDeliveries, DeliveryPage))
                 {
                     <div class="delivery-row delivery-modern-row">
                         <div class="automation-name"><span>@DeliverySource(delivery)</span><div><strong>@delivery.ScheduleName</strong><small>@delivery.Id</small></div></div>
@@ -81,6 +82,7 @@
                 }
                 @if (FilteredDeliveries.Count == 0) { <div class="api-registry-empty">No delivery attempt matches the current search.</div> }
             </div>
+            <TablePagination TotalItems="@FilteredDeliveries.Count" @bind-Page="DeliveryPage" />
         </section>
     }
 
@@ -137,3 +139,8 @@
         </section></div>
     }
 </div>
+
+@code {
+    private int ReportSchedulePage { get; set; } = 1;
+    private int DeliveryPage { get; set; } = 1;
+}

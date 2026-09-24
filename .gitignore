@@ -19,3 +19,5 @@ coverage/
 *.bak
 *.tmp
 .local-certs/
+.clear-collection-data-on-next-start
+.reset-workflow-data-on-next-start

@@ -2,20 +2,40 @@ namespace TestingSystem.Web.Services;
 
 public sealed class PrototypeLssDataApiClient(IHttpClientFactory httpClientFactory) : ILssDataApiClient
 {
-    public Task<LssApiCollectionResult> CollectAsync(
+    public async Task<LssApiCollectionResult> CollectAsync(
         string plantName,
         string source,
         string endpoint,
         CancellationToken cancellationToken = default)
     {
-        // Replace this simulation with HttpClient when the plant API contract is available.
-        var isConfigured = Uri.TryCreate(endpoint, UriKind.Absolute, out _);
-        var result = isConfigured
-            ? new LssApiCollectionResult(true, source == "DDQ" ? 2880 : 576,
-                $"{source} data from {plantName} was received through its configured API endpoint.")
-            : new LssApiCollectionResult(false, 0,
-                $"{source} collection could not start because the plant API endpoint is invalid.");
-        return Task.FromResult(result);
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            return new(false, 0, $"{source} collection could not start because the plant API endpoint is invalid.");
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(30));
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Accept.ParseAdd("application/json, application/xml, text/xml, text/csv, text/plain; q=0.8, */*; q=0.5");
+            using var response = await httpClientFactory.CreateClient().SendAsync(
+                request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            var payload = await response.Content.ReadAsStringAsync(timeout.Token);
+            var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
+            return response.IsSuccessStatusCode
+                ? new(true, 0, $"{source} data from {plantName} was received with HTTP {(int)response.StatusCode}.",
+                    (int)response.StatusCode, contentType, payload)
+                : new(false, 0, $"API returned HTTP {(int)response.StatusCode} ({response.StatusCode}).",
+                    (int)response.StatusCode, contentType, payload);
+        }
+        catch (OperationCanceledException)
+        {
+            return new(false, 0, "Collection timed out after 30 seconds.");
+        }
+        catch (HttpRequestException exception)
+        {
+            return new(false, 0, $"Connection failed: {exception.Message}");
+        }
     }
 
     public async Task<LssApiTestResult> TestConnectionAsync(

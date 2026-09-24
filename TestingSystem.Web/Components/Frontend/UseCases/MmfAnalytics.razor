@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @inject IDbContextFactory<ApplicationDbContext> ContextFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject TestingSystem.Web.Backend.UseCases.UCLSS027Audit.IAuditTrailService AuditTrail
 @using TestingSystem.Web.Services
 
 <PageTitle>MMF Analytics | SBLSS System</PageTitle>
@@ -28,17 +30,22 @@
             <div class="compact-filter-layout mmf-compact-filter">
                 <div class="filter-section location-section">
                     <div class="filter-section-heading"><span>1</span><div><strong>Plant or location</strong><small>Leave empty for all active plants.</small></div></div>
-                    <PlantFilter @key="FilterVersion" Plants="RegisteredPlants" SelectedIds="SelectedPlantIds"
-                                 SelectedIdsChanged="OnPlantsChanged" Disabled="PlantFilterDisabled" />
-                    <div class="location-divider"><span>or filter by one location</span></div>
-                    <div class="location-alternatives">
-                        <label class="filter-field"><span>State</span><select value="@SelectedState" @onchange="OnStateChanged" disabled="@StateFilterDisabled">
-                            <option value="">Choose a state</option>@foreach (var state in AvailableStates) { <option value="@state">@state</option> }
-                        </select></label>
-                        <div class="location-or">OR</div>
-                        <label class="filter-field"><span>Region</span><select value="@SelectedRegion" @onchange="OnRegionChanged" disabled="@RegionFilterDisabled">
-                            <option value="">Choose a region</option>@foreach (var region in AvailableRegions) { <option value="@region">@region</option> }
-                        </select></label>
+                    <div class="location-selector-stack">
+                        <section class="location-selector-card @(SelectedPlantIds.Count > 0 ? "selected" : null) @(PlantFilterDisabled ? "disabled" : null)">
+                            <div class="location-selector-heading"><span class="location-selector-number">A</span><div><strong>Plant</strong><small>Select one or more individual LSS plants.</small></div></div>
+                            <PlantFilter @key="FilterVersion" Plants="RegisteredPlants" SelectedIds="SelectedPlantIds"
+                                         SelectedIdsChanged="OnPlantsChanged" Disabled="PlantFilterDisabled" />
+                        </section>
+                        <section class="location-selector-card @(SelectedStates.Count > 0 ? "selected" : null) @(StateFilterDisabled ? "disabled" : null)">
+                            <div class="location-selector-heading"><span class="location-selector-number">B</span><div><strong>States</strong><small>Each selected state produces its own plant average.</small></div></div>
+                            <StringMultiFilter Label="States" Items="AvailableStates" SelectedValues="SelectedStates"
+                                               SelectedValuesChanged="OnStatesChanged" Disabled="StateFilterDisabled" />
+                        </section>
+                        <section class="location-selector-card @(SelectedRegions.Count > 0 ? "selected" : null) @(RegionFilterDisabled ? "disabled" : null)">
+                            <div class="location-selector-heading"><span class="location-selector-number">C</span><div><strong>Regions</strong><small>Each selected region produces its own plant average.</small></div></div>
+                            <StringMultiFilter Label="Regions" Items="AvailableRegions" SelectedValues="SelectedRegions"
+                                               SelectedValuesChanged="OnRegionsChanged" Disabled="RegionFilterDisabled" />
+                        </section>
                     </div>
                 </div>
                 <div class="compact-filter-right">
@@ -76,7 +83,7 @@
         <section class="filter-summary mmf-summary" aria-live="polite"><span class="summary-mark">MMF</span><div><strong>Filtered MMF data</strong><p>@ResultDescription</p></div></section>
         <section class="table-panel mmf-template-panel">
             <div class="ddq-table-heading">
-                <div><p class="section-label">Step 2 · Results</p><h2>@(IsLocationAverage ? $"{AppliedLocationLabel} location average" : "Plant time data")</h2><p>@(IsLocationAverage ? $"Each value is the average of available readings from {AppliedSourcePlantCount} LSS plant(s) in {AppliedLocationLabel}." : "Plant names run vertically; forecast intervals run horizontally.")</p></div>
+                <div><p class="section-label">Step 2 · Results</p><h2>@(IsLocationAverage ? $"{AppliedScope} averages" : "Plant time data")</h2><p>@(IsLocationAverage ? $"Each row is calculated separately from the LSS plants within its selected {AppliedScope.ToLowerInvariant()}." : "LSS codes run vertically; selected data intervals run horizontally as HR1, HR2 and onward.")</p></div>
                 <div class="result-heading-actions"><span class="result-count">@ReadingIndex.Count reading(s)</span>
                     @if (LoadedReadings.Count > 0) { <button type="button" class="result-download excel" disabled="@IsExporting" @onclick="DownloadExcelAsync">@(IsExporting ? "Preparing Excel..." : "↓ Download Excel")</button> }
                 </div>
@@ -90,8 +97,8 @@
                 <div class="excel-sheet-heading mmf-sheet-heading"><div class="excel-sheet-title">@ActiveParameter.ToUpperInvariant()</div><div class="excel-sheet-meta"><span><small>Parameter</small><strong>@ActiveParameter</strong></span><span><small>Data interval</small><strong>@IntervalLabel</strong></span><span><small>Date range</small><strong>@AppliedStart.ToString("dd/MM/yyyy HH:mm") - @AppliedEnd.ToString("dd/MM/yyyy HH:mm")</strong></span><span><small>Unit</small><strong>@UnitForParameter</strong></span></div></div>
                 @if (DisplayMode == "table")
                 {
-                    <div class="mmf-pivot-scroll"><table class="mmf-pivot-table"><thead><tr><th class="sticky-plant">@(IsLocationAverage ? "Location Average" : "Plant Name")</th><th class="sticky-code">@(IsLocationAverage ? "Scope" : "Plant ID / Code")</th>@foreach (var time in TimeColumns) { <th>@TimeHeading(time)</th> }</tr></thead><tbody>
-                    @foreach (var plant in ResultPlants) { <tr><th class="sticky-plant">@plant.Name</th><td class="sticky-code">@plant.PlantId</td>@foreach (var time in TimeColumns) { var value=ValueFor(plant.Id,time); <td class="@(value.HasValue ? null : "missing-cell")">@(value?.ToString("N2") ?? "-")</td> }</tr> }
+                    <div class="mmf-pivot-scroll"><table class="mmf-pivot-table"><thead><tr><th class="sticky-plant">@ScopeColumnHeading</th>@for (var index = 0; index < TimeColumns.Count; index++) { <th title="@TimeHeading(TimeColumns[index])">@HourHeading(index)</th> }</tr></thead><tbody>
+                    @foreach (var plant in ResultPlants) { <tr><th class="sticky-plant" title="@($"{plant.Name} · {plant.PlantId}")">@ResultRowLabel(plant)</th>@foreach (var time in TimeColumns) { var value=ValueFor(plant.Id,time); <td class="@(value.HasValue ? null : "missing-cell")" title="@TimeHeading(time)">@(value?.ToString("N2") ?? "-")</td> }</tr> }
                     </tbody></table></div>
                 }
                 else

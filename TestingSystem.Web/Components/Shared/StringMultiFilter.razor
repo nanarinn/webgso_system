@@ -1,0 +1,64 @@
+<fieldset class="plant-filter string-multi-filter">
+    <legend>@Label</legend>
+    <div class="plant-filter-controls">
+        <label class="filter-field">
+            <span>Search and choose @Label.ToLowerInvariant()</span>
+            <input @key="SearchVersion" type="search" list="@ListId" placeholder="@SearchPlaceholder"
+                   value="@PendingValue" @onchange="AddFromSelection" disabled="@Disabled" autocomplete="off" />
+            <datalist id="@ListId">
+                @foreach (var item in AvailableItems)
+                {
+                    <option value="@item"></option>
+                }
+            </datalist>
+        </label>
+        <span class="plant-auto-add @(SelectedValues.Count > 0 ? "has-selection" : null)">@SelectionStatus</span>
+    </div>
+    <div class="plant-filter-chips" aria-live="polite">
+        @foreach (var item in Items.Where(SelectedValues.Contains))
+        {
+            <button type="button" class="plant-filter-chip" @onclick="() => Remove(item)" aria-label="@($"Remove {item}")">
+                @item <span aria-hidden="true">&times;</span>
+            </button>
+        }
+    </div>
+    <small>@HelpText</small>
+</fieldset>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Values";
+    [Parameter] public IEnumerable<string> Items { get; set; } = [];
+    [Parameter] public HashSet<string> SelectedValues { get; set; } = [];
+    [Parameter] public EventCallback<HashSet<string>> SelectedValuesChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    private string PendingValue = string.Empty;
+    private int SearchVersion;
+    private string ListId => $"multi-{new string(Label.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray())}";
+    private IEnumerable<string> AvailableItems => Items.Where(item => !SelectedValues.Contains(item));
+    private string SearchPlaceholder => SelectedValues.Count == 0
+        ? $"Search {Label.ToLowerInvariant()}"
+        : $"Search another {Label.ToLowerInvariant()}...";
+    private string SelectionStatus => SelectedValues.Count == 0
+        ? "Select from the suggestions"
+        : $"{SelectedValues.Count} selected · ready for another";
+    private string HelpText => Disabled
+        ? $"{Label} selection is disabled because another location filter is selected."
+        : SelectedValues.Count == 0
+            ? $"No {Label.ToLowerInvariant()} selected. All locations will be included."
+            : $"{SelectedValues.Count} {Label.ToLowerInvariant()} selected. Add or remove selections.";
+
+    private async Task AddFromSelection(ChangeEventArgs args)
+    {
+        PendingValue = args.Value?.ToString()?.Trim() ?? string.Empty;
+        var item = AvailableItems.FirstOrDefault(value => value.Equals(PendingValue, StringComparison.OrdinalIgnoreCase));
+        if (item is null) return;
+        var values = new HashSet<string>(SelectedValues, StringComparer.OrdinalIgnoreCase) { item };
+        PendingValue = string.Empty;
+        SearchVersion++;
+        await SelectedValuesChanged.InvokeAsync(values);
+    }
+
+    private Task Remove(string item) => SelectedValuesChanged.InvokeAsync(
+        SelectedValues.Where(value => !value.Equals(item, StringComparison.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase));
+}
