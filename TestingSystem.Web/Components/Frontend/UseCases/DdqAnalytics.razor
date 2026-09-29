@@ -100,11 +100,11 @@
                         <div class="date-pair">
                             <div class="date-time-control">
                                 <span>Start</span>
-                                <label><small>Date</small><input type="date" required value="@(SubmissionStartDate?.ToString("yyyy-MM-dd") ?? string.Empty)" max="@(SubmissionEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)" @oninput="OnSubmissionStartDateChanged" /></label>
+                                <label><small>Date</small><input type="date" required value="@(SubmissionStartDate?.ToString("yyyy-MM-dd") ?? string.Empty)" max="@(SubmissionEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)" @onchange="OnSubmissionStartDateChanged" /></label>
                             </div>
                             <div class="date-time-control">
                                 <span>End</span>
-                                <label><small>Date</small><input type="date" required value="@(SubmissionEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)" min="@(SubmissionStartDate?.ToString("yyyy-MM-dd") ?? string.Empty)" @oninput="OnSubmissionEndDateChanged" /></label>
+                                <label><small>Date</small><input type="date" required value="@(SubmissionEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)" min="@(SubmissionStartDate?.ToString("yyyy-MM-dd") ?? string.Empty)" @onchange="OnSubmissionEndDateChanged" /></label>
                             </div>
                         </div>
                         <small>Required. Select both the Start Date and End Date.</small>
@@ -114,13 +114,13 @@
                         <div class="date-pair">
                             <div class="date-time-control">
                                 <span>Start</span>
-                                <div><label><small>Date</small><input type="date" value="@(RangeStart?.ToString("yyyy-MM-dd") ?? string.Empty)" max="@(RangeEnd?.ToString("yyyy-MM-dd") ?? string.Empty)" @oninput="OnRangeStartDateChanged" /></label>
-                                <label><small>Time</small><input type="time" value="@(RangeStart?.ToString("HH:mm") ?? string.Empty)" step="900" @oninput="OnRangeStartTimeChanged" /></label></div>
+                                <div><label><small>Date</small><input type="date" value="@RangeStartDateValue" max="@RangeEndDateValue" @oninput="args => RangeStartDateValue = args.Value?.ToString() ?? string.Empty" /></label>
+                                <label><small>Time</small><input type="time" value="@RangeStartTimeValue" step="900" @oninput="args => RangeStartTimeValue = args.Value?.ToString() ?? string.Empty" /></label></div>
                             </div>
                             <div class="date-time-control">
                                 <span>End</span>
-                                <div><label><small>Date</small><input type="date" value="@(RangeEnd?.ToString("yyyy-MM-dd") ?? string.Empty)" min="@(RangeStart?.ToString("yyyy-MM-dd") ?? string.Empty)" @oninput="OnRangeEndDateChanged" /></label>
-                                <label><small>Time</small><input type="time" value="@(RangeEnd?.ToString("HH:mm") ?? string.Empty)" step="900" @oninput="OnRangeEndTimeChanged" /></label></div>
+                                <div><label><small>Date</small><input type="date" value="@RangeEndDateValue" min="@RangeStartDateValue" @oninput="args => RangeEndDateValue = args.Value?.ToString() ?? string.Empty" /></label>
+                                <label><small>Time</small><input type="time" value="@RangeEndTimeValue" step="900" @oninput="args => RangeEndTimeValue = args.Value?.ToString() ?? string.Empty" /></label></div>
                             </div>
                         </div>
                         <small>Optional. Leave both Start and End empty to include every data timestamp.</small>

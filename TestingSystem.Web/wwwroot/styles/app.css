@@ -798,7 +798,8 @@ a {
     background: var(--sb-navy);
 }
 
-.profile-dialog form {
+.profile-dialog form,
+.profile-dialog .profile-content {
     padding: 24px 26px 26px;
 }
 
@@ -3513,7 +3514,8 @@ a {
     }
 
     .profile-dialog-header,
-    .profile-dialog form {
+    .profile-dialog form,
+    .profile-dialog .profile-content {
         padding-right: 19px;
         padding-left: 19px;
     }
@@ -3748,7 +3750,7 @@ a {
 .admin-search input { width: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: .75rem; }
 .admin-panel { overflow-x: auto; border-top: 4px solid var(--admin-accent); }
 .api-registry-panel { overflow: hidden; margin: 0; border: 1px solid #c9dde2; border-top: 4px solid var(--admin-accent); border-radius: 14px; box-shadow: 0 8px 24px rgba(6,59,85,.06); }
-.api-registry-panel .admin-table-heading { min-width: 1050px; padding: 18px; background: #fff; }
+.api-registry-panel .admin-table-heading { min-width: 1080px; padding: 18px; background: #fff; }
 .api-registry-panel .plant-admin-row > strong { color: #153d4d; font-size: .67rem; }
 .api-registry-panel .status-pill { justify-content: center; }
 .api-registry-empty { padding: 28px 22px; color: var(--sb-muted); background: #fbfdfd; font-size: .7rem; text-align: center; }
@@ -3762,8 +3764,8 @@ a {
 .admin-table-heading { display: flex; min-width: 1100px; padding: 21px 23px 17px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--sb-border); }
 .admin-table-heading h2 { margin: 2px 0 0; font-size: 1.25rem; }
 .admin-table-heading > span { color: var(--sb-muted); font-size: .65rem; }
-.plant-admin-table { min-width: 1050px; background: #fff; }
-.plant-admin-row { display: grid; min-height: 68px; padding: 11px 18px; grid-template-columns: 180px 80px 75px 55px 115px minmax(260px,1fr) 80px 58px; align-items: center; gap: 12px; border-bottom: 1px solid #dfeaec; font: .69rem "Aptos", "Trebuchet MS", sans-serif; }
+.plant-admin-table { min-width: 1080px; background: #fff; }
+.plant-admin-row { display: grid; min-height: 68px; padding: 11px 18px; grid-template-columns: 180px 90px 55px 115px minmax(260px,1fr) 98px 80px 58px; align-items: center; gap: 12px; border-bottom: 1px solid #dfeaec; font: .69rem "Aptos", "Trebuchet MS", sans-serif; }
 .plant-admin-row:not(.admin-table-header):nth-child(odd) { background: #fbfdfd; }
 .plant-admin-row:not(.admin-table-header):hover { background: #f2f9fa; }
 .plant-admin-row:last-child,
@@ -3776,6 +3778,54 @@ a {
 .admin-entity strong { overflow: hidden; color: var(--admin-dark); text-overflow: ellipsis; white-space: nowrap; }
 .admin-entity small { color: var(--sb-muted); font-size: .6rem; }
 .plant-admin-row code { display: block; overflow: hidden; padding: 9px 11px; border: 1px solid #d9e8ec; border-radius: 8px; color: #17617b; background: #f4f9fa; font-size: .59rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.plant-registry-table { min-width: 1050px; background: #fff; }
+.plant-registry-header,
+.plant-registry-group { display: grid; grid-template-columns: 220px minmax(430px,1fr) 110px 84px 66px; align-items: center; gap: 18px; }
+.plant-registry-header { min-height: 48px; padding: 0 20px; color: #48636d; background: #eaf4f6; font: 900 .57rem "Aptos", "Trebuchet MS", sans-serif; letter-spacing: .055em; text-transform: uppercase; }
+.plant-registry-group { min-height: 86px; padding: 14px 20px; border-bottom: 1px solid #dfeaec; font: .69rem "Aptos", "Trebuchet MS", sans-serif; transition: background 140ms ease; }
+.plant-registry-group:nth-of-type(odd) { background: #fbfdfd; }
+.plant-registry-group:hover { background: #f2f9fa; }
+.plant-registry-group:last-child { border-bottom: 0; }
+.plant-registry-identity { display: flex; min-width: 0; flex-direction: column; gap: 7px; }
+.plant-registry-state { padding-left: 50px; color: #607682; font-size: .61rem; }
+.plant-endpoint-list { display: flex; min-width: 0; flex-direction: column; gap: 7px; }
+.plant-endpoint-item { display: grid; min-width: 0; grid-template-columns: 48px 116px minmax(210px,1fr); align-items: center; gap: 10px; }
+.plant-endpoint-item strong { color: #153d4d; font-size: .65rem; }
+.plant-endpoint-item code { display: block; overflow: hidden; padding: 8px 10px; border: 1px solid #d9e8ec; border-radius: 8px; color: #17617b; background: #f4f9fa; font-size: .59rem; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.plant-registry-group > .status-pill { justify-self: start; }
+.plant-registry-group > .admin-edit-action { width: 62px; }
+.plant-registry-scroll { overflow-x: auto; }
+.plant-registry-data { width: 100%; min-width: 1160px; border-collapse: separate; border-spacing: 0; color: #263f4d; background: #fff; font: .69rem "Aptos", "Trebuchet MS", sans-serif; table-layout: fixed; }
+.plant-registry-data .plant-column { width: 190px; }
+.plant-registry-data .state-column { width: 120px; }
+.plant-registry-data .type-column { width: 82px; }
+.plant-registry-data .data-column { width: 140px; }
+.plant-registry-data .registered-column { width: 122px; }
+.plant-registry-data .status-column { width: 92px; }
+.plant-registry-data .action-column { width: 78px; }
+.plant-registry-data thead th { height: 50px; padding: 0 14px; border-right: 1px solid #d6e5e9; border-bottom: 1px solid #c4dae0; color: #3d5e6c; background: #eaf4f6; font-size: .58rem; font-weight: 900; letter-spacing: .06em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.plant-registry-data thead th:last-child { border-right: 0; }
+.plant-registry-data tbody th,
+.plant-registry-data tbody td { height: 58px; padding: 10px 14px; border-right: 1px solid #edf3f5; border-bottom: 1px solid #dfeaec; vertical-align: middle; text-align: left; }
+.plant-registry-data tbody tr > *:last-child { border-right: 0; }
+.plant-registry-data tbody th { font-weight: inherit; }
+.plant-registry-data tbody tr.plant-first-endpoint > * { border-top: 3px solid #d5e7eb; }
+.plant-registry-data tbody tr.plant-first-endpoint:first-child > * { border-top: 0; }
+.plant-registry-data tbody tr.plant-next-endpoint td { background: #fbfdfd; }
+.plant-registry-data tbody tr:hover td,
+.plant-registry-data tbody tr:hover th { background: #f2f9fa; }
+.plant-registry-data code { display: block; width: 100%; overflow: hidden; padding: 9px 11px; border: 1px solid #d3e5e9; border-radius: 8px; color: #0b6684; background: #f3f9fa; font-family: Consolas, monospace; font-size: .58rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.plant-table-identity,
+.plant-table-state { border-right-color: #dbe9ec !important; background: #f7fbfc; }
+.plant-table-identity { padding-left: 18px !important; border-left: 4px solid #15809b; background: #f7fbfc; }
+.plant-table-state { color: #405d69; font-weight: 700; }
+.plant-table-data-type strong { color: #153d4d; font-size: .66rem; }
+.plant-registry-data .status-pill { display: inline-flex; justify-content: center; }
+.plant-registry-data .admin-edit-action { width: 58px; padding: 0 8px; }
+.plant-registry-data .api-registry-empty { height: auto; padding: 28px 22px; text-align: center; }
+.plant-registered-time { display: flex; flex-direction: column; gap: 3px; color: #153d4d; font-style: normal; white-space: nowrap; }
+.plant-registered-time strong { font-size: .64rem; }
+.plant-registered-time small { color: var(--sb-muted); font-size: .57rem; }
 .api-type-badge { display: inline-flex; width: 46px; padding: 6px 5px; justify-content: center; border-radius: 8px; font-size: .57rem; font-weight: 900; letter-spacing: .03em; }
 .api-type-ddq { color: #075a9f; background: #eaf4fb; }
 .api-type-mmf { color: #067647; background: #eaf9f1; }
@@ -3806,8 +3856,9 @@ a {
 .api-test-result.failed > span { background: #c6382d; }
 .api-test-form .profile-actions { margin-top: 21px; }
 
-.schedule-admin-table { min-width: 1200px; }
-.schedule-admin-row { display: grid; min-height: 78px; padding: 13px 21px; grid-template-columns: 220px 170px 60px 85px 70px 85px 76px 72px; align-items: center; gap: 14px; border-bottom: 1px solid #e6eef0; font: .69rem "Aptos", "Trebuchet MS", sans-serif; }
+.schedule-admin-table { min-width: 1320px; }
+.schedule-admin-row { display: grid; min-height: 78px; padding: 13px 21px; grid-template-columns: 220px 170px 70px 95px 70px 85px 90px 100px 72px; align-items: center; gap: 14px; border-bottom: 1px solid #e6eef0; font: .69rem "Aptos", "Trebuchet MS", sans-serif; }
+.status-processing { color: #075a9f; background: #eaf4fb; }
 .admin-toggle { min-height: 33px; padding: 0 9px; border: 1px solid #a9cbd4; border-radius: 8px 3px 8px 3px; color: var(--admin-accent); background: #f2fafb; cursor: pointer; font-size: .6rem; font-weight: 800; }
 .admin-toggle:hover { color: #fff; background: var(--admin-accent); }
 
@@ -3866,16 +3917,32 @@ a {
 .api-config-heading > div { display: flex; flex-direction: column; gap: 4px; }
 .api-config-heading strong { color: var(--admin-dark); font-size: .76rem; }
 .api-config-heading small { color: var(--sb-muted); font-size: .62rem; }
+.api-config-heading-mmf { margin-top: 24px; }
+.required-indicator { display: inline-flex; margin-left: 7px; padding: 2px 7px; align-items: center; border-radius: 999px; color: #9a3412; background: #ffedd5; font-size: .54rem; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
 .api-link-entry { display: grid; grid-template-columns: 190px minmax(0,1fr) 38px; align-items: end; gap: 10px; }
+.mmf-api-link-entry { grid-template-columns: 190px minmax(0,1fr); }
 .api-link-entry label { display: flex; flex-direction: column; gap: 6px; }
 .api-link-entry label span { color: var(--admin-dark); font-size: .61rem; font-weight: 800; }
 .api-link-entry input,.api-link-entry select { width: 100%; height: 45px; padding: 0 12px; border: 1px solid #c6d7dc; border-radius: 8px; }
+.api-endpoint-field input { transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease; }
+.api-endpoint-field.verified input { border-color: #16a36a; box-shadow: 0 0 0 3px rgba(22,163,106,.11); background: #f2fff8; }
+.api-endpoint-field.failed input { border-color: #dc4c43; box-shadow: 0 0 0 3px rgba(220,76,67,.11); background: #fff7f6; }
+.api-endpoint-field.checking input { border-color: #0c789d; box-shadow: 0 0 0 3px rgba(12,120,157,.1); background: #f5fcff; }
+.endpoint-verification { display: flex; margin-top: 2px; align-items: flex-start; gap: 6px; line-height: 1.35; }
+.api-endpoint-field.verified .endpoint-verification { color: #087a4d; }
+.api-endpoint-field.failed .endpoint-verification { color: #b42318; }
+.api-endpoint-field.checking .endpoint-verification { color: #0c6c88; }
+.endpoint-verification b { display: inline-grid; width: 17px; height: 17px; flex: 0 0 17px; place-items: center; border-radius: 50%; color: #fff; font-size: .68rem; }
+.api-endpoint-field.verified .endpoint-verification b { background: #087a4d; }
+.api-endpoint-field.failed .endpoint-verification b { background: #b42318; }
+.api-endpoint-field.checking .endpoint-verification b { background: #0c6c88; }
 .api-link-entry > button { height: 45px; border: 1px solid #d5e1e5; border-radius: 8px; color: #b42318; background: #fff; cursor: pointer; }
 .add-api-link { width: fit-content; padding: 9px 13px; border: 1px solid #88bcc9; border-radius: 8px; color: var(--admin-accent); background: #eff9fb; cursor: pointer; font-weight: 800; }
 .password-policy { margin: 13px 0 0; color: var(--sb-muted); font-size: .63rem; }
 .admin-alert { margin-bottom: 16px; padding: 11px 13px; border: 1px solid; border-radius: 10px 3px 10px 3px; font-size: .68rem; }
 .admin-alert.success { color: #067647; border-color: #acd9c6; background: #effbf5; }
 .admin-alert.error { color: #b42318; border-color: #efb8b3; background: #fff3f2; }
+.admin-alert.warning { color: #735c00; border-color: #ead285; background: #fffae8; }
 
 @media (max-width: 640px) {
     .admin-summary { grid-template-columns: 1fr; }
@@ -4446,6 +4513,49 @@ a {
 .collection-dialog-header h2 { margin: 3px 0 0; color: var(--sb-navy); font-size: 1.42rem; }
 .collection-dialog-body { padding: 24px 26px 26px; }
 .collection-dialog-intro { margin: 0 0 18px; color: var(--sb-muted); font-size: 0.76rem; line-height: 1.5; }
+.manual-batch-dialog { width: min(100%, 880px); }
+.manual-batch-data-select { display: flex; margin-bottom: 16px; flex-direction: column; gap: 6px; }
+.manual-batch-data-select > span { color: #123d59; font-size: .62rem; font-weight: 850; }
+.manual-batch-data-select select { width: 100%; height: 45px; padding: 0 12px; border: 1px solid #bdd3da; border-radius: 9px; color: #123d59; background: #fff; font: 700 .72rem "Aptos", "Trebuchet MS", sans-serif; }
+.manual-batch-data-select small { color: #6a7f8a; font-size: .59rem; }
+.manual-batch-summary { display: grid; margin-bottom: 16px; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
+.manual-batch-summary > div { display: flex; min-height: 62px; padding: 11px 14px; flex-direction: column; justify-content: center; gap: 4px; border: 1px solid #d3e3e7; border-radius: 10px; background: #f7fbfc; }
+.manual-batch-summary small { color: #607985; font-size: .56rem; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
+.manual-batch-summary strong { color: #123d59; font-size: 1.25rem; line-height: 1; }
+.manual-batch-summary .batch-success-count { border-color: #b7dfcd; background: #f1fbf6; }
+.manual-batch-summary .batch-success-count strong { color: #08794f; }
+.manual-batch-summary .batch-failed-count { border-color: #efc0bb; background: #fff5f4; }
+.manual-batch-summary .batch-failed-count strong { color: #b42318; }
+.manual-batch-list { max-height: min(52vh,520px); overflow-y: auto; border: 1px solid #cfdee3; border-radius: 12px; background: #f8fbfc; }
+.manual-batch-item { display: grid; min-height: 72px; padding: 11px 13px; grid-template-columns: 42px minmax(165px,1fr) 52px minmax(190px,1.25fr) 108px; align-items: center; gap: 11px; border-bottom: 1px solid #dce8eb; background: #fff; transition: background .18s ease,border-color .18s ease; }
+.manual-batch-item:last-child { border-bottom: 0; }
+.manual-batch-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 10px 3px 10px 3px; color: #0b6986; background: #eaf6f8; font-size: .57rem; font-weight: 900; }
+.manual-batch-plant,
+.manual-batch-type { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.manual-batch-plant strong,
+.manual-batch-type strong { overflow: hidden; color: #123d59; font-size: .69rem; text-overflow: ellipsis; white-space: nowrap; }
+.manual-batch-plant small,
+.manual-batch-type small { overflow: hidden; color: #6a7f8a; font-size: .58rem; text-overflow: ellipsis; white-space: nowrap; }
+.manual-batch-status { display: inline-flex; min-height: 30px; padding: 0 9px; align-items: center; justify-content: center; gap: 6px; border-radius: 999px; color: #596d76; background: #edf2f3; font-size: .58rem; font-weight: 850; }
+.manual-batch-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.manual-batch-item.batch-processing { background: #f3f9ff; }
+.manual-batch-item.batch-processing .manual-batch-status { color: #075a9f; background: #e4f2fc; }
+.manual-batch-item.batch-processing .manual-batch-status i { animation: batch-pulse 900ms ease-in-out infinite alternate; }
+.manual-batch-item.batch-successful { background: #f2fbf6; }
+.manual-batch-item.batch-successful .manual-batch-icon { color: #067647; background: #dff6e9; }
+.manual-batch-item.batch-successful .manual-batch-status { color: #067647; background: #dff6e9; }
+.manual-batch-item.batch-failed { background: #fff5f4; }
+.manual-batch-item.batch-failed .manual-batch-icon { color: #b42318; background: #fee7e5; }
+.manual-batch-item.batch-failed .manual-batch-status { color: #b42318; background: #fee7e5; }
+.manual-batch-actions { margin-top: 18px; }
+.manual-batch-actions button { min-width: 150px; }
+@keyframes batch-pulse { from { opacity: .35; transform: scale(.8); } to { opacity: 1; transform: scale(1.15); } }
+@media (max-width:700px) {
+    .manual-batch-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .manual-batch-item { grid-template-columns: 38px minmax(0,1fr) 52px; }
+    .manual-batch-type { grid-column: 2 / -1; }
+    .manual-batch-status { grid-column: 2 / -1; justify-self: start; }
+}
 .collection-plant-select { max-width: 340px; margin-bottom: 18px; }
 
 .plant-connection-card { overflow: hidden; margin-bottom: 22px; border: 1px solid #bcd9ea; border-radius: 16px 5px 16px 5px; background: #fff; }

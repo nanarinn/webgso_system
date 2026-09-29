@@ -18,8 +18,10 @@ builder.Services.AddRazorComponents()
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(DatabaseSettings.SectionName));
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient<IReportEmailSender, GraphReportEmailSender>();
 builder.Services.AddScoped<ILssDataApiClient, PrototypeLssDataApiClient>();
 builder.Services.AddHostedService<ScheduledCollectionWorker>();
+builder.Services.AddHostedService<ScheduledReportWorker>();
 builder.Services.AddScoped<IAuditTrailService, AuditTrailService>();
 builder.Services.AddScoped<IUserAccessNotificationService, UserAccessNotificationService>();
 builder.Services.AddAntiforgery();

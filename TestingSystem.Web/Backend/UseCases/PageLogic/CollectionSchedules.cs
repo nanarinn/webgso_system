@@ -17,6 +17,9 @@ public partial class CollectionSchedules : ComponentBase
     private static readonly (int Value, string Label)[] Months = [(1,"Jan"),(2,"Feb"),(3,"Mar"),(4,"Apr"),(5,"May"),(6,"Jun"),(7,"Jul"),(8,"Aug"),(9,"Sep"),(10,"Oct"),(11,"Nov"),(12,"Dec")];
     private List<LssPlant> Plants { get; set; } = [];
     private List<CollectionSchedule> Schedules { get; set; } = [];
+    private Dictionary<int, ScheduleRunStatus> LatestRunStatuses { get; set; } = [];
+    private readonly CancellationTokenSource StatusRefreshCancellation = new();
+    private Task? StatusRefreshTask;
     private string SearchTerm { get; set; } = string.Empty;
     private string SelectedApiType { get; set; } = "DDQ";
     private bool IsDialogOpen { get; set; }
@@ -44,12 +47,68 @@ public partial class CollectionSchedules : ComponentBase
         (string.IsNullOrWhiteSpace(SearchTerm) || x.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
          GetPlant(x.PlantId).Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) || x.DataType.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))).ToList();
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        StatusRefreshTask = RefreshRunStatusesAsync(StatusRefreshCancellation.Token);
+    }
+
     private async Task LoadAsync()
     {
         await using var db = await ContextFactory.CreateDbContextAsync();
         Plants = await db.LssPlants.Include(x => x.ApiConfigurations).OrderBy(x => x.Name).ToListAsync();
-        Schedules = await db.CollectionSchedules.OrderBy(x => x.Name).ToListAsync();
+        Schedules = await db.CollectionSchedules.OrderByDescending(x => x.Id).ToListAsync();
+        await LoadRunStatusesAsync(db);
+    }
+
+    private async Task LoadRunStatusesAsync(ApplicationDbContext db, CancellationToken cancellationToken = default)
+    {
+        var jobs = await db.CollectionJobs.AsNoTracking()
+            .Where(x => x.CollectionId.StartsWith("COL-SCH-"))
+            .OrderByDescending(x => x.StartedAt)
+            .Select(x => new { x.CollectionId, x.Status, x.StartedAt, x.ErrorMessage })
+            .ToListAsync(cancellationToken);
+
+        LatestRunStatuses = jobs
+            .Select(x => new { ScheduleId = ParseScheduleId(x.CollectionId), Job = x })
+            .Where(x => x.ScheduleId.HasValue)
+            .GroupBy(x => x.ScheduleId!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => MapRunStatus(group.First().Job.Status, group.First().Job.StartedAt,
+                    group.First().Job.ErrorMessage));
+    }
+
+    private async Task RefreshRunStatusesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await using var db = await ContextFactory.CreateDbContextAsync(cancellationToken);
+                await LoadRunStatusesAsync(db, cancellationToken);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    private ScheduleRunStatus GetRunStatus(int scheduleId) => LatestRunStatuses.GetValueOrDefault(scheduleId)
+        ?? new("Waiting", "status-warning", "This schedule has not run yet.");
+
+    private static ScheduleRunStatus MapRunStatus(string status, DateTimeOffset startedAt, string? errorMessage) => status switch
+    {
+        "Completed" => new("Successful", "status-successful", $"Last collection completed. Started {startedAt.ToLocalTime():dd MMM yyyy HH:mm}.") ,
+        "Failed" => new("Failed", "status-failed", string.IsNullOrWhiteSpace(errorMessage) ? "The last collection failed." : errorMessage),
+        "Running" or "Pending" => new("Processing", "status-processing", $"Collection started {startedAt.ToLocalTime():dd MMM yyyy HH:mm}."),
+        _ => new(status, "status-warning", $"Last collection status: {status}.")
+    };
+
+    private static int? ParseScheduleId(string collectionId)
+    {
+        var parts = collectionId.Split('-', 4, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 3 && int.TryParse(parts[2], out var scheduleId) ? scheduleId : null;
     }
     private LssPlant GetPlant(int id) => Plants.FirstOrDefault(x => x.Id == id) ?? new LssPlant { Name = "Unknown plant", PlantId = "-" };
     private string RequiredApiDataType => CollectionSchedulePolicy.ApiDataType(NewApiType, NewDataType);
@@ -107,5 +166,18 @@ public partial class CollectionSchedules : ComponentBase
         if (!EditingId.HasValue) return; await using var db = await ContextFactory.CreateDbContextAsync(); var item = await db.CollectionSchedules.SingleAsync(x => x.Id == EditingId);
         var name = item.Name; db.CollectionSchedules.Remove(item); await db.SaveChangesAsync(); IsDialogOpen = false; await LoadAsync(); SuccessTitle = "Schedule deleted"; SuccessMessage = $"{name} has been removed from MS SQL.";
     }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StatusRefreshCancellation.CancelAsync();
+        if (StatusRefreshTask is not null)
+        {
+            try { await StatusRefreshTask; }
+            catch (OperationCanceledException) { }
+        }
+        StatusRefreshCancellation.Dispose();
+    }
+
+    private sealed record ScheduleRunStatus(string Label, string CssClass, string Detail);
 
 }

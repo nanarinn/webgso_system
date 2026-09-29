@@ -12,7 +12,7 @@
             <h1>Collection Management</h1>
             <p class="page-subtitle">Monitor DDQ and MMF API collection, translation and validation for every LSS plant.</p>
         </div>
-        <button class="primary-action collection-run-action" type="button" @onclick="OpenRunDialog" disabled="@(Plants.Count == 0)">
+        <button class="primary-action collection-run-action" type="button" @onclick="OpenRunDialogAsync" disabled="@IsLoadingJobs">
             <span class="collection-run-icon">&#9654;</span> Run Manual
         </button>
     </header>
@@ -183,90 +183,58 @@
     @if (IsRunDialogOpen)
     {
         <div class="collection-overlay" role="presentation">
-            <section class="collection-dialog" role="dialog" aria-modal="true" aria-labelledby="manual-run-title">
+            <section class="collection-dialog manual-batch-dialog" role="dialog" aria-modal="true" aria-labelledby="manual-run-title">
                 <div class="collection-dialog-header">
-                    <div><p class="section-label">DDQ manual collection</p><h2 id="manual-run-title">Run plant collection</h2></div>
-                    <button class="profile-close" type="button" @onclick="CloseRunDialog" aria-label="Close manual run form">&#215;</button>
+                    <div><p class="section-label">All active API endpoints</p><h2 id="manual-run-title">Run manual collection</h2></div>
+                    <button class="profile-close" type="button" disabled="@IsRunningManualCollection" @onclick="CloseRunDialog" aria-label="Close manual collection">&#215;</button>
                 </div>
 
                 <div class="collection-dialog-body">
-                    @if (RunResult is null)
+                    <p class="collection-dialog-intro">Select one data type, then run it for every active LSS plant. Each LSS status changes automatically when its collection finishes.</p>
+                    @if (!string.IsNullOrWhiteSpace(ManualCollectionError))
                     {
-                        <p class="collection-dialog-intro">Select a plant and DDQ data type. Rolling 24 Hour can only be collected by its configured schedule.</p>
-                        @if (!string.IsNullOrWhiteSpace(ManualCollectionError))
-                        {
-                            <div class="admin-alert error">@ManualCollectionError</div>
-                        }
-                        <div class="manual-collection-selectors">
-                            <label class="filter-field collection-plant-select">
-                                <span>Plant name</span>
-                                <select @bind="SelectedPlantId">
-                                    @foreach (var plant in Plants)
-                                    {
-                                        <option value="@plant.DatabaseId">@plant.Name (@plant.PlantId)</option>
-                                    }
-                                </select>
-                            </label>
-                            <label class="filter-field collection-plant-select">
-                                <span>DDQ data type</span>
-                                <select @bind="SelectedManualDataType">
-                                    @foreach (var dataType in ManualDdqDataTypes)
-                                    {
-                                        <option value="@dataType">@dataType</option>
-                                    }
-                                </select>
-                            </label>
-                        </div>
-
-                        @if (SelectedPlant is not null)
-                        {
-                        <section class="plant-connection-card">
-                            <div class="plant-connection-title">
-                                <span>@GetPlantCode(SelectedPlant.Name)</span>
-                                <div><strong>@SelectedPlant.Name</strong><small>@SelectedPlant.State, Malaysia</small></div>
-                                <span class="connection-ready"><i></i> @(string.IsNullOrWhiteSpace(SelectedManualEndpoint) ? "Endpoint required" : "Ready")</span>
-                            </div>
-                            <dl class="plant-information">
-                                <div><dt>Plant ID</dt><dd>@SelectedPlant.PlantId</dd></div>
-                                <div><dt>Collection type</dt><dd>DDQ @SelectedManualDataType</dd></div>
-                                <div><dt>Submission date</dt><dd>@DateTime.Today.ToString("dd MMM yyyy")</dd></div>
-                                <div><dt>Authentication</dt><dd>API key</dd></div>
-                            </dl>
-                            <div class="api-endpoint">
-                                <div><span>Configured API endpoint</span><small>Managed in Admin Configuration</small></div>
-                                <code>@(string.IsNullOrWhiteSpace(SelectedManualEndpoint) ? $"No {SelectedManualDataType} endpoint configured" : SelectedManualEndpoint)</code>
-                            </div>
-                        </section>
-                        }
-
-                        <div class="profile-actions">
-                            <button class="profile-cancel" type="button" disabled="@IsRunningManualCollection" @onclick="CloseRunDialog">Cancel</button>
-                            <button class="primary-action collection-run-action" type="button"
-                                    disabled="@(IsRunningManualCollection || SelectedPlant is null || string.IsNullOrWhiteSpace(SelectedManualEndpoint))"
-                                    @onclick="RequestManualCollectionAsync">
-                                <span class="collection-run-icon">&#9654;</span> @(IsRunningManualCollection ? "Collecting..." : "Run Collection")
-                            </button>
-                        </div>
+                        <div class="admin-alert error">@ManualCollectionError</div>
                     }
-                    else
-                    {
-                        <section class="collection-result result-@RunResult.Status.ToLowerInvariant()">
-                            <span class="collection-result-icon">@(RunResult.Status == "Successful" ? "OK" : "!")</span>
-                            <p class="section-label">Collection completed</p>
-                            <h3>@RunResult.Status</h3>
-                            <p>@RunResult.ResponseMessage</p>
-                            <dl>
-                                <div><dt>Plant</dt><dd>@RunResult.PlantName</dd></div>
-                                <div><dt>Data type</dt><dd>@RunResult.DataType</dd></div>
-                                <div><dt>Collection ID</dt><dd>@RunResult.CollectionId</dd></div>
-                                <div><dt>Completed at</dt><dd>@RunResult.RunAt.ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
-                                <div><dt>Duration</dt><dd>@RunResult.DurationSeconds.ToString("0.0") seconds</dd></div>
-                            </dl>
-                        </section>
-                        <div class="profile-actions">
-                            <button class="primary-action collection-close-action" type="button" @onclick="CloseRunDialog">Close &amp; view history</button>
-                        </div>
-                    }
+                    <label class="filter-field manual-batch-data-select">
+                        <span>Data type</span>
+                        <select @bind="SelectedManualBatchKey" @bind:after="ManualBatchDataTypeChangedAsync" disabled="@IsRunningManualCollection">
+                            @foreach (var option in ManualBatchOptions)
+                            {
+                                <option value="@option.Key">@option.Label</option>
+                            }
+                        </select>
+                        <small>All active LSS plants are included automatically.</small>
+                    </label>
+                    <section class="manual-batch-summary" aria-label="Manual collection progress">
+                        <div><small>Total LSS</small><strong>@ManualBatchItems.Count</strong></div>
+                        <div class="batch-success-count"><small>Successful</small><strong>@ManualBatchItems.Count(item => item.Status == "Successful")</strong></div>
+                        <div class="batch-failed-count"><small>Failed</small><strong>@ManualBatchItems.Count(item => item.Status == "Failed")</strong></div>
+                        <div><small>Remaining</small><strong>@ManualBatchItems.Count(item => item.Status is "Start" or "Processing")</strong></div>
+                    </section>
+
+                    <div class="manual-batch-list">
+                        @foreach (var item in ManualBatchItems)
+                        {
+                            <article class="manual-batch-item batch-@item.Status.ToLowerInvariant()">
+                                <span class="manual-batch-icon">@GetPlantCode(item.PlantName)</span>
+                                <div class="manual-batch-plant"><strong>@item.PlantId</strong><small>@item.PlantName · @item.State</small></div>
+                                <span class="api-type-badge api-type-@item.ApiType.ToLowerInvariant()">@item.ApiType</span>
+                                <div class="manual-batch-type"><strong>@item.DataType</strong><small>@item.Message</small></div>
+                                <span class="manual-batch-status"><i></i>@item.Status</span>
+                            </article>
+                        }
+                        @if (ManualBatchItems.Count == 0)
+                        {
+                            <div class="collection-empty"><strong>No active API endpoint found</strong><span>Configure and verify plant DDQ/MMF endpoints first.</span></div>
+                        }
+                    </div>
+
+                    <div class="profile-actions manual-batch-actions">
+                        <button class="profile-cancel" type="button" disabled="@IsRunningManualCollection" @onclick="CloseRunDialog">@(ManualBatchHasRun ? "Close & view history" : "Cancel")</button>
+                        <button class="primary-action collection-run-action" type="button" disabled="@(IsRunningManualCollection || ManualBatchItems.Count == 0 || ManualBatchHasRun)" @onclick="RunAllManualCollectionsAsync">
+                            <span class="collection-run-icon">&#9654;</span> @(IsRunningManualCollection ? $"Running {ManualBatchCompletedCount}/{ManualBatchItems.Count}..." : ManualBatchHasRun ? "Run completed" : "Run all LSS")
+                        </button>
+                    </div>
                 </div>
             </section>
         </div>

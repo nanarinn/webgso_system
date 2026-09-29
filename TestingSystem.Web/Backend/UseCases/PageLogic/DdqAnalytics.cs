@@ -35,8 +35,10 @@ public partial class DdqAnalytics : ComponentBase
     private DateTime? ImportedRangeStart;
     private DateTime? ImportedRangeEnd;
     private int FilterVersion;
-    private DateTime? RangeStart { get; set; }
-    private DateTime? RangeEnd { get; set; }
+    private string RangeStartDateValue { get; set; } = string.Empty;
+    private string RangeStartTimeValue { get; set; } = string.Empty;
+    private string RangeEndDateValue { get; set; } = string.Empty;
+    private string RangeEndTimeValue { get; set; } = string.Empty;
     private DateOnly? SubmissionStartDate { get; set; }
     private DateOnly? SubmissionEndDate { get; set; }
     private string ActiveDataType { get; set; } = "Rolling 24 Hour";
@@ -131,31 +133,37 @@ public partial class DdqAnalytics : ComponentBase
 
     private int IntervalFor(string dataType) => SelectedIntervals.GetValueOrDefault(dataType,
         DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes);
-
-    private void OnRangeStartDateChanged(ChangeEventArgs args) => RangeStart = WithOptionalDate(RangeStart, args.Value?.ToString());
-    private void OnRangeStartTimeChanged(ChangeEventArgs args) => RangeStart = WithOptionalTime(RangeStart, args.Value?.ToString());
-    private void OnRangeEndDateChanged(ChangeEventArgs args) => RangeEnd = WithOptionalDate(RangeEnd, args.Value?.ToString());
-    private void OnRangeEndTimeChanged(ChangeEventArgs args) => RangeEnd = WithOptionalTime(RangeEnd, args.Value?.ToString());
     private void OnSubmissionStartDateChanged(ChangeEventArgs args) => SubmissionStartDate = ParseOptionalDate(args.Value?.ToString());
     private void OnSubmissionEndDateChanged(ChangeEventArgs args) => SubmissionEndDate = ParseOptionalDate(args.Value?.ToString());
 
-    private static DateTime WithDate(DateTime current, string? value) =>
-        DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            DateTimeStyles.None, out var date)
-            ? date.ToDateTime(TimeOnly.FromDateTime(current))
-            : current;
+    private DateTime? RangeStart => ComposeDateTime(RangeStartDateValue, RangeStartTimeValue);
+    private DateTime? RangeEnd => ComposeDateTime(RangeEndDateValue, RangeEndTimeValue);
+    private bool HasAnyRangeInput => !string.IsNullOrWhiteSpace(RangeStartDateValue)
+        || !string.IsNullOrWhiteSpace(RangeStartTimeValue)
+        || !string.IsNullOrWhiteSpace(RangeEndDateValue)
+        || !string.IsNullOrWhiteSpace(RangeEndTimeValue);
+    private bool HasCompleteRangeInput => !string.IsNullOrWhiteSpace(RangeStartDateValue)
+        && !string.IsNullOrWhiteSpace(RangeStartTimeValue)
+        && !string.IsNullOrWhiteSpace(RangeEndDateValue)
+        && !string.IsNullOrWhiteSpace(RangeEndTimeValue);
 
-    private static DateTime WithTime(DateTime current, string? value) =>
-        TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture,
-            DateTimeStyles.None, out var time)
-            ? DateOnly.FromDateTime(current).ToDateTime(time)
-            : current;
+    private static DateTime? ComposeDateTime(string? dateValue, string? timeValue)
+    {
+        if (!DateOnly.TryParseExact(dateValue, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var date))
+        {
+            return null;
+        }
 
-    private static DateTime? WithOptionalDate(DateTime? current, string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : WithDate(current ?? DateTime.Today, value);
+        var timeFormats = new[] { "HH:mm", "HH:mm:ss", "h:mm tt", "hh:mm tt" };
+        if (!TimeOnly.TryParseExact(timeValue, timeFormats, CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces, out var time))
+        {
+            return null;
+        }
 
-    private static DateTime? WithOptionalTime(DateTime? current, string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : WithTime(current ?? DateTime.Today, value);
+        return date.ToDateTime(time);
+    }
 
     private static DateOnly? ParseOptionalDate(string? value) =>
         DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
@@ -171,9 +179,15 @@ public partial class DdqAnalytics : ComponentBase
         ResultPlants = [];
         TableRows = [];
 
-        if (RangeStart.HasValue != RangeEnd.HasValue)
+        if (HasAnyRangeInput && !HasCompleteRangeInput)
         {
             ValidationMessage = "Complete both Start and End, or leave the entire data timestamp range empty.";
+            return;
+        }
+
+        if (HasCompleteRangeInput && (!RangeStart.HasValue || !RangeEnd.HasValue))
+        {
+            ValidationMessage = "Enter a valid date and time for both Start and End.";
             return;
         }
 
@@ -264,7 +278,7 @@ public partial class DdqAnalytics : ComponentBase
                         && (!submissionEnd.HasValue || x.SubmissionDateTime < submissionEnd.Value)
                         && (x.IntervalStart.Hour * 60 + x.IntervalStart.Minute) % selectedInterval == 0)
             .OrderByDescending(x => x.Id).ToListAsync();
-        TableRows = timestamps.Select(timestamp =>
+        TableRows = timestamps.OrderByDescending(timestamp => timestamp).Select(timestamp =>
         {
             var timestampReadings = LoadedReadings.Where(x => x.IntervalStart == timestamp).ToList();
             return new DdqTableRow(timestampReadings.Max(reading => reading.SubmissionDateTime), timestamp,
@@ -275,8 +289,10 @@ public partial class DdqAnalytics : ComponentBase
 
     private void ResetFilters()
     {
-        RangeStart = null;
-        RangeEnd = null;
+        RangeStartDateValue = string.Empty;
+        RangeStartTimeValue = string.Empty;
+        RangeEndDateValue = string.Empty;
+        RangeEndTimeValue = string.Empty;
         SubmissionStartDate = null;
         SubmissionEndDate = null;
         SelectedStates = new(StringComparer.OrdinalIgnoreCase);

@@ -5,12 +5,14 @@ using Microsoft.EntityFrameworkCore;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Demo;
 using TestingSystem.Web.Database.Entities;
+using TestingSystem.Web.Services;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
 public partial class ScheduledReports : ComponentBase
 {
     [Inject] private IDbContextFactory<ApplicationDbContext> ContextFactory { get; set; } = default!;
+    [Inject] private IReportEmailSender ReportEmailSender { get; set; } = default!;
 
     private static readonly string[] ApiTypes = ["DDQ", "MMF"];
     private static readonly string[] DdqDataTypes = ["Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month Ahead"];
@@ -88,7 +90,19 @@ public partial class ScheduledReports : ComponentBase
     }
 
     private void ShowSchedules() => ActiveTab = "Schedules";
-    private void ShowDelivery() => ActiveTab = "Delivery";
+    private async Task ShowDelivery()
+    {
+        ActiveTab = "Delivery";
+        await RefreshDeliveriesAsync();
+    }
+
+    private async Task RefreshDeliveriesAsync()
+    {
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        var deliveryRows = await database.ReportDeliveryAttempts.AsNoTracking().Include(x => x.Recipients)
+            .OrderByDescending(x => x.GeneratedAt).ToListAsync();
+        Deliveries = deliveryRows.Select(MapDelivery).ToList();
+    }
 
     private void OpenAddSchedule()
     {
@@ -159,8 +173,13 @@ public partial class ScheduledReports : ComponentBase
 
     private void ToggleScheduleMonth(int month) { if (!SelectedScheduleMonths.Add(month)) SelectedScheduleMonths.Remove(month); }
 
-    private void OnExecutionTimeChanged(ChangeEventArgs args) =>
-        ExecutionTime = args.Value?.ToString() ?? "07:00";
+    private void OnExecutionTimeChanged(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString();
+        ExecutionTime = ReportScheduleTimePolicy.TryNormalize(value, out var normalized)
+            ? normalized
+            : value ?? "07:00";
+    }
 
     private void SetScheduleStatus(bool isActive)
     {
@@ -218,6 +237,12 @@ public partial class ScheduledReports : ComponentBase
             return;
         }
         if (SelectedScheduleType == "4 Month" && SelectedScheduleMonths.Count == 0) { FormError = "Select at least one month for the 4 Month schedule."; return; }
+        if (!ReportScheduleTimePolicy.TryNormalize(ExecutionTime, out var normalizedExecutionTime))
+        {
+            FormError = "Enter a valid schedule time.";
+            return;
+        }
+        ExecutionTime = normalizedExecutionTime;
         if (!string.IsNullOrWhiteSpace(RecipientSearchTerm) && IsValidEmail(RecipientSearchTerm.Trim())) AddRecipientEmail(RecipientSearchTerm);
         var recipients = SelectedRecipientEmails.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (recipients.Count == 0 || recipients.Any(email => !IsValidEmail(email))) { FormError = "Enter at least one valid recipient email address."; return; }
@@ -242,7 +267,15 @@ public partial class ScheduledReports : ComponentBase
         entity.ScheduleMonths = string.Join(',', SelectedScheduleMonths.OrderBy(x => x)); entity.ExecutionTime = ExecutionTime; entity.IsActive = SelectedIsActive;
         entity.Recipients.Clear();
         foreach (var email in recipients) entity.Recipients.Add(new ReportScheduleRecipient { Email = email });
-        await database.SaveChangesAsync();
+        try
+        {
+            await database.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            FormError = "Schedule could not be saved. Check the form and try again.";
+            return;
+        }
         if (EditingScheduleId is null) Schedules.Insert(0, saved);
         else
         {

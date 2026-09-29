@@ -35,6 +35,18 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     private DemoCollectionJob? RunResult { get; set; }
     private string LoadErrorMessage { get; set; } = string.Empty;
     private bool IsLoadingJobs { get; set; }
+    private List<ManualBatchItem> ManualBatchItems { get; set; } = [];
+    private bool ManualBatchHasRun { get; set; }
+    private int ManualBatchCompletedCount => ManualBatchItems.Count(item => item.Status is "Successful" or "Failed");
+    private static readonly IReadOnlyList<ManualBatchOption> ManualBatchOptions =
+    [
+        new("DDQ|Rolling 24 Hour", "DDQ", "Rolling 24 Hour", "DDQ · Rolling 24 Hour"),
+        new("DDQ|Day Ahead", "DDQ", "Day Ahead", "DDQ · Day Ahead"),
+        new("DDQ|Week Ahead", "DDQ", "Week Ahead", "DDQ · Week Ahead"),
+        new("DDQ|4 Month Ahead", "DDQ", "4 Month Ahead", "DDQ · 4 Month Ahead"),
+        new("MMF|MMF", "MMF", "MMF", "MMF · All parameters")
+    ];
+    private string SelectedManualBatchKey { get; set; } = ManualBatchOptions[0].Key;
     private int Sequence { get; set; } = 6;
     private readonly CancellationTokenSource RefreshCancellation = new();
     private Task? RefreshTask { get; set; }
@@ -195,12 +207,222 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         IsRunDialogOpen = true;
     }
 
+    private async Task OpenRunDialogAsync()
+    {
+        ManualCollectionError = string.Empty;
+        ManualBatchHasRun = false;
+        IsReplaceConfirmationOpen = false;
+        RunResult = null;
+        SelectedManualBatchKey = ManualBatchOptions[0].Key;
+        await LoadManualBatchItemsAsync();
+        IsRunDialogOpen = true;
+    }
+
+    private async Task ManualBatchDataTypeChangedAsync()
+    {
+        if (IsRunningManualCollection) return;
+        ManualBatchHasRun = false;
+        ManualCollectionError = string.Empty;
+        await LoadManualBatchItemsAsync();
+    }
+
+    private async Task LoadManualBatchItemsAsync()
+    {
+        var option = ManualBatchOptions.First(item => item.Key == SelectedManualBatchKey);
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        var plants = await database.LssPlants.AsNoTracking().Include(plant => plant.ApiConfigurations)
+            .Where(plant => plant.IsActive).OrderBy(plant => plant.Name).ToListAsync();
+        ManualBatchItems = plants.Select(plant =>
+        {
+            var endpoint = plant.ApiConfigurations.FirstOrDefault(api =>
+                api.ApiType == option.ApiType && api.DataType == option.DataType)?.ApiLink ?? string.Empty;
+            return new ManualBatchItem
+            {
+                PlantDatabaseId = plant.Id,
+                PlantId = plant.PlantId,
+                PlantName = plant.Name,
+                State = plant.State,
+                CapacityMw = plant.CapacityMw,
+                ApiType = option.ApiType,
+                DataType = ManualBatchCollectionPolicy.StoredDataType(option.ApiType, option.DataType),
+                Endpoint = endpoint,
+                Status = "Start",
+                Message = string.IsNullOrWhiteSpace(endpoint) ? "Endpoint not configured" : "Ready to run"
+            };
+        }).ToList();
+    }
+
     private void CloseRunDialog()
     {
+        if (IsRunningManualCollection) return;
         IsRunDialogOpen = false;
         IsReplaceConfirmationOpen = false;
         ManualCollectionError = string.Empty;
         RunResult = null;
+        ManualBatchItems = [];
+        ManualBatchHasRun = false;
+    }
+
+    private async Task RunAllManualCollectionsAsync()
+    {
+        if (IsRunningManualCollection || ManualBatchItems.Count == 0) return;
+        IsRunningManualCollection = true;
+        ManualCollectionError = string.Empty;
+        try
+        {
+            foreach (var item in ManualBatchItems)
+            {
+                item.Status = "Processing";
+                item.Message = string.IsNullOrWhiteSpace(item.Endpoint) ? "Checking API configuration..." : "Contacting API...";
+                await InvokeAsync(StateHasChanged);
+                if (string.IsNullOrWhiteSpace(item.Endpoint))
+                {
+                    item.Status = "Failed";
+                    item.Message = $"No {item.ApiType} {item.DataType} endpoint configured";
+                }
+                else
+                {
+                    await RunBatchEndpointAsync(item);
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+            ManualBatchHasRun = true;
+            await LoadJobsAsync();
+            CollectionPage = 1;
+        }
+        finally
+        {
+            IsRunningManualCollection = false;
+        }
+    }
+
+    private async Task RunBatchEndpointAsync(ManualBatchItem item)
+    {
+        Sequence++;
+        var startedAt = DateTime.Now;
+        var submissionDate = DateOnly.FromDateTime(startedAt);
+        var collectionId = $"MAN-{item.ApiType}-{startedAt:yyyyMMddHHmmssfff}-{Sequence:000}";
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        var entity = new CollectionJobEntity
+        {
+            CollectionId = collectionId,
+            PlantId = item.PlantDatabaseId,
+            DataType = item.DataType,
+            Mode = ManualBatchCollectionPolicy.Mode(item.ApiType),
+            SubmissionDate = submissionDate,
+            StartedAt = DateTimeOffset.Now,
+            Status = "Running",
+            ResponseMessage = $"Manual {item.ApiType} {item.DataType} collection started."
+        };
+        database.CollectionJobs.Add(entity);
+        await database.SaveChangesAsync();
+
+        var watch = Stopwatch.StartNew();
+        LssApiCollectionResult? apiResult = null;
+        try
+        {
+            apiResult = await ApiClient.CollectAsync(item.PlantName, $"{item.ApiType} {item.DataType}", item.Endpoint);
+            if (!apiResult.IsSuccessful) throw new InvalidOperationException(apiResult.Message);
+
+            var intervalMinutes = item.ApiType == "MMF"
+                ? 15
+                : DdqDatasetPolicy.Get(item.DataType).ReferenceTemplateIntervalMinutes;
+            var translated = ScheduledApiPayloadTranslator.Translate(apiResult.Payload, item.ApiType, item.DataType,
+                item.PlantDatabaseId, entity.Id, startedAt, intervalMinutes, apiResult.ContentType);
+            if (translated.Readings.Count == 0)
+                throw new InvalidOperationException("API responded, but no supported numeric readings were found.");
+
+            var strategy = database.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await database.Database.BeginTransactionAsync();
+                var dayStart = submissionDate.ToDateTime(TimeOnly.MinValue);
+                var dayEnd = dayStart.AddDays(1);
+                var replacedJobIds = await database.CollectionJobs.AsNoTracking()
+                    .Where(job => job.Id != entity.Id && job.PlantId == item.PlantDatabaseId
+                        && job.DataType == item.DataType && job.SubmissionDate == submissionDate)
+                    .Select(job => job.Id).ToListAsync();
+                var replacedReadings = await database.SolarApiReadings
+                    .Where(reading => reading.PlantId == item.PlantDatabaseId && reading.DataType == item.DataType
+                        && reading.SubmissionDateTime >= dayStart && reading.SubmissionDateTime < dayEnd)
+                    .ExecuteDeleteAsync();
+                if (replacedJobIds.Count > 0)
+                    await database.DataAnomalies.Where(anomaly => replacedJobIds.Contains(anomaly.CollectionJobId)).ExecuteDeleteAsync();
+
+                database.RawApiResponses.Add(CreateRawResponse(entity.Id, apiResult));
+                database.SolarApiReadings.AddRange(translated.Readings);
+                var anomalyCount = await AddBatchAnomaliesAsync(database, entity, item, translated);
+                watch.Stop();
+                entity.CompletedAt = DateTimeOffset.Now;
+                entity.Status = "Completed";
+                entity.DurationSeconds = watch.Elapsed.TotalSeconds;
+                entity.ResponseMessage = $"HTTP {apiResult.HttpStatusCode}; {translated.Readings.Count:N0} reading(s) saved; {replacedReadings:N0} replaced; {anomalyCount:N0} issue(s).";
+                database.AuditEvents.Add(new AuditEvent
+                {
+                    OccurredAt = DateTimeOffset.UtcNow, Actor = "Current user",
+                    Action = "Run all API manual collection", EntityType = "CollectionJob",
+                    EntityReference = collectionId, Result = "Success", Detail = entity.ResponseMessage,
+                    CorrelationId = $"{item.PlantId}:{item.ApiType}:{item.DataType}"
+                });
+                await database.SaveChangesAsync();
+                await transaction.CommitAsync();
+            });
+            item.Status = "Successful";
+            item.Message = $"{translated.Readings.Count:N0} readings saved";
+        }
+        catch (Exception exception)
+        {
+            watch.Stop();
+            var message = Limit(exception.GetBaseException().Message, 500);
+            database.ChangeTracker.Clear();
+            var failedEntity = await database.CollectionJobs.SingleAsync(job => job.Id == entity.Id);
+            failedEntity.CompletedAt = DateTimeOffset.Now;
+            failedEntity.Status = "Failed";
+            failedEntity.ErrorMessage = message;
+            failedEntity.ResponseMessage = $"Manual {item.ApiType} {item.DataType} collection failed: {message}";
+            failedEntity.DurationSeconds = watch.Elapsed.TotalSeconds;
+            if (apiResult is not null && !string.IsNullOrWhiteSpace(apiResult.Payload))
+                database.RawApiResponses.Add(CreateRawResponse(entity.Id, apiResult));
+            database.AuditEvents.Add(new AuditEvent
+            {
+                OccurredAt = DateTimeOffset.UtcNow, Actor = "Current user",
+                Action = "Run all API manual collection", EntityType = "CollectionJob",
+                EntityReference = collectionId, Result = "Failed", Detail = failedEntity.ResponseMessage,
+                CorrelationId = $"{item.PlantId}:{item.ApiType}:{item.DataType}"
+            });
+            await database.SaveChangesAsync();
+            item.Status = "Failed";
+            item.Message = message;
+        }
+    }
+
+    private static async Task<int> AddBatchAnomaliesAsync(ApplicationDbContext database,
+        CollectionJobEntity job, ManualBatchItem item, TranslationResult result)
+    {
+        var issues = result.Issues.ToList();
+        foreach (var reading in result.Readings)
+        {
+            if (reading.Value < 0)
+                issues.Add(new(item.ApiType == "MMF" ? "MMF-015" : "DDQ-004", reading.Parameter,
+                    reading.Value.ToString(CultureInfo.InvariantCulture), "A negative measurement was received."));
+            if (item.ApiType == "DDQ" && reading.Value > item.CapacityMw)
+                issues.Add(new("DDQ-005", reading.Parameter, reading.Value.ToString(CultureInfo.InvariantCulture),
+                    $"The forecast exceeds the configured plant capacity of {item.CapacityMw:N2} MW."));
+        }
+
+        var ruleCodes = issues.Select(issue => issue.RuleCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var rules = ruleCodes.Count == 0
+            ? new Dictionary<string, ValidationRule>(StringComparer.OrdinalIgnoreCase)
+            : await database.ValidationRules.AsNoTracking().Where(rule => ruleCodes.Contains(rule.Code))
+                .ToDictionaryAsync(rule => rule.Code, StringComparer.OrdinalIgnoreCase);
+        database.DataAnomalies.AddRange(issues.Select(issue => new DataAnomaly
+        {
+            CollectionJobId = job.Id, ValidationRuleId = rules.GetValueOrDefault(issue.RuleCode)?.Id,
+            DataType = item.ApiType, FieldName = Limit(issue.FieldName, 100),
+            OriginalValue = Limit(issue.OriginalValue, 500), Reason = Limit(issue.Reason, 1000),
+            Status = "Open", DetectedAt = DateTimeOffset.UtcNow
+        }));
+        return issues.Count;
     }
 
     private void OpenSummaryDialog(string filter)
@@ -324,43 +546,47 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
             if (readingCount == 0)
                 throw new InvalidOperationException($"The API responded successfully, but no numeric DDQ {dataType} readings could be translated.");
 
-            await using var transaction = await database.Database.BeginTransactionAsync();
-            var dayStart = submissionDate.ToDateTime(TimeOnly.MinValue);
-            var dayEnd = dayStart.AddDays(1);
-            var replacedJobIds = await database.CollectionJobs.AsNoTracking()
-                .Where(job => job.Id != entity.Id && job.PlantId == plant.DatabaseId
-                    && job.DataType == dataType && job.SubmissionDate == submissionDate)
-                .Select(job => job.Id).ToListAsync();
-            replacedReadingCount = await database.SolarApiReadings
-                .Where(reading => reading.PlantId == plant.DatabaseId && reading.DataType == dataType
-                    && reading.SubmissionDateTime >= dayStart && reading.SubmissionDateTime < dayEnd)
-                .ExecuteDeleteAsync();
-            if (replacedJobIds.Count > 0)
-                await database.DataAnomalies.Where(anomaly => replacedJobIds.Contains(anomaly.CollectionJobId)).ExecuteDeleteAsync();
-
-            database.RawApiResponses.Add(CreateRawResponse(entity.Id, apiResult));
-            database.SolarApiReadings.AddRange(translated.Readings);
-            anomalyCount = await AddManualDdqAnomaliesAsync(database, entity, plant, translated);
-
-            watch.Stop();
-            entity.CompletedAt = DateTimeOffset.Now;
-            entity.Status = "Completed";
-            entity.DurationSeconds = watch.Elapsed.TotalSeconds;
-            message = $"HTTP {apiResult.HttpStatusCode}; {readingCount:N0} {dataType} reading(s) saved; {replacedReadingCount:N0} previous reading(s) replaced; {anomalyCount:N0} validation issue(s).";
-            entity.ResponseMessage = message;
-            database.AuditEvents.Add(new AuditEvent
+            var strategy = database.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
             {
-                OccurredAt = DateTimeOffset.UtcNow,
-                Actor = "Current user",
-                Action = "Run manual DDQ collection",
-                EntityType = "CollectionJob",
-                EntityReference = collectionId,
-                Result = "Success",
-                Detail = message,
-                CorrelationId = $"{plant.PlantId}:{dataType}"
+                await using var transaction = await database.Database.BeginTransactionAsync();
+                var dayStart = submissionDate.ToDateTime(TimeOnly.MinValue);
+                var dayEnd = dayStart.AddDays(1);
+                var replacedJobIds = await database.CollectionJobs.AsNoTracking()
+                    .Where(job => job.Id != entity.Id && job.PlantId == plant.DatabaseId
+                        && job.DataType == dataType && job.SubmissionDate == submissionDate)
+                    .Select(job => job.Id).ToListAsync();
+                replacedReadingCount = await database.SolarApiReadings
+                    .Where(reading => reading.PlantId == plant.DatabaseId && reading.DataType == dataType
+                        && reading.SubmissionDateTime >= dayStart && reading.SubmissionDateTime < dayEnd)
+                    .ExecuteDeleteAsync();
+                if (replacedJobIds.Count > 0)
+                    await database.DataAnomalies.Where(anomaly => replacedJobIds.Contains(anomaly.CollectionJobId)).ExecuteDeleteAsync();
+
+                database.RawApiResponses.Add(CreateRawResponse(entity.Id, apiResult));
+                database.SolarApiReadings.AddRange(translated.Readings);
+                anomalyCount = await AddManualDdqAnomaliesAsync(database, entity, plant, translated);
+
+                watch.Stop();
+                entity.CompletedAt = DateTimeOffset.Now;
+                entity.Status = "Completed";
+                entity.DurationSeconds = watch.Elapsed.TotalSeconds;
+                message = $"HTTP {apiResult.HttpStatusCode}; {readingCount:N0} {dataType} reading(s) saved; {replacedReadingCount:N0} previous reading(s) replaced; {anomalyCount:N0} validation issue(s).";
+                entity.ResponseMessage = message;
+                database.AuditEvents.Add(new AuditEvent
+                {
+                    OccurredAt = DateTimeOffset.UtcNow,
+                    Actor = "Current user",
+                    Action = "Run manual DDQ collection",
+                    EntityType = "CollectionJob",
+                    EntityReference = collectionId,
+                    Result = "Success",
+                    Detail = message,
+                    CorrelationId = $"{plant.PlantId}:{dataType}"
+                });
+                await database.SaveChangesAsync();
+                await transaction.CommitAsync();
             });
-            await database.SaveChangesAsync();
-            await transaction.CommitAsync();
         }
         catch (Exception exception)
         {
@@ -449,4 +675,20 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
 
     private sealed record PlantConnection(int DatabaseId, string PlantId, string Name, string State,
         decimal CapacityMw, IReadOnlyDictionary<string, string> ApiEndpoints);
+
+    private sealed class ManualBatchItem
+    {
+        public int PlantDatabaseId { get; init; }
+        public string PlantId { get; init; } = string.Empty;
+        public string PlantName { get; init; } = string.Empty;
+        public string State { get; init; } = string.Empty;
+        public decimal CapacityMw { get; init; }
+        public string ApiType { get; init; } = string.Empty;
+        public string DataType { get; init; } = string.Empty;
+        public string Endpoint { get; init; } = string.Empty;
+        public string Status { get; set; } = "Ready";
+        public string Message { get; set; } = string.Empty;
+    }
+
+    private sealed record ManualBatchOption(string Key, string ApiType, string DataType, string Label);
 }

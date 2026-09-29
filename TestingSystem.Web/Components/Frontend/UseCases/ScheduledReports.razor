@@ -19,6 +19,11 @@
 
     <section class="admin-summary"><div><small>Total schedules</small><strong>@Schedules.Count</strong></div><div><small>Active schedules</small><strong>@Schedules.Count(x => x.IsActive)</strong></div><div><small>Inactive schedules</small><strong>@Schedules.Count(x => !x.IsActive)</strong></div></section>
 
+    @if (!ReportEmailSender.IsConfigured)
+    {
+        <div class="admin-alert warning">Microsoft Graph email is not active yet. An Entra administrator must grant <strong>Mail.Send</strong>, then configure the sender mailbox.</div>
+    }
+
     @if (!string.IsNullOrWhiteSpace(SuccessMessage))
     {
         <div class="admin-overlay success-overlay"><section class="configuration-success-dialog" role="dialog" aria-modal="true">
@@ -61,7 +66,7 @@
     }
     else
     {
-        <section class="admin-toolbar"><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search delivery, API, data type or recipient..." @bind="DeliverySearchTerm" @bind:event="oninput" /></label><span class="result-count">@FilteredDeliveries.Count delivery attempt(s)</span></section>
+        <section class="admin-toolbar"><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search delivery, API, data type or recipient..." @bind="DeliverySearchTerm" @bind:event="oninput" /></label><button class="admin-edit-action" type="button" @onclick="RefreshDeliveriesAsync">Refresh</button><span class="result-count">@FilteredDeliveries.Count delivery attempt(s)</span></section>
         <section class="table-panel automation-panel delivery-panel">
             <div class="automation-heading"><div><p class="section-label">Scheduled report delivery</p><h2>Email report delivery monitor</h2></div><span>Latest delivery attempts shown first · Asia/Kuala_Lumpur</span></div>
             <div class="delivery-table">

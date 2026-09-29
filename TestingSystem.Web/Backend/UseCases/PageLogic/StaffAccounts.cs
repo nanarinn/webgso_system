@@ -48,8 +48,10 @@ public partial class StaffAccounts : ComponentBase
     {
         await using var database = await ContextFactory.CreateDbContextAsync();
         var accounts = await database.Users.AsNoTracking()
-            .OrderBy(user => user.AccessStatus == UserAccessStatus.Pending ? 0 : 1)
-            .ThenBy(user => user.DisplayName).ToListAsync();
+            .OrderByDescending(user => user.AccessRequestedAt.HasValue)
+            .ThenByDescending(user => user.AccessRequestedAt)
+            .ThenByDescending(user => user.Id)
+            .ToListAsync();
         var rows = new List<UserRow>();
         var roleNames = await database.Roles.AsNoTracking().ToDictionaryAsync(role => role.Id, role => role.Name ?? "");
         var userRoles = await database.UserRoles.AsNoTracking().ToListAsync();

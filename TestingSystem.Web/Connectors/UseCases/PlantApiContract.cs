@@ -10,6 +10,8 @@ public interface ILssDataApiClient
 
     Task<LssApiTestResult> TestConnectionAsync(
         string endpoint,
+        string apiType,
+        string dataType,
         CancellationToken cancellationToken = default);
 }
 

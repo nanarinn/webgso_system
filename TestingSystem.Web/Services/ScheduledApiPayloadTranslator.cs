@@ -246,8 +246,29 @@ public static class ScheduledApiPayloadTranslator
         {
             var fields = row.Elements().GroupBy(item => item.Name.LocalName, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First().Value, StringComparer.OrdinalIgnoreCase);
-            AddFields(fields, fallback, intervalMinutes, readings);
+            var inheritedTimestamp = ParseNamedTimestamp(fields, TimestampNames)
+                ?? ReadAncestorTimestamp(row, TimestampNames)
+                ?? fallback;
+            var inheritedSubmission = ParseNamedTimestamp(fields, SubmissionTimestampNames)
+                ?? ReadAncestorTimestamp(row, SubmissionTimestampNames)
+                ?? fallback;
+            var inheritedEndTimestamp = ParseNamedTimestamp(fields, EndTimestampNames)
+                ?? ReadAncestorTimestamp(row, EndTimestampNames);
+            AddFields(fields, inheritedTimestamp, intervalMinutes, readings, inheritedSubmission, inheritedEndTimestamp);
         }
+    }
+
+    private static DateTime? ReadAncestorTimestamp(XElement element, IEnumerable<string> names)
+    {
+        foreach (var ancestor in element.Ancestors())
+        {
+            var fields = ancestor.Elements().Where(child => !child.HasElements)
+                .GroupBy(child => child.Name.LocalName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First().Value, StringComparer.OrdinalIgnoreCase);
+            var timestamp = ParseNamedTimestamp(fields, names);
+            if (timestamp.HasValue) return timestamp;
+        }
+        return null;
     }
 
     private static void ReadDelimited(string payload, DateTime fallback, int intervalMinutes, List<ReadingCandidate> readings)
@@ -267,13 +288,13 @@ public static class ScheduledApiPayloadTranslator
     }
 
     private static void AddFields(IReadOnlyDictionary<string, string> fields, DateTime fallback, int intervalMinutes,
-        List<ReadingCandidate> readings, DateTime? inheritedSubmission = null)
+        List<ReadingCandidate> readings, DateTime? inheritedSubmission = null, DateTime? fallbackEnd = null)
     {
         var compositeTimestamp = ParseCompositeTimestamp(fields, intervalMinutes);
         var explicitTimestamp = ParseNamedTimestamp(fields, TimestampNames);
         var timestamp = explicitTimestamp ?? compositeTimestamp ?? fallback;
         var submissionTimestamp = ParseNamedTimestamp(fields, SubmissionTimestampNames) ?? inheritedSubmission ?? fallback;
-        var end = ParseNamedTimestamp(fields, EndTimestampNames);
+        var end = ParseNamedTimestamp(fields, EndTimestampNames) ?? fallbackEnd;
         var parameter = First(fields, ParameterNames);
         var unit = First(fields, UnitNames) ?? string.Empty;
         var explicitValue = ParseNamedDecimal(fields, ValueNames);

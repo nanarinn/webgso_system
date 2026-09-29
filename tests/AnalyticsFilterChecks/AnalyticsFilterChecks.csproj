@@ -22,6 +22,11 @@
     <Compile Include="../../TestingSystem.Web/Services/OnDemandReportReference.cs" Link="OnDemandReportReference.cs" />
     <Compile Include="../../TestingSystem.Web/Services/OnDemandCsvExporter.cs" Link="OnDemandCsvExporter.cs" />
     <Compile Include="../../TestingSystem.Web/Services/ManualDdqCollectionPolicy.cs" Link="ManualDdqCollectionPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/ManualBatchCollectionPolicy.cs" Link="ManualBatchCollectionPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/OnDemandReportOwnership.cs" Link="OnDemandReportOwnership.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/LssPlantApiConfigurationPolicy.cs" Link="LssPlantApiConfigurationPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/LssApiPayloadVerifier.cs" Link="LssApiPayloadVerifier.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/ReportScheduleTimePolicy.cs" Link="ReportScheduleTimePolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/ReportScheduleDuePolicy.cs" Link="ReportScheduleDuePolicy.cs" />
   </ItemGroup>
 </Project>

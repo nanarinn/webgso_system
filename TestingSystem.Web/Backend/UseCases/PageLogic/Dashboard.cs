@@ -33,7 +33,8 @@ public partial class Dashboard : ComponentBase
         await using var database = await ContextFactory.CreateDbContextAsync();
         var plants = await database.LssPlants
             .Where(plant => plant.IsActive)
-            .OrderBy(plant => plant.Name)
+            .OrderByDescending(plant => plant.CreatedAt)
+            .ThenByDescending(plant => plant.Id)
             .ToListAsync();
 
         var jobs = await database.CollectionJobs.AsNoTracking().OrderByDescending(x => x.StartedAt)

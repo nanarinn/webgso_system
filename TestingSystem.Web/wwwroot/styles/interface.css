@@ -363,7 +363,7 @@ body:has(.admin-overlay) { overflow: hidden; }
 .schedule-month-options button:hover { border-color: #6ba9c4; background: #eef7fa; }
 .schedule-month-options button.selected { border-color: #087f69; color: #fff; background: #087f69; box-shadow: 0 4px 10px rgb(8 127 105 / 18%); }
 .schedule-admin-table { min-width: 1240px; }
-.schedule-admin-row { min-height: 76px; padding: 14px 22px; grid-template-columns: minmax(250px, 1.35fr) minmax(210px, 1.1fr) 130px minmax(160px, .9fr) 72px 105px 90px 76px; gap: 18px; font-size: .74rem; transition: background 140ms ease; }
+.schedule-admin-row { min-height: 76px; padding: 14px 22px; grid-template-columns: minmax(220px, 1.45fr) minmax(170px, 1.1fr) 130px minmax(150px, .9fr) 62px 95px 105px 120px 72px; gap: 14px; font-size: .74rem; transition: background 140ms ease; }
 .schedule-admin-row:not(.admin-table-header):hover { background: #f4f9fc; }
 .schedule-admin-row.admin-table-header { min-height: 58px; color: #587185; background: #edf6f9; font-size: .65rem; letter-spacing: .045em; }
 .schedule-identity { min-width: 0; }
@@ -644,9 +644,13 @@ body:has(.admin-overlay) { overflow: hidden; }
 
 .schedule-admin-table { width: 100%; min-width: 0; }
 .schedule-admin-row {
-    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1.2fr) minmax(0, .82fr) minmax(0, 1fr)
-        minmax(45px, .45fr) minmax(0, .68fr) minmax(0, .58fr) minmax(52px, .5fr);
+    grid-template-columns: minmax(220px, 1.45fr) minmax(170px, 1.1fr) 130px minmax(150px, .9fr)
+        62px 95px 105px 120px 72px;
 }
+.schedules-page .admin-panel { overflow-x: auto; }
+.schedules-page .schedule-admin-table { width: 100%; min-width: 1280px; }
+.schedules-page .schedule-admin-row.admin-table-header > span { white-space: nowrap; }
+.schedules-page .schedule-admin-row .admin-edit-action { width: 100%; min-width: 0; }
 
 .user-admin-row {
     grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, .82fr) minmax(0, .62fr)

@@ -8,7 +8,7 @@
         <span class="user-avatar">@GetInitial(DisplayName)</span>
         <span>
             <strong>@DisplayName</strong>
-            <small>@RoleName · Edit profile</small>
+            <small>@RoleName · View profile</small>
         </span>
     </button>
 }
@@ -19,30 +19,30 @@
         <section class="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-title">
             <div class="profile-dialog-header">
                 <div>
-                    <p class="section-label">Account settings</p>
-                    <h2 id="profile-title">Edit profile</h2>
+                    <p class="section-label">Account information</p>
+                    <h2 id="profile-title">View profile</h2>
                 </div>
                 <button class="profile-close" type="button" @onclick="CloseProfile" aria-label="Close profile">×</button>
             </div>
 
-            <form @onsubmit="SaveProfile" @onsubmit:preventDefault>
+            <form class="profile-content">
                 <div class="profile-identity">
-                    <span class="profile-large-avatar">@GetInitial(EditDisplayName)</span>
+                    <span class="profile-large-avatar">@GetInitial(DisplayName)</span>
                     <div>
                         <strong>@DisplayName</strong>
-                        <small>Only name and phone number can be changed.</small>
+                        <small>Your account details are view-only.</small>
                     </div>
                 </div>
 
                 <div class="profile-form-grid">
                     <label class="profile-field">
-                        <span>Name <b>Editable</b></span>
-                        <input type="text" maxlength="160" required @bind="EditDisplayName" />
+                        <span>Name</span>
+                        <input type="text" value="@DisplayName" readonly />
                     </label>
 
                     <label class="profile-field">
-                        <span>Phone number <b>Editable</b></span>
-                        <input type="tel" maxlength="32" placeholder="+60 12-345 6789" @bind="EditPhoneNumber" />
+                        <span>Phone number</span>
+                        <input type="tel" value="@PhoneNumber" readonly />
                     </label>
 
                     <label class="profile-field">
@@ -66,16 +66,8 @@
                     </label>
                 </div>
 
-                @if (!string.IsNullOrEmpty(StatusMessage))
-                {
-                    <p class="profile-message @(SaveSucceeded ? "success" : "error")" role="status">@StatusMessage</p>
-                }
-
                 <div class="profile-actions">
-                    <button class="profile-cancel" type="button" @onclick="CloseProfile">Cancel</button>
-                    <button class="primary-action" type="submit" disabled="@IsSaving">
-                        @(IsSaving ? "Saving..." : "Save changes") <span>→</span>
-                    </button>
+                    <button class="primary-action" type="button" @onclick="CloseProfile">Close</button>
                 </div>
             </form>
         </section>
@@ -85,12 +77,7 @@
 @code {
     private ApplicationUser? CurrentUser { get; set; }
     private string RoleName { get; set; } = "User";
-    private string EditDisplayName { get; set; } = string.Empty;
-    private string EditPhoneNumber { get; set; } = string.Empty;
-    private string StatusMessage { get; set; } = string.Empty;
     private bool IsOpen { get; set; }
-    private bool IsSaving { get; set; }
-    private bool SaveSucceeded { get; set; }
 
     private string DisplayName => string.IsNullOrWhiteSpace(CurrentUser?.DisplayName)
         ? CurrentUser?.UserName ?? "User"
@@ -99,6 +86,10 @@
     private string EmailAddress => string.IsNullOrWhiteSpace(CurrentUser?.Email)
         ? "Not assigned"
         : CurrentUser.Email;
+
+    private string PhoneNumber => string.IsNullOrWhiteSpace(CurrentUser?.PhoneNumber)
+        ? "Not assigned"
+        : CurrentUser.PhoneNumber;
 
     protected override async Task OnInitializedAsync()
     {
@@ -114,88 +105,17 @@
         {
             var roles = await userManager.GetRolesAsync(CurrentUser);
             RoleName = roles.FirstOrDefault() ?? "User";
-            ResetEditableFields();
         }
     }
 
     private void OpenProfile()
     {
-        ResetEditableFields();
-        StatusMessage = string.Empty;
-        SaveSucceeded = false;
         IsOpen = true;
     }
 
     private void CloseProfile()
     {
-        ResetEditableFields();
-        StatusMessage = string.Empty;
         IsOpen = false;
-    }
-
-    private async Task SaveProfile()
-    {
-        if (CurrentUser is null)
-        {
-            return;
-        }
-
-        var displayName = EditDisplayName.Trim();
-        var phoneNumber = EditPhoneNumber.Trim();
-
-        if (string.IsNullOrWhiteSpace(displayName))
-        {
-            SetError("Name is required.");
-            return;
-        }
-
-        if (phoneNumber.Length > 0
-            && !System.Text.RegularExpressions.Regex.IsMatch(phoneNumber, @"^[0-9+()\-\s]{7,32}$"))
-        {
-            SetError("Enter a valid phone number using numbers, spaces, +, - or brackets.");
-            return;
-        }
-
-        IsSaving = true;
-        StatusMessage = string.Empty;
-
-        await using var scope = ScopeFactory.CreateAsyncScope();
-        var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
-        var databaseUser = await userManager.FindByIdAsync(CurrentUser.Id);
-        if (databaseUser is null)
-        {
-            IsSaving = false;
-            SetError("The profile could not be found. Please sign in again.");
-            return;
-        }
-
-        databaseUser.DisplayName = displayName;
-        databaseUser.PhoneNumber = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber;
-        var result = await userManager.UpdateAsync(databaseUser);
-        IsSaving = false;
-
-        if (!result.Succeeded)
-        {
-            SetError(string.Join(" ", result.Errors.Select(error => error.Description)));
-            return;
-        }
-
-        CurrentUser = databaseUser;
-        ResetEditableFields();
-        SaveSucceeded = true;
-        StatusMessage = "Profile saved successfully to MS SQL.";
-    }
-
-    private void ResetEditableFields()
-    {
-        EditDisplayName = CurrentUser?.DisplayName ?? string.Empty;
-        EditPhoneNumber = CurrentUser?.PhoneNumber ?? string.Empty;
-    }
-
-    private void SetError(string message)
-    {
-        SaveSucceeded = false;
-        StatusMessage = message;
     }
 
     private static string GetInitial(string? name) =>

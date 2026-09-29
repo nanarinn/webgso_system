@@ -39,26 +39,113 @@
         }
     </div>
 
-    @{ var configurations = FilteredApiConfigurations.Where(api => api.ApiType == SelectedApiType).ToList(); }
+    @{
+        var apiPlants = FilteredPlants
+            .Where(plant => plant.ApiConfigurations.Any(api => api.ApiType == SelectedApiType))
+            .ToList();
+        var endpointCount = apiPlants.Sum(plant => plant.ApiConfigurations.Count(api => api.ApiType == SelectedApiType));
+    }
     <section class="table-panel admin-panel api-registry-panel">
-        <div class="admin-table-heading"><div><p class="section-label">@SelectedApiType API registry</p><h2>@SelectedApiType API Configuration</h2></div><span>@configurations.Count endpoint(s) · Administrator access only</span></div>
-        <div class="plant-admin-table"><div class="plant-admin-row admin-table-header"><span>Plant</span><span>State</span><span>Capacity</span><span>API Type</span><span>Data Type</span><span>API Link</span><span>Status</span><span>Action</span></div>
-            @foreach (var api in TablePaging.Slice(configurations, PlantApiPage))
+        <div class="admin-table-heading"><div><p class="section-label">@SelectedApiType API registry</p><h2>@SelectedApiType API Configuration</h2></div><span>@apiPlants.Count plant(s) · @endpointCount endpoint(s)</span></div>
+        <div class="plant-registry-scroll">
+        <table class="plant-registry-data">
+            <colgroup><col class="plant-column" /><col class="state-column" /><col class="type-column" /><col class="data-column" /><col class="link-column" /><col class="registered-column" /><col class="status-column" /><col class="action-column" /></colgroup>
+            <thead><tr><th>Plant</th><th>State</th><th>API Type</th><th>Data Type</th><th>API Link</th><th>Registered</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+            @foreach (var plant in TablePaging.Slice(apiPlants, PlantApiPage))
             {
-                <div class="plant-admin-row"><div class="admin-entity"><span>@GetCode(api.Plant.Name)</span><div><strong>@api.Plant.Name</strong><small>@api.Plant.PlantId</small></div></div><span>@api.Plant.State</span><strong>@api.Plant.CapacityMw.ToString("N0") MW</strong><span class="api-type-badge api-type-@api.ApiType.ToLowerInvariant()">@api.ApiType</span><strong>@api.DataType</strong><code title="@api.ApiLink">@api.ApiLink</code><span class="status-pill @(api.Plant.IsActive ? "status-successful" : "status-failed")">@(api.Plant.IsActive ? "Active" : "Inactive")</span><button class="admin-edit-action" type="button" @onclick="() => OpenEditDialog(api.Plant, api.ApiType)">Edit</button></div>
+                var endpoints = plant.ApiConfigurations
+                    .Where(api => api.ApiType == SelectedApiType)
+                    .OrderBy(api => Array.IndexOf(DdqDataTypes, api.DataType))
+                    .ThenBy(api => api.DataType)
+                    .ToList();
+                @for (var endpointIndex = 0; endpointIndex < endpoints.Count; endpointIndex++)
+                {
+                    var api = endpoints[endpointIndex];
+                    <tr class="@(endpointIndex == 0 ? "plant-first-endpoint" : "plant-next-endpoint")">
+                        @if (endpointIndex == 0)
+                        {
+                            <th class="plant-table-identity" rowspan="@endpoints.Count" scope="rowgroup"><div class="admin-entity"><span>@GetCode(plant.Name)</span><div><strong>@plant.Name</strong><small>@plant.PlantId</small></div></div></th>
+                            <td class="plant-table-state" rowspan="@endpoints.Count">@plant.State</td>
+                        }
+                        <td><span class="api-type-badge api-type-@api.ApiType.ToLowerInvariant()">@api.ApiType</span></td>
+                        <td class="plant-table-data-type"><strong>@api.DataType</strong></td>
+                        <td><code title="@api.ApiLink">@api.ApiLink</code></td>
+                        @if (endpointIndex == 0)
+                        {
+                            <td rowspan="@endpoints.Count"><time class="plant-registered-time" datetime="@plant.CreatedAt.ToString("O")"><strong>@FormatRegisteredDate(plant.CreatedAt)</strong><small>@FormatRegisteredTime(plant.CreatedAt) MYT</small></time></td>
+                            <td rowspan="@endpoints.Count"><span class="status-pill @(plant.IsActive ? "status-successful" : "status-failed")">@(plant.IsActive ? "Active" : "Inactive")</span></td>
+                            <td rowspan="@endpoints.Count"><button class="admin-edit-action" type="button" @onclick="() => OpenEditDialog(plant)">Edit</button></td>
+                        }
+                    </tr>
+                }
             }
-            @if (configurations.Count == 0)
+            @if (apiPlants.Count == 0)
             {
-                <div class="api-registry-empty">No @SelectedApiType API configuration matches the current search.</div>
+                <tr><td class="api-registry-empty" colspan="8">No @SelectedApiType API configuration matches the current search.</td></tr>
             }
+            </tbody>
+        </table>
         </div>
-        <TablePagination TotalItems="@configurations.Count" @bind-Page="PlantApiPage" />
+        <TablePagination TotalItems="@apiPlants.Count" @bind-Page="PlantApiPage" />
     </section>
 
     @if (IsDialogOpen)
     {
         <div class="admin-overlay"><section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="plant-form-title"><div class="admin-dialog-header"><div><p class="section-label">@(EditingPlantId.HasValue ? "Update configuration" : "New configuration")</p><h2 id="plant-form-title">@(EditingPlantId.HasValue ? "Edit LSS plant" : "Add LSS plant")</h2></div><button class="profile-close" type="button" @onclick="CloseDialog">&#215;</button></div>
-            <form @onsubmit="SavePlantAsync" @onsubmit:preventDefault>@if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }<div class="admin-form-grid plant-details-grid"><label><span>Plant name</span><input required @bind="NewName" /></label><label><span>Plant ID</span><input required @bind="NewPlantId" /></label><label><span>State</span><select @bind="NewState">@foreach (var state in States){<option>@state</option>}</select></label><label><span>Capacity (MW)</span><input type="number" min="1" required @bind="NewCapacity" /></label><label class="wide"><span>API type</span><select @bind="NewApiType" @bind:after="ApiTypeChanged"><option value="DDQ">DDQ</option><option value="MMF">MMF</option></select></label></div><div class="api-config-heading"><div><strong>@NewApiType endpoint@(NewApiType == "DDQ" ? "s" : null)</strong><small>@(NewApiType == "DDQ" ? "Choose one unique data type for every API link." : "MMF supports one API link for each plant.")</small></div></div><div class="api-link-list">@foreach (var link in NewApiLinks){<div class="api-link-entry"><label><span>Data type</span><select @bind="link.DataType" disabled="@(NewApiType == "MMF")">@if(NewApiType == "DDQ"){@foreach(var type in AvailableDataTypes(link)){<option value="@type">@type</option>}}else{<option value="MMF">MMF</option>}</select></label><label><span>API link</span><input type="url" required placeholder="https://api.example.com/collection" @bind="link.ApiLink" /></label>@if(NewApiType == "DDQ"){<button type="button" title="Remove API link" disabled="@(NewApiLinks.Count == 1)" @onclick="() => RemoveApiLink(link)">&#215;</button>}</div>}@if(CanAddApiLink){<button class="add-api-link" type="button" @onclick="AddApiLink">+ Add another DDQ API link</button>}</div>@if(IsDeleteConfirmationOpen){<div class="schedule-confirm-overlay"><section class="schedule-status-confirmation delete-confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="plant-delete-title"><button class="profile-close" type="button" aria-label="Close confirmation" @onclick="HideDeleteConfirmation">&#215;</button><span class="schedule-status-warning">!</span><div><p class="section-label">Delete plant</p><h3 id="plant-delete-title">Delete this plant?</h3><p><b>@NewName</b> (@NewPlantId), its API configurations, collection schedules, collection history, readings and anomalies will be permanently removed.</p><div><button type="button" class="profile-cancel" @onclick="HideDeleteConfirmation">Keep Plant</button><button type="button" class="confirm-delete-action" @onclick="DeletePlantAsync">Confirm Delete</button></div></div></section></div>}<div class="profile-actions plant-form-actions">@if(EditingPlantId.HasValue && !IsDeleteConfirmationOpen){<button class="delete-plant-action" type="button" @onclick="ShowDeleteConfirmation">Delete Plant</button>}<span></span><button class="profile-cancel" type="button" @onclick="CloseDialog">Cancel</button><button class="primary-action admin-primary" type="submit" disabled="@IsDeleteConfirmationOpen">@(EditingPlantId.HasValue ? "Save Changes" : "Save Plant to MS SQL")</button></div></form>
+            <form @onsubmit="SavePlantAsync" @onsubmit:preventDefault>
+                @if (!string.IsNullOrWhiteSpace(FormError))
+                {
+                    <div class="admin-alert error">@FormError</div>
+                }
+                <div class="admin-form-grid plant-details-grid">
+                    <label><span>Plant name</span><input required @bind="NewName" /></label>
+                    <label><span>Plant ID</span><input required @bind="NewPlantId" /></label>
+                    <label><span>State</span><select @bind="NewState">@foreach (var state in States) { <option>@state</option> }</select></label>
+                    <label><span>Capacity (MW)</span><input type="number" min="1" required @bind="NewCapacity" /></label>
+                </div>
+
+                <div class="api-config-heading">
+                    <div><strong>DDQ endpoints <span class="required-indicator">Required</span></strong><small>Complete DDQ first. Choose one unique data type for every API link.</small></div>
+                </div>
+                <div class="api-link-list">
+                    @foreach (var link in NewApiLinks)
+                    {
+                        <div class="api-link-entry">
+                            <label><span>Data type</span><select @bind="link.DataType" @bind:after="() => ClearEndpointStatus(link)">@foreach (var type in AvailableDataTypes(link)) { <option value="@type">@type</option> }</select></label>
+                            <label class="@EndpointFieldClass(link.ValidationState)"><span>DDQ API link</span><input type="url" required placeholder="https://api.example.com/ddq" @bind="link.ApiLink" @bind:event="oninput" @bind:after="() => ClearEndpointStatus(link)" />
+                                @if (link.ValidationState != "idle") { <small class="endpoint-verification"><b>@(link.ValidationState == "verified" ? "✓" : link.ValidationState == "failed" ? "!" : "…")</b> @link.ValidationMessage</small> }
+                            </label>
+                            <button type="button" title="Remove DDQ API link" disabled="@(NewApiLinks.Count == 1)" @onclick="() => RemoveApiLink(link)">&#215;</button>
+                        </div>
+                    }
+                    @if (CanAddApiLink)
+                    {
+                        <button class="add-api-link" type="button" @onclick="AddApiLink">+ Add another DDQ API link</button>
+                    }
+                </div>
+
+                <div class="api-config-heading api-config-heading-mmf">
+                    <div><strong>MMF endpoint <span class="required-indicator">Required</span></strong><small>MMF supports one API link for each plant and must be completed before saving.</small></div>
+                </div>
+                <div class="api-link-list">
+                    <div class="api-link-entry mmf-api-link-entry">
+                        <label><span>Data type</span><select disabled><option>MMF</option></select></label>
+                        <label class="@EndpointFieldClass(MmfValidationState)"><span>MMF API link</span><input type="url" required placeholder="https://api.example.com/mmf" @bind="NewMmfApiLink" @bind:event="oninput" @bind:after="ClearMmfEndpointStatus" />
+                            @if (MmfValidationState != "idle") { <small class="endpoint-verification"><b>@(MmfValidationState == "verified" ? "✓" : MmfValidationState == "failed" ? "!" : "…")</b> @MmfValidationMessage</small> }
+                        </label>
+                    </div>
+                </div>
+
+                @if (IsDeleteConfirmationOpen)
+                {
+                    <div class="schedule-confirm-overlay"><section class="schedule-status-confirmation delete-confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="plant-delete-title"><button class="profile-close" type="button" aria-label="Close confirmation" @onclick="HideDeleteConfirmation">&#215;</button><span class="schedule-status-warning">!</span><div><p class="section-label">Delete plant</p><h3 id="plant-delete-title">Delete this plant?</h3><p><b>@NewName</b> (@NewPlantId), its API configurations, collection schedules, collection history, readings and anomalies will be permanently removed.</p><div><button type="button" class="profile-cancel" @onclick="HideDeleteConfirmation">Keep Plant</button><button type="button" class="confirm-delete-action" @onclick="DeletePlantAsync">Confirm Delete</button></div></div></section></div>
+                }
+                <div class="profile-actions plant-form-actions">
+                    @if (EditingPlantId.HasValue && !IsDeleteConfirmationOpen) { <button class="delete-plant-action" type="button" @onclick="ShowDeleteConfirmation">Delete Plant</button> }
+                    <span></span><button class="profile-cancel" type="button" disabled="@IsSavingPlant" @onclick="CloseDialog">Cancel</button><button class="primary-action admin-primary" type="submit" disabled="@(IsDeleteConfirmationOpen || IsSavingPlant)">@(IsSavingPlant ? "Saving..." : "Save Plant")</button>
+                </div>
+            </form>
         </section></div>
     }
 
@@ -71,10 +158,11 @@
                     <button class="profile-close" type="button" @onclick="CloseApiTestDialog">&#215;</button>
                 </div>
                 <div class="api-test-form">
-                    <p>Select a registered plant and endpoint. The latest URL and test result will be saved to MS SQL.</p>
+                    <p>Select a registered plant endpoint. Only a verified data payload will replace the URL in MS SQL; failed tests save the failure status only.</p>
                     <div class="admin-form-grid">
                         <label><span>LSS plant</span><select @bind="TestPlantId" @bind:after="LoadSelectedEndpoint">@foreach (var plant in Plants) { <option value="@plant.Id">@plant.Name</option> }</select></label>
-                        <label><span>API type</span><select @bind="TestApiSource" @bind:after="LoadSelectedEndpoint"><option>DDQ</option><option>MMF</option></select></label>
+                        <label><span>API type</span><select @bind="TestApiSource" @bind:after="TestApiSourceChanged"><option>DDQ</option><option>MMF</option></select></label>
+                        <label><span>Data type</span><select @bind="TestDataType" @bind:after="LoadSelectedEndpoint">@foreach (var dataType in TestDataTypes) { <option value="@dataType">@dataType</option> }</select></label>
                         <label class="wide"><span>API link</span><input type="url" required @bind="TestApiEndpoint" /></label>
                     </div>
 
@@ -82,7 +170,7 @@
                     {
                         <section class="api-test-result @(LastTestResult.IsConnected ? "connected" : "failed")">
                             <span>@(LastTestResult.IsConnected ? "OK" : "!")</span>
-                            <div><strong>@(LastTestResult.IsConnected ? "API Connected" : "API Test Failed")</strong><p>@LastTestResult.Message</p><small>Response time: @LastTestResult.ElapsedMilliseconds ms</small></div>
+                            <div><strong>@(LastTestResult.IsConnected ? "API Connected" : "API Test Failed")</strong><p>@(LastTestResult.IsConnected ? "API verified." : "Invalid API endpoint.")</p><small>Response time: @LastTestResult.ElapsedMilliseconds ms</small></div>
                         </section>
                     }
 

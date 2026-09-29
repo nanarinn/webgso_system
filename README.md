@@ -101,6 +101,24 @@ Approval and rejection email records are stored in `UserAccessNotifications`. To
 an SMTP gateway, set `ApprovalEmail:Enabled`, `Host`, `Port`, `Sender`, `UseSsl`, and any required
 `UserName`/`Password` through environment variables or .NET user secrets. Never commit credentials.
 
+### Scheduled report email through Microsoft Graph
+
+Report Automation sends its CSV attachment in the background through Microsoft Graph. In the Entra
+app registration, add the Microsoft Graph **Application** permission `Mail.Send` and grant tenant
+administrator consent. The configured sender must be a valid Microsoft 365 mailbox. The report
+service can reuse the `EntraId` tenant, client ID and client secret; only the following settings are
+then required:
+
+```powershell
+dotnet user-secrets set "ReportEmail:Enabled" "true" --project .\TestingSystem.Web\TestingSystem.Web.csproj
+dotnet user-secrets set "ReportEmail:SenderMailbox" "reports@your-company.example" --project .\TestingSystem.Web\TestingSystem.Web.csproj
+```
+
+To use a separate app registration, also set `ReportEmail:TenantId`, `ReportEmail:ClientId`, and
+`ReportEmail:ClientSecret` in user secrets. Never put the client secret in `appsettings.json`.
+Delivery attempts appear under **Report Automation > Delivery monitor** as Processing, Delivered,
+or Failed. A report is attached only when the selected DDQ or MMF readings exist in MS SQL.
+
 Development accounts are configured in `TestingSystem.Web/appsettings.Development.json`. Change their passwords before sharing or deployment.
 
 ## Code folders

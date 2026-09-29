@@ -183,6 +183,24 @@ var forecastXml = ScheduledApiPayloadTranslator.Translate(
 if (forecastXml.Readings.Count != 2 || forecastXml.Readings.Any(reading => reading.IntervalMinutes != 15)
     || forecastXml.Readings[0].Parameter != "DayAhead" || forecastXml.Readings[1].Value != 7.8m)
     throw new Exception("The LSS forecast XML contract must retain every API timestamp and detect its 15-minute interval");
+var translatedSoapDayAhead = ScheduledApiPayloadTranslator.Translate(
+    """<s:Envelope xmlns:s="urn:soap"><s:Body><DayAheadResponse><PlantForecastIntervals><PlantForecastIntervalNode><IntervalStartTime>2026-08-30T00:00:00</IntervalStartTime><IntervalEndTime>2026-08-30T00:15:00</IntervalEndTime><IntervalLength>15</IntervalLength><Forecast><PlantForecastNode><DataErrorCode>0</DataErrorCode><DataErrorMessage>OK</DataErrorMessage><ForecastResultParameter>DayAhead</ForecastResultParameter><ForecastValue>7.25</ForecastValue><ValueUnit>MW</ValueUnit></PlantForecastNode></Forecast></PlantForecastIntervalNode></PlantForecastIntervals></DayAheadResponse></s:Body></s:Envelope>""",
+    "DDQ", "Day Ahead", 1, 105, scheduleNow, 15, "application/soap+xml");
+if (translatedSoapDayAhead.Readings.Count != 1
+    || translatedSoapDayAhead.Readings[0].IntervalStart != new DateTime(2026, 8, 30, 0, 0, 0)
+    || translatedSoapDayAhead.Readings[0].IntervalEnd != new DateTime(2026, 8, 30, 0, 15, 0)
+    || translatedSoapDayAhead.Readings[0].Parameter != "DayAhead"
+    || translatedSoapDayAhead.Readings[0].Value != 7.25m
+    || translatedSoapDayAhead.Readings[0].Unit != "MW")
+    throw new Exception("Nested SOAP Day Ahead payload translation failed");
+var translatedFlatDayAhead = ScheduledApiPayloadTranslator.Translate(
+    """<PlantForecastIntervals><PlantForecastIntervalNode><IntervalStartTime>2026-08-31T00:00:00</IntervalStartTime><IntervalEndTime>2026-08-31T00:15:00</IntervalEndTime><IntervalLength>15</IntervalLength><ForecastResultParameter>DayAhead</ForecastResultParameter><ForecastValue>8.5</ForecastValue><ValueUnit>MW</ValueUnit></PlantForecastIntervalNode></PlantForecastIntervals>""",
+    "DDQ", "Day Ahead", 1, 106, scheduleNow, 15, "application/xml");
+if (translatedFlatDayAhead.Readings.Count != 1
+    || translatedFlatDayAhead.Readings[0].IntervalStart != new DateTime(2026, 8, 31, 0, 0, 0)
+    || translatedFlatDayAhead.Readings[0].Parameter != "DayAhead"
+    || translatedFlatDayAhead.Readings[0].Value != 8.5m)
+    throw new Exception("Flat XML Day Ahead payload translation failed");
 var translatedCsv = ScheduledApiPayloadTranslator.Translate(
     "timestamp,forecastValue,valueUnit\n2026-09-23T10:00:00+08:00,18.75,MW",
     "DDQ", "Day Ahead", 1, 103, scheduleNow, 15, "text/csv");
@@ -296,6 +314,53 @@ if (ManualDdqCollectionPolicy.Evaluate(0, ["Running"]) != ManualCollectionExisti
     || ManualDdqCollectionPolicy.Evaluate(0, []) != ManualCollectionExistingState.None)
     throw new Exception("Manual DDQ replacement checks must distinguish running, failed, existing and new datasets");
 Console.WriteLine("PASS: Manual DDQ type restrictions and replacement confirmation states");
+if (ManualBatchCollectionPolicy.StoredDataType("MMF", "All MMF parameters") != "MMF"
+    || ManualBatchCollectionPolicy.StoredDataType("DDQ", " Rolling 24 Hour ") != "Rolling 24 Hour"
+    || ManualBatchCollectionPolicy.Mode("MMF") != "Manual MMF"
+    || ManualBatchCollectionPolicy.Mode("DDQ") != "Manual DDQ")
+    throw new Exception("Run-all manual collection must map every DDQ and MMF endpoint to its stored dataset");
+Console.WriteLine("PASS: Run-all manual collection maps DDQ and MMF endpoint jobs correctly");
+var completePlantApiConfiguration = LssPlantApiConfigurationPolicy.Validate(
+    [new PlantApiEndpointInput("Rolling 24 Hour", "https://api.example.com/ddq")],
+    "https://api.example.com/mmf");
+if (completePlantApiConfiguration is not null
+    || LssPlantApiConfigurationPolicy.Validate([], "https://api.example.com/mmf") is null
+    || LssPlantApiConfigurationPolicy.Validate(
+        [new PlantApiEndpointInput("Rolling 24 Hour", "https://api.example.com/ddq")], string.Empty) is null)
+    throw new Exception("LSS plant configuration must require both DDQ and MMF endpoints");
+Console.WriteLine("PASS: LSS plant configuration requires DDQ and MMF endpoints together");
+var verifiedMmfApi = LssApiPayloadVerifier.Verify(
+    """{"timestamp":"2026-09-28T00:00:00","parameter":"GHI","value":725.5,"unit":"W/m2"}""",
+    "application/json", "MMF", "MMF", 15);
+var rejectedWebPage = LssApiPayloadVerifier.Verify(
+    "<html><body><h1>Administration</h1></body></html>",
+    "text/html", "DDQ", "Rolling 24 Hour", 15);
+if (!verifiedMmfApi.IsValid || verifiedMmfApi.ReadingCount != 1 || rejectedWebPage.IsValid)
+    throw new Exception("API verification must accept readable measurement payloads and reject ordinary web pages");
+Console.WriteLine("PASS: Plant API verification rejects HTTP 200 web pages without DDQ or MMF data");
+if (!ReportScheduleTimePolicy.TryNormalize("10:53 AM", out var morningScheduleTime)
+    || morningScheduleTime != "10:53"
+    || !ReportScheduleTimePolicy.TryNormalize("10:53 PM", out var eveningScheduleTime)
+    || eveningScheduleTime != "22:53"
+    || !ReportScheduleTimePolicy.TryNormalize("07:05", out var twentyFourHourScheduleTime)
+    || twentyFourHourScheduleTime != "07:05"
+    || ReportScheduleTimePolicy.TryNormalize("not-a-time", out _))
+    throw new Exception("Report schedule times must be normalized to the five-character 24-hour MS SQL format");
+Console.WriteLine("PASS: Report schedule time accepts browser AM/PM values and stores HH:mm");
+var rollingReportSlot = ReportScheduleDuePolicy.GetDueSlot("Rolling 24 Hour", 15, "07:00", "", "",
+    new DateTime(2026, 9, 28, 10, 53, 22));
+var dailyReportSlot = ReportScheduleDuePolicy.GetDueSlot("Daily", 15, "10:53", "", "",
+    new DateTime(2026, 9, 28, 10, 54, 0));
+var earlyDailySlot = ReportScheduleDuePolicy.GetDueSlot("Daily", 15, "10:53", "", "",
+    new DateTime(2026, 9, 28, 10, 52, 59));
+var wrongWeeklyDay = ReportScheduleDuePolicy.GetDueSlot("Weekly", 15, "10:00", "Tuesday", "",
+    new DateTime(2026, 9, 28, 11, 0, 0));
+var selectedFourMonthSlot = ReportScheduleDuePolicy.GetDueSlot("4 Month", 15, "10:00", "28", "1,5,9",
+    new DateTime(2026, 9, 28, 11, 0, 0));
+if (rollingReportSlot != "202609281045" || dailyReportSlot != "202609281053" || earlyDailySlot is not null
+    || wrongWeeklyDay is not null || selectedFourMonthSlot != "202609281000")
+    throw new Exception("Report schedules must calculate one deterministic Malaysia-time delivery slot");
+Console.WriteLine("PASS: Scheduled report due slots support rolling, daily, weekly and selected-month delivery");
 var firstReportUser = new ClaimsPrincipal(new ClaimsIdentity(
     [new Claim(ClaimTypes.NameIdentifier, "user-one"), new Claim(ClaimTypes.Email, "one@example.com")], "test"));
 var secondReportUser = new ClaimsPrincipal(new ClaimsIdentity(
