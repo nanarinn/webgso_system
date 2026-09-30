@@ -157,11 +157,20 @@ public static class ScheduledApiPayloadTranslator
         if (!string.IsNullOrWhiteSpace(parameter) && explicitValue.HasValue)
             readings.Add(new(timestamp, endTimestamp, submissionTimestamp, parameter, explicitValue.Value, unit));
         else
-            foreach (var property in element.EnumerateObject())
-                if (TryDecimal(property.Value, out var value)
-                    && (LooksLikeMeasurement(property.Name)
-                        || (explicitTimestamp.HasValue || compositeTimestamp.HasValue) && !IsMetadataField(property.Name)))
-                    readings.Add(new(timestamp, endTimestamp, submissionTimestamp, property.Name, value, unit));
+        {
+            var sensorValues = string.IsNullOrWhiteSpace(parameter) ? Array.Empty<decimal>() : element.EnumerateObject()
+                .Where(property => IsMmfSensorField(property.Name) && TryDecimal(property.Value, out _))
+                .Select(property => TryDecimal(property.Value, out var value) ? value : 0m).ToArray();
+            if (sensorValues.Length > 0)
+                readings.Add(new(timestamp, endTimestamp, submissionTimestamp, parameter!,
+                    sensorValues.Average(), unit));
+            else
+                foreach (var property in element.EnumerateObject())
+                    if (TryDecimal(property.Value, out var value)
+                        && (LooksLikeMeasurement(property.Name)
+                            || (explicitTimestamp.HasValue || compositeTimestamp.HasValue) && !IsMetadataField(property.Name)))
+                        readings.Add(new(timestamp, endTimestamp, submissionTimestamp, property.Name, value, unit));
+        }
 
         foreach (var property in element.EnumerateObject())
             if (property.Value.ValueKind is JsonValueKind.Array or JsonValueKind.Object)
@@ -475,6 +484,12 @@ public static class ScheduledApiPayloadTranslator
     {
         var normalized = NormalizeFieldKey(name);
         return normalized is "year" or "month" or "day" or "period";
+    }
+    private static bool IsMmfSensorField(string name)
+    {
+        var normalized = NormalizeFieldKey(name);
+        return normalized.Length > 3 && normalized.StartsWith("mmf", StringComparison.Ordinal)
+            && normalized[3..].All(char.IsDigit);
     }
     private static string JsonScalarText(JsonElement element) => element.ValueKind == JsonValueKind.String
         ? element.GetString() ?? string.Empty

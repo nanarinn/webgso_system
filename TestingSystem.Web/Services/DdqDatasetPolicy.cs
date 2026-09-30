@@ -13,7 +13,7 @@ public static class DdqDatasetPolicy
         new("Rolling 24 Hour", "Rolling 24 Hour", 15,
             "All timestamps returned by the rolling API for its latest 24-hour window."),
         new("Day Ahead", "Day Ahead", 30,
-            "All forecast timestamps returned by the Day Ahead API are displayed using its detected source interval."),
+            "Five forecast days are displayed from the selected submission start date using the API source interval."),
         new("Week Ahead", "Week Ahead", 60,
             "All forecast timestamps returned by the Week Ahead API are displayed using its detected source interval."),
         new("4 Month Ahead", "4 Month Ahead", 60,

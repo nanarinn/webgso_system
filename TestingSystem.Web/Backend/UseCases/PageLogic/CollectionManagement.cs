@@ -15,6 +15,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
 {
     [Inject] private IDbContextFactory<ApplicationDbContext> ContextFactory { get; set; } = default!;
     [Inject] private ILssDataApiClient ApiClient { get; set; } = default!;
+    [Inject] private ICollectionCommandBus CollectionCommands { get; set; } = default!;
 
     private List<PlantConnection> Plants { get; set; } = [];
 
@@ -272,20 +273,31 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         {
             foreach (var item in ManualBatchItems)
             {
-                item.Status = "Processing";
-                item.Message = string.IsNullOrWhiteSpace(item.Endpoint) ? "Checking API configuration..." : "Contacting API...";
-                await InvokeAsync(StateHasChanged);
                 if (string.IsNullOrWhiteSpace(item.Endpoint))
                 {
                     item.Status = "Failed";
                     item.Message = $"No {item.ApiType} {item.DataType} endpoint configured";
+                    continue;
                 }
-                else
+
+                try
                 {
-                    await RunBatchEndpointAsync(item);
+                    var queued = await CollectionCommands.EnqueueAsync(new QueueCollectionCommand(
+                        item.PlantDatabaseId, item.ApiType, item.DataType,
+                        ManualBatchCollectionPolicy.Mode(item.ApiType), DateOnly.FromDateTime(DateTime.Today),
+                        "Current user", ReplaceExisting: true));
+                    item.JobId = queued.JobId;
+                    item.Status = "Start";
+                    item.Message = "Queued and waiting for a collection worker";
                 }
-                await InvokeAsync(StateHasChanged);
+                catch (Exception exception)
+                {
+                    item.Status = "Failed";
+                    item.Message = Limit(exception.GetBaseException().Message, 500);
+                }
             }
+            await InvokeAsync(StateHasChanged);
+            await MonitorManualBatchAsync();
             ManualBatchHasRun = true;
             await LoadJobsAsync();
             CollectionPage = 1;
@@ -293,6 +305,36 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         finally
         {
             IsRunningManualCollection = false;
+        }
+    }
+
+    private async Task MonitorManualBatchAsync()
+    {
+        var pending = ManualBatchItems.Where(item => item.JobId.HasValue).ToList();
+        while (pending.Count > 0 && !RefreshCancellation.IsCancellationRequested)
+        {
+            var ids = pending.Select(item => item.JobId!.Value).ToArray();
+            await using var database = await ContextFactory.CreateDbContextAsync(RefreshCancellation.Token);
+            var states = await database.CollectionJobs.AsNoTracking().Where(job => ids.Contains(job.Id))
+                .Select(job => new { job.Id, job.Status, job.ResponseMessage, job.ErrorMessage })
+                .ToDictionaryAsync(job => job.Id, RefreshCancellation.Token);
+            foreach (var item in pending)
+            {
+                if (!states.TryGetValue(item.JobId!.Value, out var state)) continue;
+                item.Status = state.Status switch
+                {
+                    CollectionJobStatus.Queued => "Start",
+                    CollectionJobStatus.Processing => "Processing",
+                    CollectionJobStatus.Completed => "Successful",
+                    CollectionJobStatus.Failed => "Failed",
+                    _ => state.Status
+                };
+                item.Message = state.Status == CollectionJobStatus.Failed
+                    ? state.ErrorMessage ?? state.ResponseMessage : state.ResponseMessage;
+            }
+            pending = pending.Where(item => item.Status is not ("Successful" or "Failed")).ToList();
+            await InvokeAsync(StateHasChanged);
+            if (pending.Count > 0) await Task.Delay(500, RefreshCancellation.Token);
         }
     }
 
@@ -507,121 +549,39 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         ManualCollectionError = string.Empty;
         var plant = SelectedPlant;
         var dataType = SelectedManualDataType;
-        var endpoint = SelectedManualEndpoint;
-        Sequence++;
-        var startedAt = DateTime.Now;
-        var submissionDate = DateOnly.FromDateTime(startedAt);
-        var collectionId = $"DDQ-MAN-{startedAt:yyyyMMddHHmmss}-{Sequence:000}";
-        await using var database = await ContextFactory.CreateDbContextAsync();
-        var entity = new CollectionJobEntity
-        {
-            CollectionId = collectionId,
-            PlantId = plant.DatabaseId,
-            DataType = dataType,
-            Mode = "Manual DDQ",
-            SubmissionDate = submissionDate,
-            StartedAt = DateTimeOffset.Now,
-            Status = "Running",
-            ResponseMessage = $"Manual DDQ {dataType} collection started."
-        };
-        database.CollectionJobs.Add(entity);
-        await database.SaveChangesAsync();
-
-        var watch = Stopwatch.StartNew();
-        var readingCount = 0;
-        var anomalyCount = 0;
-        var replacedReadingCount = 0;
-        var message = string.Empty;
-        LssApiCollectionResult? apiResult = null;
         try
         {
-            apiResult = await ApiClient.CollectAsync(plant.Name, $"DDQ {dataType}", endpoint);
-            if (!apiResult.IsSuccessful)
-                throw new InvalidOperationException(apiResult.Message);
-
-            var intervalMinutes = DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes;
-            var translated = ScheduledApiPayloadTranslator.Translate(apiResult.Payload, "DDQ", dataType,
-                plant.DatabaseId, entity.Id, startedAt, intervalMinutes, apiResult.ContentType);
-            readingCount = translated.Readings.Count;
-            if (readingCount == 0)
-                throw new InvalidOperationException($"The API responded successfully, but no numeric DDQ {dataType} readings could be translated.");
-
-            var strategy = database.Database.CreateExecutionStrategy();
-            await strategy.ExecuteAsync(async () =>
-            {
-                await using var transaction = await database.Database.BeginTransactionAsync();
-                var dayStart = submissionDate.ToDateTime(TimeOnly.MinValue);
-                var dayEnd = dayStart.AddDays(1);
-                var replacedJobIds = await database.CollectionJobs.AsNoTracking()
-                    .Where(job => job.Id != entity.Id && job.PlantId == plant.DatabaseId
-                        && job.DataType == dataType && job.SubmissionDate == submissionDate)
-                    .Select(job => job.Id).ToListAsync();
-                replacedReadingCount = await database.SolarApiReadings
-                    .Where(reading => reading.PlantId == plant.DatabaseId && reading.DataType == dataType
-                        && reading.SubmissionDateTime >= dayStart && reading.SubmissionDateTime < dayEnd)
-                    .ExecuteDeleteAsync();
-                if (replacedJobIds.Count > 0)
-                    await database.DataAnomalies.Where(anomaly => replacedJobIds.Contains(anomaly.CollectionJobId)).ExecuteDeleteAsync();
-
-                database.RawApiResponses.Add(CreateRawResponse(entity.Id, apiResult));
-                database.SolarApiReadings.AddRange(translated.Readings);
-                anomalyCount = await AddManualDdqAnomaliesAsync(database, entity, plant, translated);
-
-                watch.Stop();
-                entity.CompletedAt = DateTimeOffset.Now;
-                entity.Status = "Completed";
-                entity.DurationSeconds = watch.Elapsed.TotalSeconds;
-                message = $"HTTP {apiResult.HttpStatusCode}; {readingCount:N0} {dataType} reading(s) saved; {replacedReadingCount:N0} previous reading(s) replaced; {anomalyCount:N0} validation issue(s).";
-                entity.ResponseMessage = message;
-                database.AuditEvents.Add(new AuditEvent
-                {
-                    OccurredAt = DateTimeOffset.UtcNow,
-                    Actor = "Current user",
-                    Action = "Run manual DDQ collection",
-                    EntityType = "CollectionJob",
-                    EntityReference = collectionId,
-                    Result = "Success",
-                    Detail = message,
-                    CorrelationId = $"{plant.PlantId}:{dataType}"
-                });
-                await database.SaveChangesAsync();
-                await transaction.CommitAsync();
-            });
+            var queued = await CollectionCommands.EnqueueAsync(new QueueCollectionCommand(
+                plant.DatabaseId, "DDQ", dataType, "Manual DDQ", DateOnly.FromDateTime(DateTime.Today),
+                "Current user", ReplaceExisting: true));
+            var finalStatus = await WaitForCollectionAsync(queued.JobId);
+            if (finalStatus.Status == CollectionJobStatus.Failed)
+                ManualCollectionError = finalStatus.ErrorMessage ?? finalStatus.ResponseMessage;
+            await LoadJobsAsync();
+            CollectionPage = 1;
+            RunResult = Jobs.FirstOrDefault(job => job.CollectionId == queued.CollectionId);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            watch.Stop();
-            message = exception.GetBaseException().Message;
-            database.ChangeTracker.Clear();
-            var failedEntity = await database.CollectionJobs.SingleAsync(job => job.Id == entity.Id);
-            failedEntity.CompletedAt = DateTimeOffset.Now;
-            failedEntity.Status = "Failed";
-            failedEntity.ErrorMessage = message;
-            failedEntity.ResponseMessage = $"Manual DDQ {dataType} collection failed: {message}";
-            failedEntity.DurationSeconds = watch.Elapsed.TotalSeconds;
-            if (apiResult is not null && !string.IsNullOrWhiteSpace(apiResult.Payload))
-                database.RawApiResponses.Add(CreateRawResponse(entity.Id, apiResult));
-            database.AuditEvents.Add(new AuditEvent
-            {
-                OccurredAt = DateTimeOffset.UtcNow,
-                Actor = "Current user",
-                Action = "Run manual DDQ collection",
-                EntityType = "CollectionJob",
-                EntityReference = collectionId,
-                Result = "Failed",
-                Detail = failedEntity.ResponseMessage,
-                CorrelationId = $"{plant.PlantId}:{dataType}"
-            });
-            await database.SaveChangesAsync();
+            ManualCollectionError = $"The collection command could not be completed: {exception.GetBaseException().Message}";
         }
         finally
         {
             IsRunningManualCollection = false;
         }
+    }
 
-        await LoadJobsAsync();
-        CollectionPage = 1;
-        RunResult = Jobs.FirstOrDefault(job => job.CollectionId == collectionId);
+    private async Task<CollectionCompletion> WaitForCollectionAsync(long jobId)
+    {
+        while (true)
+        {
+            await using var database = await ContextFactory.CreateDbContextAsync(RefreshCancellation.Token);
+            var job = await database.CollectionJobs.AsNoTracking().Where(item => item.Id == jobId)
+                .Select(item => new CollectionCompletion(item.Status, item.ResponseMessage, item.ErrorMessage))
+                .SingleAsync(RefreshCancellation.Token);
+            if (job.Status is CollectionJobStatus.Completed or CollectionJobStatus.Failed) return job;
+            await Task.Delay(500, RefreshCancellation.Token);
+        }
     }
 
     private static RawApiResponse CreateRawResponse(long collectionJobId, LssApiCollectionResult apiResult) => new()
@@ -678,6 +638,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
 
     private sealed class ManualBatchItem
     {
+        public long? JobId { get; set; }
         public int PlantDatabaseId { get; init; }
         public string PlantId { get; init; } = string.Empty;
         public string PlantName { get; init; } = string.Empty;
@@ -689,6 +650,8 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         public string Status { get; set; } = "Ready";
         public string Message { get; set; } = string.Empty;
     }
+
+    private sealed record CollectionCompletion(string Status, string ResponseMessage, string? ErrorMessage);
 
     private sealed record ManualBatchOption(string Key, string ApiType, string DataType, string Label);
 }

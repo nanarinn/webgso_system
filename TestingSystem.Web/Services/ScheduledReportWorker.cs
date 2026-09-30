@@ -92,7 +92,7 @@ public sealed class ScheduledReportWorker(
 
             var storedDataType = schedule.ApiType.Equals("MMF", StringComparison.OrdinalIgnoreCase)
                 ? "MMF" : schedule.DataType;
-            var latestSubmission = await database.SolarApiReadings.AsNoTracking()
+            var latestSubmission = await database.PublishedReadings()
                 .Where(item => item.DataType == storedDataType)
                 .MaxAsync(item => (DateTime?)item.SubmissionDateTime, cancellationToken);
             if (!latestSubmission.HasValue)
@@ -100,7 +100,7 @@ public sealed class ScheduledReportWorker(
 
             var start = latestSubmission.Value.Date;
             var end = start.AddDays(1);
-            var readings = await database.SolarApiReadings.AsNoTracking()
+            var readings = await database.PublishedReadings()
                 .Where(item => item.DataType == storedDataType
                     && item.SubmissionDateTime >= start && item.SubmissionDateTime < end)
                 .ToListAsync(cancellationToken);

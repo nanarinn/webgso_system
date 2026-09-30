@@ -87,18 +87,20 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         builder.Entity<CollectionJobEntity>(item =>
         {
             item.Property(x => x.CollectionId).HasMaxLength(60);
-            item.Property(x => x.DataType).HasColumnType("nvarchar(max)");
-            item.Property(x => x.Mode).HasColumnType("nvarchar(max)");
+            item.Property(x => x.DataType).HasMaxLength(50);
+            item.Property(x => x.Mode).HasMaxLength(40);
             item.Property(x => x.Status).HasMaxLength(30);
-            item.Property(x => x.ErrorMessage).HasColumnType("nvarchar(max)");
+            item.Property(x => x.ErrorMessage).HasMaxLength(1000);
             item.Property(x => x.ResponseMessage).HasMaxLength(1000);
+            item.Property(x => x.RequestedBy).HasMaxLength(160);
             item.HasIndex(x => x.CollectionId).IsUnique();
+            item.HasIndex(x => new { x.Status, x.StartedAt });
             item.HasOne<LssPlant>().WithMany().HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<RawApiResponse>(item =>
         {
-            item.Property(x => x.ContentType).HasColumnType("nvarchar(max)");
+            item.Property(x => x.ContentType).HasMaxLength(100);
             item.Property(x => x.Payload).HasColumnType("nvarchar(max)");
             item.Property(x => x.Sha256).HasMaxLength(64);
             item.HasIndex(x => x.CollectionJobId);
@@ -195,12 +197,14 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         builder.Entity<SolarApiReading>(item =>
         {
             item.Property(x => x.DataType).HasMaxLength(30);
-            item.Property(x => x.Parameter).HasColumnType("nvarchar(max)");
+            item.Property(x => x.Parameter).HasMaxLength(100);
             item.Property(x => x.Value).HasPrecision(18, 6);
-            item.Property(x => x.Unit).HasColumnType("nvarchar(max)");
-            item.Property(x => x.ErrorMessage).HasColumnType("nvarchar(max)");
-            item.Property(x => x.SyntheticReason).HasColumnType("nvarchar(max)");
+            item.Property(x => x.Unit).HasMaxLength(30);
+            item.Property(x => x.ErrorMessage).HasMaxLength(500);
+            item.Property(x => x.SyntheticReason).HasMaxLength(500);
             item.HasIndex(x => new { x.DataType, x.PlantId, x.IntervalStart });
+            item.HasIndex(x => new { x.DataType, x.PlantId, x.Parameter, x.IntervalStart });
+            item.HasIndex(x => new { x.DataType, x.SubmissionDateTime });
             item.HasOne<CollectionJobEntity>().WithMany().HasForeignKey(x => x.CollectionJobId).OnDelete(DeleteBehavior.Cascade);
             item.HasOne<LssPlant>().WithMany().HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Restrict);
         });

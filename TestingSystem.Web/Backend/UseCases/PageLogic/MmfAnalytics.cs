@@ -113,9 +113,11 @@ public partial class MmfAnalytics : ComponentBase
         try
         {
             var ids = matchedPlants.Select(x => x.Id).ToArray();
+            var allowedParameters = MmfParameterCatalog.Names.ToArray();
             await using var db = await ContextFactory.CreateDbContextAsync();
-            LoadedReadings = await db.SolarApiReadings.AsNoTracking()
+            LoadedReadings = await db.PublishedReadings()
                 .Where(x => x.DataType == "MMF" && ids.Contains(x.PlantId)
+                    && allowedParameters.Contains(x.Parameter)
                     && x.IntervalStart >= start && x.IntervalStart <= end
                     && x.IntervalStart.Second == 0 && x.IntervalStart.Minute % SelectedInterval == 0
                     && (SelectedParameters.Count == 0 || SelectedParameters.Contains(x.Parameter)))
@@ -145,8 +147,8 @@ public partial class MmfAnalytics : ComponentBase
             }
 
             RebuildReadingIndex();
-            AppliedParameters = ReadingIndex.Values.Select(x => x.Parameter)
-                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+            AppliedParameters = ReadingIndex.Values.Select(x => MmfParameterCatalog.DisplayName(x.Parameter))
+                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(MmfParameterCatalog.OrderOf).ToList();
             ActiveParameter = AppliedParameters.FirstOrDefault() ?? "";
             AppliedStart = start;
             AppliedEnd = end;
@@ -208,11 +210,8 @@ public partial class MmfAnalytics : ComponentBase
         var currentEnd = EndDate.Date.Add(EndTime.ToTimeSpan());
         var wasUsingDefaults = currentStart == previousDefaultStart && currentEnd == previousDefaultEnd;
 
-        var parameterValues = await db.SolarApiReadings.AsNoTracking()
-            .Where(x => x.DataType == "MMF" && x.Parameter != "")
-            .Select(x => x.Parameter).ToListAsync();
-        AvailableParameters = parameterValues.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
-        var window = await db.SolarApiReadings.AsNoTracking().Where(x => x.DataType == "MMF").GroupBy(_ => 1)
+        AvailableParameters = MmfParameterCatalog.Names.ToList();
+        var window = await db.PublishedReadings().Where(x => x.DataType == "MMF").GroupBy(_ => 1)
             .Select(g => new { Start = g.Min(x => x.IntervalStart), End = g.Max(x => x.IntervalStart) }).FirstOrDefaultAsync();
         if (window is null)
         {
@@ -246,7 +245,10 @@ public partial class MmfAnalytics : ComponentBase
     private SolarApiReading? ReadingFor(string parameter, int plantId, DateTime timestamp) =>
         ReadingIndex.GetValueOrDefault(new(parameter.ToUpperInvariant(), plantId, timestamp));
     private decimal? ValueFor(int plantId, DateTime timestamp) => ReadingFor(ActiveParameter, plantId, timestamp)?.Value;
-    private string UnitForParameter => ReadingIndex.Values.FirstOrDefault(x => x.Parameter.Equals(ActiveParameter, StringComparison.OrdinalIgnoreCase))?.Unit ?? "";
+    private string UnitForParameter => MmfParameterCatalog.UnitFor(ActiveParameter) is { Length: > 0 } catalogUnit
+        ? catalogUnit
+        : ReadingIndex.Values.FirstOrDefault(x =>
+            x.Parameter.Equals(ActiveParameter, StringComparison.OrdinalIgnoreCase))?.Unit ?? "";
     private string TimeHeading(DateTime value) => AppliedStart.Date == AppliedEnd.Date ? value.ToString("HH:mm") : value.ToString("dd/MM HH:mm");
     private static string HourHeading(int index) => $"HR{index + 1}";
     private void ToggleGraphPlant(int id) { if (!HiddenGraphPlantIds.Add(id)) HiddenGraphPlantIds.Remove(id); RecalculateGraphBounds(); }

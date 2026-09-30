@@ -2,6 +2,7 @@ using System.Security.Claims;
 using TestingSystem.Web.Connectors.UseCases;
 using TestingSystem.Web.Backend.UseCases;
 using TestingSystem.Web.Models;
+using TestingSystem.Web.Configuration;
 
 const string tenant = "27971c0d-2474-4fa6-bc9c-d30415822fc9";
 
@@ -41,4 +42,5 @@ Check(UserAccessPolicy.CanReview(SystemRoles.Administrator, "None", SystemRoles.
 Check(!UserAccessPolicy.CanReview(SystemRoles.Administrator, SystemRoles.Staff, SystemRoles.Administrator));
 Check(!UserAccessPolicy.CanReview(SystemRoles.Administrator, SystemRoles.Administrator, SystemRoles.Staff));
 Check(!UserAccessPolicy.CanReview(SystemRoles.Staff, SystemRoles.Staff, SystemRoles.Staff));
+Check(SessionSecurity.IdleTimeout == TimeSpan.FromMinutes(15));
 Console.WriteLine("Entra identity, safe redirect and access approval policy checks passed.");

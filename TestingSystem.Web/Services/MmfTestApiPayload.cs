@@ -2,23 +2,6 @@ namespace TestingSystem.Web.Services;
 
 public static class MmfTestApiPayload
 {
-    private static readonly (string Parameter, string Unit)[] Parameters =
-    [
-        ("AmbientTemp", "C"),
-        ("AtmPressure", "atm"),
-        ("AirPressure", "hPa"),
-        ("HorIrradiance", "W/m2"),
-        ("Humidity", "%"),
-        ("IncIrradiance", "W/m2"),
-        ("MWPerArea", "MW"),
-        ("Precipitation", "mm/h"),
-        ("PVTemperature", "C"),
-        ("TotRadiation", "Wh/m2"),
-        ("WindDir", "degree"),
-        ("WindDirSD", "degree"),
-        ("WindSpeed", "m/s")
-    ];
-
     public static MmfTestApiResponse Build(string plantCode, DateOnly date, int intervalMinutes)
     {
         if (intervalMinutes is not (15 or 30 or 60))
@@ -33,10 +16,11 @@ public static class MmfTestApiPayload
             var timestamp = start.AddMinutes(period * intervalMinutes);
             var hour = timestamp.TimeOfDay.TotalHours;
             var solarFactor = Math.Max(0d, Math.Sin(Math.PI * (hour - 6d) / 12d));
-            foreach (var (parameter, unit) in Parameters)
+            foreach (var definition in MmfParameterCatalog.Parameters)
                 for (var sensor = 1; sensor <= 5; sensor++)
-                    readings.Add(new(timestamp, parameter, SensorValue(parameter, hour, solarFactor, sensor, intervalMinutes),
-                        unit, $"MMF{sensor}"));
+                    readings.Add(new(timestamp, definition.Name,
+                        SensorValue(definition.Name, hour, solarFactor, sensor, intervalMinutes),
+                        definition.Unit, $"MMF{sensor}"));
         }
 
         return new("SBLSS sample MMF test API", normalizedPlantCode, DateTime.Now, intervalMinutes, readings);

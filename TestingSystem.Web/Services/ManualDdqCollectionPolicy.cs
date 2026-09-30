@@ -18,7 +18,9 @@ public static class ManualDdqCollectionPolicy
     public static ManualCollectionExistingState Evaluate(int existingReadingCount, IEnumerable<string> scheduledStatuses)
     {
         var statuses = scheduledStatuses.ToList();
-        if (statuses.Any(status => status.Equals("Running", StringComparison.OrdinalIgnoreCase)))
+        if (statuses.Any(status => status.Equals("Running", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("Queued", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("Processing", StringComparison.OrdinalIgnoreCase)))
             return ManualCollectionExistingState.ScheduledRunning;
         if (existingReadingCount > 0 || statuses.Any(status => status.Equals("Completed", StringComparison.OrdinalIgnoreCase)))
             return ManualCollectionExistingState.ExistingData;

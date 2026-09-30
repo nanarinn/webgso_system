@@ -20,6 +20,9 @@ builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(Da
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<IReportEmailSender, GraphReportEmailSender>();
 builder.Services.AddScoped<ILssDataApiClient, PrototypeLssDataApiClient>();
+builder.Services.AddScoped<ICollectionCommandBus, SqlCollectionCommandBus>();
+builder.Services.AddScoped<CollectionCommandProcessor>();
+builder.Services.AddHostedService<CollectionCommandWorker>();
 builder.Services.AddHostedService<ScheduledCollectionWorker>();
 builder.Services.AddHostedService<ScheduledReportWorker>();
 builder.Services.AddScoped<IAuditTrailService, AuditTrailService>();
@@ -50,7 +53,7 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.Name = "SingleBuyer.LssRepository";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Lax;
-    options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    options.ExpireTimeSpan = SessionSecurity.IdleTimeout;
     options.LoginPath = "/login";
     options.AccessDeniedPath = "/login";
     options.SlidingExpiration = true;

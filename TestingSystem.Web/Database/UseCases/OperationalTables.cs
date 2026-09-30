@@ -14,6 +14,9 @@ public sealed class CollectionJobEntity
     public string? ErrorMessage { get; set; }
     public string ResponseMessage { get; set; } = string.Empty;
     public double DurationSeconds { get; set; }
+    public string RequestedBy { get; set; } = "System";
+    public int RetryCount { get; set; }
+    public bool ReplaceExisting { get; set; }
 }
 
 public sealed class RawApiResponse

@@ -8,15 +8,16 @@
     <link rel="stylesheet" href="bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="styles/app.css?v=single-buyer-lss-62" />
     <link rel="stylesheet" href="TestingSystem.Web.styles.css" />
-    <link rel="stylesheet" href="styles/interface.css?v=51" />
+    <link rel="stylesheet" href="styles/interface.css?v=52" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=single-buyer-4" />
     <HeadOutlet />
 </head>
 
-<body>
+<body data-session-timeout-minutes="@SessionSecurity.IdleTimeoutMinutes">
     <Routes />
     <script src="_framework/blazor.web.js"></script>
     <script src="scripts/downloads.js?v=1"></script>
+    <script src="scripts/session-timeout.js?v=1"></script>
 </body>
 
 </html>

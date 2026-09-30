@@ -647,6 +647,55 @@ body:has(.admin-overlay) { overflow: hidden; }
     grid-template-columns: minmax(220px, 1.45fr) minmax(170px, 1.1fr) 130px minmax(150px, .9fr)
         62px 95px 105px 120px 72px;
 }
+
+/* Keep every popup below the sticky application header. The remaining
+   viewport becomes the popup's scroll-safe area, so tall dialogs no longer
+   disappear behind the account bar. */
+:root {
+    --dialog-top-clearance: 96px;
+    --dialog-edge-space: 24px;
+}
+
+body:has(:is(.profile-overlay, .metric-modal-overlay, .graph-modal-overlay,
+    .on-demand-overlay, .admin-overlay, .monitor-overlay, .report-overlay,
+    .collection-overlay, .summary-list-overlay, .schedule-confirm-overlay)) {
+    overflow: hidden;
+}
+
+:is(.profile-overlay, .metric-modal-overlay, .graph-modal-overlay,
+    .on-demand-overlay, .admin-overlay, .monitor-overlay, .report-overlay,
+    .collection-overlay, .summary-list-overlay, .schedule-confirm-overlay) {
+    box-sizing: border-box;
+    max-width: 100vw;
+    max-height: 100dvh;
+    overflow-y: auto;
+    padding: var(--dialog-top-clearance) var(--dialog-edge-space) var(--dialog-edge-space);
+    overscroll-behavior: contain;
+}
+
+:is(.profile-dialog, .metric-dialog, .graph-dialog, .on-demand-dialog,
+    .admin-dialog, .monitor-dialog, .report-dialog, .collection-dialog,
+    .summary-list-dialog, .schedule-status-confirmation,
+    .configuration-success-dialog) {
+    max-height: calc(100dvh - var(--dialog-top-clearance) - var(--dialog-edge-space));
+    margin-right: auto;
+    margin-left: auto;
+}
+
+@media (max-width: 640px) {
+    :root {
+        --dialog-top-clearance: 76px;
+        --dialog-edge-space: 10px;
+    }
+
+    .admin-overlay > .admin-dialog {
+        width: calc(100vw - 20px);
+        min-height: 0;
+        border-width: 1px;
+        border-top-width: 4px;
+        border-radius: 14px 4px 14px 4px;
+    }
+}
 .schedules-page .admin-panel { overflow-x: auto; }
 .schedules-page .schedule-admin-table { width: 100%; min-width: 1280px; }
 .schedules-page .schedule-admin-row.admin-table-header > span { white-space: nowrap; }

@@ -50,6 +50,7 @@ public partial class DdqAnalytics : ComponentBase
     private bool ShowGraphCrosshair { get; set; } = true;
     private string LegendSearch { get; set; } = string.Empty;
     private bool IsExporting { get; set; }
+    private bool IsApplyingFilters { get; set; }
     private static readonly string[] GraphColours =
         ["#0875c9", "#00a56a", "#f2a900", "#d64545", "#7656d6", "#00a6a6", "#e06c00", "#c13f87", "#54708f", "#4c9b35"];
 
@@ -64,7 +65,7 @@ public partial class DdqAnalytics : ComponentBase
             .Where(p => p.IsActive)
             .OrderBy(p => p.Name)
             .ToListAsync();
-        var importedWindow = await database.SolarApiReadings.AsNoTracking()
+        var importedWindow = await database.PublishedReadings()
             .Where(x => DataTypes.Contains(x.DataType))
             .GroupBy(_ => 1)
             .Select(group => new
@@ -172,7 +173,36 @@ public partial class DdqAnalytics : ComponentBase
     private DateTime? SubmissionStartDateTime => SubmissionStartDate?.ToDateTime(TimeOnly.MinValue);
     private DateTime? SubmissionEndDateTime => SubmissionEndDate?.ToDateTime(TimeOnly.MinValue);
 
+    private (DateTime? Start, DateTime? EndExclusive) TimestampWindowFor(string dataType)
+    {
+        if (RangeStart.HasValue && RangeEnd.HasValue)
+            return (RangeStart.Value, RangeEnd.Value.AddTicks(1));
+
+        if (DdqDatasetPolicy.CanonicalName(dataType) == "Day Ahead" && SubmissionStartDateTime.HasValue)
+        {
+            var window = DdqDatasetPolicy.ReferenceWindow(dataType, SubmissionStartDateTime.Value);
+            return (window.Start, window.EndExclusive);
+        }
+
+        return (null, null);
+    }
+
     private async Task ApplyFilters()
+    {
+        if (IsApplyingFilters) return;
+
+        IsApplyingFilters = true;
+        try
+        {
+            await ApplyFiltersCoreAsync();
+        }
+        finally
+        {
+            IsApplyingFilters = false;
+        }
+    }
+
+    private async Task ApplyFiltersCoreAsync()
     {
         ValidationMessage = string.Empty;
         HasApplied = false;
@@ -254,37 +284,37 @@ public partial class DdqAnalytics : ComponentBase
         var submissionStart = SubmissionStartDateTime;
         var submissionEnd = SubmissionEndDateTime?.AddDays(1);
         var selectedInterval = IntervalFor(ActiveDataType);
+        var timestampWindow = TimestampWindowFor(ActiveDataType);
         await using var database = await ContextFactory.CreateDbContextAsync();
-        var timestamps = await database.SolarApiReadings.AsNoTracking()
+        var loadedReadings = await database.PublishedReadings()
             .Where(x => x.DataType == ActiveDataType && plantIds.Contains(x.PlantId)
-                        && (!RangeStart.HasValue || x.IntervalStart >= RangeStart.Value)
-                        && (!RangeEnd.HasValue || x.IntervalStart <= RangeEnd.Value)
+                        && (!timestampWindow.Start.HasValue || x.IntervalStart >= timestampWindow.Start.Value)
+                        && (!timestampWindow.EndExclusive.HasValue || x.IntervalStart < timestampWindow.EndExclusive.Value)
                         && (!submissionStart.HasValue || x.SubmissionDateTime >= submissionStart.Value)
                         && (!submissionEnd.HasValue || x.SubmissionDateTime < submissionEnd.Value)
                         && (x.IntervalStart.Hour * 60 + x.IntervalStart.Minute) % selectedInterval == 0)
-            .Select(x => x.IntervalStart).Distinct().OrderBy(x => x).ToListAsync();
-        if (timestamps.Count == 0)
+            .OrderByDescending(x => x.Id)
+            .ToListAsync();
+        if (loadedReadings.Count == 0)
         {
             TableRows = [];
             LoadedReadings = [];
             ValidationMessage = $"No {ActiveDataType} readings match the selected location, submission, date range, and interval.";
             return;
         }
-        var lastTimestamp = timestamps[^1];
-        LoadedReadings = await database.SolarApiReadings.AsNoTracking()
-            .Where(x => x.DataType == ActiveDataType && plantIds.Contains(x.PlantId)
-                        && x.IntervalStart >= timestamps[0] && x.IntervalStart <= lastTimestamp
-                        && (!submissionStart.HasValue || x.SubmissionDateTime >= submissionStart.Value)
-                        && (!submissionEnd.HasValue || x.SubmissionDateTime < submissionEnd.Value)
-                        && (x.IntervalStart.Hour * 60 + x.IntervalStart.Minute) % selectedInterval == 0)
-            .OrderByDescending(x => x.Id).ToListAsync();
-        TableRows = timestamps.OrderByDescending(timestamp => timestamp).Select(timestamp =>
+
+        var readingGroups = loadedReadings
+            .GroupBy(reading => reading.IntervalStart)
+            .OrderBy(group => group.Key)
+            .ToList();
+        TableRows = readingGroups.Select(group =>
         {
-            var timestampReadings = LoadedReadings.Where(x => x.IntervalStart == timestamp).ToList();
-            return new DdqTableRow(timestampReadings.Max(reading => reading.SubmissionDateTime), timestamp,
-                timestampReadings.GroupBy(x => x.PlantId)
+            var timestampReadings = group.ToList();
+            return new DdqTableRow(timestampReadings.Max(reading => reading.SubmissionDateTime), group.Key,
+                timestampReadings.GroupBy(reading => reading.PlantId)
                     .ToDictionary(x => x.Key, x => x.First().Value), selectedInterval);
         }).ToList();
+        LoadedReadings = loadedReadings;
     }
 
     private void ResetFilters()
@@ -318,12 +348,25 @@ public partial class DdqAnalytics : ComponentBase
     private string SubmissionPeriodLabel => SubmissionStartDate.HasValue && SubmissionEndDate.HasValue
         ? $"{SubmissionStartDate:dd/MM/yyyy} - {SubmissionEndDate:dd/MM/yyyy}"
         : "All available submissions";
-    private string TimestampRangeLabel => RangeStart.HasValue && RangeEnd.HasValue
-        ? $"{RangeStart:dd/MM/yyyy HH:mm} - {RangeEnd:dd/MM/yyyy HH:mm}"
-        : "All available timestamps";
-    private string TimestampRangeDescription => RangeStart.HasValue && RangeEnd.HasValue
-        ? $"{RangeStart:dd MMM yyyy HH:mm} to {RangeEnd:dd MMM yyyy HH:mm}"
-        : "all available data timestamps";
+    private string TimestampRangeLabel => TimestampRangeLabelFor(ActiveDataType);
+
+    private string TimestampRangeLabelFor(string dataType)
+    {
+        var window = TimestampWindowFor(dataType);
+        return window.Start.HasValue && window.EndExclusive.HasValue
+            ? $"{window.Start:dd/MM/yyyy HH:mm} - {window.EndExclusive.Value.AddTicks(-1):dd/MM/yyyy HH:mm}"
+            : "All available timestamps";
+    }
+    private string TimestampRangeDescription
+    {
+        get
+        {
+            var window = TimestampWindowFor(ActiveDataType);
+            return window.Start.HasValue && window.EndExclusive.HasValue
+                ? $"{window.Start:dd MMM yyyy HH:mm} to {window.EndExclusive.Value.AddTicks(-1):dd MMM yyyy HH:mm}"
+                : "all available data timestamps";
+        }
+    }
 
     private async Task DownloadExcelAsync()
     {
@@ -341,10 +384,11 @@ public partial class DdqAnalytics : ComponentBase
             foreach (var dataType in DataTypes.Where(SelectedDataTypes.Contains))
             {
                 var selectedInterval = IntervalFor(dataType);
-                var readings = await database.SolarApiReadings.AsNoTracking()
+                var timestampWindow = TimestampWindowFor(dataType);
+                var readings = await database.PublishedReadings()
                     .Where(reading => reading.DataType == dataType && plantIds.Contains(reading.PlantId)
-                        && (!RangeStart.HasValue || reading.IntervalStart >= RangeStart.Value)
-                        && (!RangeEnd.HasValue || reading.IntervalStart <= RangeEnd.Value)
+                        && (!timestampWindow.Start.HasValue || reading.IntervalStart >= timestampWindow.Start.Value)
+                        && (!timestampWindow.EndExclusive.HasValue || reading.IntervalStart < timestampWindow.EndExclusive.Value)
                         && (!submissionStart.HasValue || reading.SubmissionDateTime >= submissionStart.Value)
                         && (!submissionEnd.HasValue || reading.SubmissionDateTime < submissionEnd.Value)
                         && (reading.IntervalStart.Hour * 60 + reading.IntervalStart.Minute) % selectedInterval == 0)
@@ -396,7 +440,7 @@ public partial class DdqAnalytics : ComponentBase
                     ("Data Type", dataType),
                     ("Submission Period", SubmissionPeriodLabel),
                     ("Data Interval", IntervalText(selectedInterval)),
-                    ("Data Timestamp Range", TimestampRangeLabel)
+                    ("Data Timestamp Range", TimestampRangeLabelFor(dataType))
                 };
                 workbookSheets.Add(new DdqWorkbookSheet(dataType,
                     "SOLAR DATA SUBMISSION / DATA MONITORING", metadata, headers, sheetRows, 5));

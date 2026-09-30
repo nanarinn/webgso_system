@@ -8,6 +8,17 @@ using System.IO.Compression;
 using System.Security.Claims;
 using System.Text.Json;
 
+var expectedMmfParameters = new[]
+{
+    "AirPressure", "AmbientTemp", "AtmPressure", "HorIrradiance", "Humidity", "IncIrradiance",
+    "MWPerArea", "Precipitation", "PVTemperature", "TotRadiation", "WindDir", "WindDirSD", "WindSpeed"
+};
+if (!MmfParameterCatalog.Names.SequenceEqual(expectedMmfParameters)
+    || MmfParameterCatalog.UnitFor("winddir") != "o"
+    || MmfParameterCatalog.DisplayName("AMBIENTTEMP") != "AmbientTemp")
+    throw new Exception("MMF parameter filter must follow the supplied API parameter names, order and units");
+Console.WriteLine("PASS: MMF parameter catalog follows the supplied API payload");
+
 LssPlant[] plants = [
     new() { Id = 1, Name = "Same name", State = "Perak" },
     new() { Id = 2, Name = "Same name", State = "Kedah" },
@@ -172,6 +183,15 @@ var translatedMmf = ScheduledApiPayloadTranslator.Translate(
 if (translatedMmf.Readings.Count != 1 || translatedMmf.Readings[0].Value != 450m
     || translatedMmf.Readings[0].Parameter != "GHI")
     throw new Exception("Scheduled MMF sensor averaging failed");
+var translatedNamedMmf = ScheduledApiPayloadTranslator.Translate(
+    """{"MMFResponse":{"PlantName":"LSS-026","MMFData":[{"Parameter":"IncIrradiance","Time":"2026-09-24T00:00:00","Unit":"W/m2","MMF1":"100","MMF2":"200"},{"Parameter":"AirPressure","Time":"2026-09-24T00:00:00","Unit":"hPa","MMF1":"1006.157"}]}}""",
+    "MMF", "MMF", 1, 121, scheduleNow, 30, "application/json");
+if (translatedNamedMmf.Readings.Count != 2
+    || translatedNamedMmf.Readings.Any(reading => reading.Parameter == "MMF1" || reading.Parameter == "MMF2")
+    || translatedNamedMmf.Readings.Single(reading => reading.Parameter == "IncIrradiance").Value != 150m
+    || translatedNamedMmf.Readings.Single(reading => reading.Parameter == "AirPressure").Value != 1006.157m)
+    throw new Exception("Named MMF payloads must retain Parameter and average MMF1..MMFn sensor values");
+Console.WriteLine("PASS: Named MMF payload retains parameter names instead of sensor field names");
 var translatedXml = ScheduledApiPayloadTranslator.Translate(
     """<response><reading><timestamp>2026-09-23T10:00:00+08:00</timestamp><parameter>GHI</parameter><value>725.5</value><unit>W/m2</unit></reading></response>""",
     "MMF", "MMF", 1, 102, scheduleNow, 15, "application/xml");
@@ -309,11 +329,18 @@ if (ManualDdqCollectionPolicy.IsSupported("Rolling 24 Hour")
     || !ManualDdqCollectionPolicy.IsSupported("4 Month Ahead"))
     throw new Exception("Manual DDQ must exclude Rolling 24 Hour and allow the three forward forecast data types");
 if (ManualDdqCollectionPolicy.Evaluate(0, ["Running"]) != ManualCollectionExistingState.ScheduledRunning
+    || ManualDdqCollectionPolicy.Evaluate(0, ["Queued"]) != ManualCollectionExistingState.ScheduledRunning
+    || ManualDdqCollectionPolicy.Evaluate(0, ["Processing"]) != ManualCollectionExistingState.ScheduledRunning
     || ManualDdqCollectionPolicy.Evaluate(0, ["Failed"]) != ManualCollectionExistingState.ScheduledFailed
     || ManualDdqCollectionPolicy.Evaluate(48, []) != ManualCollectionExistingState.ExistingData
     || ManualDdqCollectionPolicy.Evaluate(0, []) != ManualCollectionExistingState.None)
     throw new Exception("Manual DDQ replacement checks must distinguish running, failed, existing and new datasets");
 Console.WriteLine("PASS: Manual DDQ type restrictions and replacement confirmation states");
+var generatedCommandId = CollectionCommandIdentity.Create("DDQ", new DateTimeOffset(2026, 9, 30, 12, 0, 0, TimeSpan.Zero));
+var requestedCommandId = CollectionCommandIdentity.Create("DDQ", DateTimeOffset.UtcNow, new string('X', 80));
+if (generatedCommandId.Length is <= 0 or > 60 || requestedCommandId.Length != 60)
+    throw new Exception("CQRS collection command IDs must be generated safely within the SQL column limit");
+Console.WriteLine("PASS: CQRS collection command IDs are generated without invalid string slicing");
 if (ManualBatchCollectionPolicy.StoredDataType("MMF", "All MMF parameters") != "MMF"
     || ManualBatchCollectionPolicy.StoredDataType("DDQ", " Rolling 24 Hour ") != "Rolling 24 Hour"
     || ManualBatchCollectionPolicy.Mode("MMF") != "Manual MMF"

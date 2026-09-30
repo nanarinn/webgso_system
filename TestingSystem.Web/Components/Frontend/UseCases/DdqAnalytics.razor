@@ -138,8 +138,10 @@
             <div class="filter-actions">
                 <span>Results will use the same column layout as the solar submission template.</span>
                 <div class="filter-action-buttons">
-                    <button class="filter-reset" type="button" @onclick="ResetFilters">Reset</button>
-                    <button class="primary-action" type="submit">Apply Filter <span>→</span></button>
+                    <button class="filter-reset" type="button" disabled="@IsApplyingFilters" @onclick="ResetFilters">Reset</button>
+                    <button class="primary-action" type="submit" disabled="@IsApplyingFilters">
+                        @(IsApplyingFilters ? "Loading..." : "Apply Filter") <span>→</span>
+                    </button>
                 </div>
             </div>
         </form>

@@ -150,10 +150,18 @@ public static class DatabaseInitializer
                     ON [SolarApiReadings] ([DataType], [PlantId], [IntervalStart]);
             END
 
-            ALTER TABLE [SolarApiReadings] ALTER COLUMN [Parameter] nvarchar(max) NOT NULL;
-            ALTER TABLE [SolarApiReadings] ALTER COLUMN [Unit] nvarchar(max) NOT NULL;
-            ALTER TABLE [SolarApiReadings] ALTER COLUMN [ErrorMessage] nvarchar(max) NULL;
-            ALTER TABLE [SolarApiReadings] ALTER COLUMN [SyntheticReason] nvarchar(max) NULL;
+            ALTER TABLE [SolarApiReadings] ALTER COLUMN [Parameter] nvarchar(100) NOT NULL;
+            ALTER TABLE [SolarApiReadings] ALTER COLUMN [Unit] nvarchar(30) NOT NULL;
+            ALTER TABLE [SolarApiReadings] ALTER COLUMN [ErrorMessage] nvarchar(500) NULL;
+            ALTER TABLE [SolarApiReadings] ALTER COLUMN [SyntheticReason] nvarchar(500) NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SolarApiReadings_ReadModel' AND object_id = OBJECT_ID(N'[SolarApiReadings]'))
+                CREATE INDEX [IX_SolarApiReadings_ReadModel] ON [SolarApiReadings]
+                    ([DataType], [PlantId], [Parameter], [IntervalStart])
+                    INCLUDE ([Value], [Unit], [SubmissionDateTime], [IntervalMinutes], [CollectionJobId]);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SolarApiReadings_Report' AND object_id = OBJECT_ID(N'[SolarApiReadings]'))
+                CREATE INDEX [IX_SolarApiReadings_Report] ON [SolarApiReadings]
+                    ([DataType], [SubmissionDateTime])
+                    INCLUDE ([PlantId], [Parameter], [IntervalStart], [Value], [CollectionJobId]);
 
             EXEC(N'CREATE OR ALTER VIEW [dbo].[DdqApiReadings] AS
                 SELECT * FROM [dbo].[SolarApiReadings] WHERE [DataType] <> N''MMF'';');
@@ -250,6 +258,9 @@ public static class DatabaseInitializer
 
             IF COL_LENGTH('CollectionJobs', 'ResponseMessage') IS NULL ALTER TABLE [CollectionJobs] ADD [ResponseMessage] nvarchar(1000) NOT NULL CONSTRAINT [DF_CollectionJobs_ResponseMessage] DEFAULT '';
             IF COL_LENGTH('CollectionJobs', 'DurationSeconds') IS NULL ALTER TABLE [CollectionJobs] ADD [DurationSeconds] float NOT NULL CONSTRAINT [DF_CollectionJobs_DurationSeconds] DEFAULT 0;
+            IF COL_LENGTH('CollectionJobs', 'RequestedBy') IS NULL ALTER TABLE [CollectionJobs] ADD [RequestedBy] nvarchar(160) NOT NULL CONSTRAINT [DF_CollectionJobs_RequestedBy] DEFAULT N'System';
+            IF COL_LENGTH('CollectionJobs', 'RetryCount') IS NULL ALTER TABLE [CollectionJobs] ADD [RetryCount] int NOT NULL CONSTRAINT [DF_CollectionJobs_RetryCount] DEFAULT 0;
+            IF COL_LENGTH('CollectionJobs', 'ReplaceExisting') IS NULL ALTER TABLE [CollectionJobs] ADD [ReplaceExisting] bit NOT NULL CONSTRAINT [DF_CollectionJobs_ReplaceExisting] DEFAULT 0;
 
             IF COL_LENGTH('ReportExecutions', 'Name') IS NULL ALTER TABLE [ReportExecutions] ADD [Name] nvarchar(200) NOT NULL CONSTRAINT [DF_ReportExecutions_Name] DEFAULT '';
             IF COL_LENGTH('ReportExecutions', 'SubmissionDate') IS NULL ALTER TABLE [ReportExecutions] ADD [SubmissionDate] datetime2 NOT NULL CONSTRAINT [DF_ReportExecutions_SubmissionDate] DEFAULT '2000-01-01';
@@ -278,10 +289,13 @@ public static class DatabaseInitializer
                 [Id] bigint IDENTITY PRIMARY KEY, [ReportDeliveryAttemptId] bigint NOT NULL, [Email] nvarchar(320) NOT NULL,
                 CONSTRAINT [FK_ReportDeliveryRecipients_ReportDeliveryAttempts] FOREIGN KEY ([ReportDeliveryAttemptId]) REFERENCES [ReportDeliveryAttempts]([Id]) ON DELETE CASCADE);
 
-            ALTER TABLE [CollectionJobs] ALTER COLUMN [DataType] nvarchar(max) NOT NULL;
-            ALTER TABLE [CollectionJobs] ALTER COLUMN [Mode] nvarchar(max) NOT NULL;
-            ALTER TABLE [CollectionJobs] ALTER COLUMN [ErrorMessage] nvarchar(max) NULL;
-            ALTER TABLE [RawApiResponses] ALTER COLUMN [ContentType] nvarchar(max) NOT NULL;
+            ALTER TABLE [CollectionJobs] ALTER COLUMN [DataType] nvarchar(50) NOT NULL;
+            ALTER TABLE [CollectionJobs] ALTER COLUMN [Mode] nvarchar(40) NOT NULL;
+            ALTER TABLE [CollectionJobs] ALTER COLUMN [ErrorMessage] nvarchar(1000) NULL;
+            ALTER TABLE [RawApiResponses] ALTER COLUMN [ContentType] nvarchar(100) NOT NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionJobs_Queue' AND object_id = OBJECT_ID(N'[CollectionJobs]'))
+                CREATE INDEX [IX_CollectionJobs_Queue] ON [CollectionJobs] ([Status], [StartedAt])
+                    INCLUDE ([PlantId], [DataType], [Mode], [RetryCount], [ReplaceExisting]);
             IF OBJECT_ID(N'[FK_CollectionJobs_LssPlants]', N'F') IS NULL ALTER TABLE [CollectionJobs] WITH CHECK ADD CONSTRAINT [FK_CollectionJobs_LssPlants] FOREIGN KEY ([PlantId]) REFERENCES [LssPlants]([Id]);
             IF OBJECT_ID(N'[FK_RawApiResponses_CollectionJobs]', N'F') IS NULL ALTER TABLE [RawApiResponses] WITH CHECK ADD CONSTRAINT [FK_RawApiResponses_CollectionJobs] FOREIGN KEY ([CollectionJobId]) REFERENCES [CollectionJobs]([Id]) ON DELETE CASCADE;
             IF OBJECT_ID(N'[FK_SolarApiReadings_CollectionJobs]', N'F') IS NULL ALTER TABLE [SolarApiReadings] WITH CHECK ADD CONSTRAINT [FK_SolarApiReadings_CollectionJobs] FOREIGN KEY ([CollectionJobId]) REFERENCES [CollectionJobs]([Id]) ON DELETE CASCADE;

@@ -94,7 +94,7 @@ public partial class OnDemandReport : ComponentBase
             var end = start.AddDays(1);
             var activePlantIds = await database.LssPlants.AsNoTracking().Where(x => x.IsActive).Select(x => x.Id).ToListAsync();
             var storedDataType = SelectedType == "DDQ" ? SelectedDataType : "MMF";
-            var query = database.SolarApiReadings.AsNoTracking().Where(x => activePlantIds.Contains(x.PlantId)
+            var query = database.PublishedReadings().Where(x => activePlantIds.Contains(x.PlantId)
                 && x.DataType == storedDataType && x.SubmissionDateTime >= start && x.SubmissionDateTime < end);
             var recordCount = await query.CountAsync();
             var submissionDate = DateOnly.FromDateTime(SelectedSubmissionDate);
@@ -156,7 +156,7 @@ public partial class OnDemandReport : ComponentBase
         var plantIds = plants.Select(plant => plant.Id).ToList();
         var storedDataType = result.Type == "DDQ" ? result.DataSelection : "MMF";
         if (string.IsNullOrWhiteSpace(storedDataType)) storedDataType = result.Type == "DDQ" ? "Rolling 24 Hour" : "MMF";
-        var query = database.SolarApiReadings.AsNoTracking().Where(x => plantIds.Contains(x.PlantId)
+        var query = database.PublishedReadings().Where(x => plantIds.Contains(x.PlantId)
             && x.DataType == storedDataType && x.SubmissionDateTime >= start && x.SubmissionDateTime < end);
         var readings = await query.OrderByDescending(x => x.Id).ToListAsync();
         var csv = result.Type == "DDQ"
