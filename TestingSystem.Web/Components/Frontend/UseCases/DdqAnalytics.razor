@@ -6,23 +6,23 @@
 @inject TestingSystem.Web.Backend.UseCases.UCLSS027Audit.IAuditTrailService AuditTrail
 @using TestingSystem.Web.Services
 
-<PageTitle>DDQ Analytics | SBLSS System</PageTitle>
+<PageTitle>Declared Daily Quantity Analytics | SBLSS System</PageTitle>
 
 <div class="ddq-page">
     <header class="page-heading ddq-heading">
         <div>
-            <p class="section-label">Data query</p>
-            <h1>DDQ Analytics</h1>
-            <p class="page-subtitle">Optionally choose a location, then select one or more data types and a date-time range.</p>
+            <p class="section-label">Solar forecast submissions</p>
+            <h1>Declared Daily Quantity (DDQ) Analytics</h1>
+            <p class="page-subtitle">Review declared daily solar generation forecasts by location, data type, interval and scheduled submission time.</p>
         </div>
-        <span class="admin-badge"><span></span> Dynamic analysis</span>
+        <span class="admin-badge"><span></span> DDQ submission analysis</span>
     </header>
 
     <section class="filter-panel" aria-labelledby="filter-heading">
         <div class="filter-panel-heading">
             <div>
                 <p class="section-label">Step 1 · Query controls</p>
-                <h2 id="filter-heading">Filter</h2>
+                <h2 id="filter-heading">DDQ Data Filter</h2>
             </div>
         </div>
 
@@ -93,37 +93,14 @@
             </div>
 
             <div class="filter-section period-section">
-                <div class="filter-section-heading"><span>3</span><div><strong>Period</strong><small>Choose the data timestamp and submission period.</small></div></div>
+                <div class="filter-section-heading"><span>3</span><div><strong>Submission</strong><small>Choose the exact scheduled submission date and time.</small></div></div>
                 <div class="period-filter-grid period-only-grid">
                     <fieldset class="filter-field submission-period-field required-filter-field">
-                        <legend>Submission date range <span aria-hidden="true">*</span></legend>
-                        <div class="date-pair">
-                            <div class="date-time-control">
-                                <span>Start</span>
-                                <label><small>Date</small><input type="date" required value="@(SubmissionStartDate?.ToString("yyyy-MM-dd") ?? string.Empty)" max="@(SubmissionEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)" @onchange="OnSubmissionStartDateChanged" /></label>
-                            </div>
-                            <div class="date-time-control">
-                                <span>End</span>
-                                <label><small>Date</small><input type="date" required value="@(SubmissionEndDate?.ToString("yyyy-MM-dd") ?? string.Empty)" min="@(SubmissionStartDate?.ToString("yyyy-MM-dd") ?? string.Empty)" @onchange="OnSubmissionEndDateChanged" /></label>
-                            </div>
+                        <legend>Submission date &amp; time <span aria-hidden="true">*</span></legend>
+                        <div class="date-time-control">
+                            <label><small>Scheduled date &amp; time</small><span class="sblss-picker sblss-picker-datetime"><span class="sblss-picker-copy"><b>@(SubmissionDateTime.HasValue ? $"{SubmissionDateTime:dd/MM/yyyy} {TimeDisplay.TwentyFourHour(SubmissionDateTime.Value)}" : "DD/MM/YYYY HH:mm")</b><small>day/month/year · 24-hour time</small></span><span class="sblss-picker-icon" aria-hidden="true">▣</span><input class="sblss-picker-native" aria-label="Scheduled date and time in day month year and 24 hour format" type="datetime-local" required value="@(SubmissionDateTime?.ToString("yyyy-MM-ddTHH:mm") ?? string.Empty)" @onchange="OnSubmissionDateTimeChanged" /></span></label>
                         </div>
-                        <small>Required. Select both the Start Date and End Date.</small>
-                    </fieldset>
-                    <fieldset class="filter-field filter-date-time-range">
-                        <legend>Data timestamp range</legend>
-                        <div class="date-pair">
-                            <div class="date-time-control">
-                                <span>Start</span>
-                                <div><label><small>Date</small><input type="date" value="@RangeStartDateValue" max="@RangeEndDateValue" @oninput="args => RangeStartDateValue = args.Value?.ToString() ?? string.Empty" /></label>
-                                <label><small>Time</small><input type="time" value="@RangeStartTimeValue" step="900" @oninput="args => RangeStartTimeValue = args.Value?.ToString() ?? string.Empty" /></label></div>
-                            </div>
-                            <div class="date-time-control">
-                                <span>End</span>
-                                <div><label><small>Date</small><input type="date" value="@RangeEndDateValue" min="@RangeStartDateValue" @oninput="args => RangeEndDateValue = args.Value?.ToString() ?? string.Empty" /></label>
-                                <label><small>Time</small><input type="time" value="@RangeEndTimeValue" step="900" @oninput="args => RangeEndTimeValue = args.Value?.ToString() ?? string.Empty" /></label></div>
-                            </div>
-                        </div>
-                        <small>Optional. Leave both Start and End empty to include every data timestamp.</small>
+                        <small>Required. Use the exact date and time produced by the collection schedule.</small>
                     </fieldset>
                 </div>
             </div>
@@ -159,7 +136,7 @@
                 <div>
                     <p class="section-label">Step 2 · Results</p>
                     <h2>Solar data submission</h2>
-                    <p>Submission: @SubmissionPeriodLabel · @ResultPlants.Count plant(s)</p>
+                    <p>Submission: @SubmissionDateTimeLabel · @ResultPlants.Count plant(s)</p>
                 </div>
                 <div class="result-heading-actions">
                     <span class="result-count">@TableRows.Count row(s)</span>
@@ -198,7 +175,7 @@
                     <div class="excel-sheet-title">SOLAR DATA SUBMISSION / DATA MONITORING</div>
                     <div class="excel-sheet-meta">
                         <span><small>Data type</small><strong>@DataTypeLabel(ActiveDataType)</strong></span>
-                        <span><small>Submission period</small><strong>@SubmissionPeriodLabel</strong></span>
+                        <span><small>Submission date &amp; time</small><strong>@SubmissionDateTimeLabel</strong></span>
                         <span><small>Data interval</small><strong>@SelectedIntervalLabel</strong></span>
                         <span><small>Data timestamp range</small><strong>@TimestampRangeLabel</strong></span>
                     </div>
@@ -305,7 +282,7 @@
                     <table class="template-data-table">
                         <thead>
                             <tr>
-                                <th class="sticky-ddq sticky-ddq-submission">Submission Date</th>
+                                <th class="sticky-ddq sticky-ddq-submission">Submission Date &amp; Time</th>
                                 <th class="sticky-ddq sticky-ddq-year">Year</th>
                                 <th class="sticky-ddq sticky-ddq-month">Month</th>
                                 <th class="sticky-ddq sticky-ddq-day">Day</th>
@@ -321,7 +298,7 @@
                             {
                                 var row = TableRows[rowIndex];
                                 <tr>
-                                    <td class="sticky-ddq sticky-ddq-submission">@row.SubmissionDateTime.ToString("dd/MM/yyyy")</td>
+                                    <td class="sticky-ddq sticky-ddq-submission">@TimeDisplay.DateTime(row.SubmissionDateTime)</td>
                                     <td class="sticky-ddq sticky-ddq-year">@row.Timestamp.Year</td>
                                     <td class="sticky-ddq sticky-ddq-month">@row.Timestamp.Month</td>
                                     <td class="sticky-ddq sticky-ddq-day">@row.Timestamp.Day</td>

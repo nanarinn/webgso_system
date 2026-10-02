@@ -48,6 +48,13 @@
                 <h2>Welcome back</h2>
                 <p class="login-intro">Use your assigned SAE Microsoft account to access the LSS repository.</p>
 
+                @if (Reason == "session-timeout")
+                {
+                    <div class="login-alert login-timeout-alert" role="status">
+                        Your session ended after 15 minutes of inactivity. Sign in once to continue.
+                    </div>
+                }
+
                 @if (Error is "microsoft" or "microsoft-setup" or "microsoft-consent" or "microsoft-pending" or "microsoft-rejected" or "microsoft-inactive" or "microsoft-assignment" or "microsoft-redirect" or "microsoft-secret" or "access-pending" or "access-rejected" or "access-inactive")
                 {
                     <div class="login-alert" role="alert">

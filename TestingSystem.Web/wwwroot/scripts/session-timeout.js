@@ -16,12 +16,7 @@
     const logoutForInactivity = () => {
         if (logoutStarted || !authenticatedLogoutForm()) return;
         logoutStarted = true;
-
-        const form = authenticatedLogoutForm();
-        form.action = "/account/logout?reason=timeout";
-        form.requestSubmit();
-
-        window.setTimeout(() => window.location.assign("/login?reason=session-timeout"), 1500);
+        window.location.replace("/account/session/timeout");
     };
 
     const scheduleTimeout = () => {

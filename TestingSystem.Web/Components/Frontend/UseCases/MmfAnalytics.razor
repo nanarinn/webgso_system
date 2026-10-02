@@ -6,23 +6,23 @@
 @inject TestingSystem.Web.Backend.UseCases.UCLSS027Audit.IAuditTrailService AuditTrail
 @using TestingSystem.Web.Services
 
-<PageTitle>MMF Analytics | SBLSS System</PageTitle>
+<PageTitle>Meteorological Measuring Facility Analytics | SBLSS System</PageTitle>
 
 <div class="mmf-page">
     <header class="page-heading">
         <div>
-            <p class="section-label">Market monitoring</p>
-            <h1>MMF Analytics</h1>
-            <p class="page-subtitle">Analyse forecast and actual plant output through a focused MMF workspace.</p>
+            <p class="section-label">Weather data monitoring</p>
+            <h1>Meteorological Measuring Facility (MMF) Analytics</h1>
+            <p class="page-subtitle">Analyse meteorological measurements from LSS plants by parameter, interval, location and forecast period.</p>
         </div>
-        <span class="mmf-badge"><span></span> Live MMF workspace</span>
+        <span class="mmf-badge"><span></span> Live meteorological data</span>
     </header>
 
     <section class="filter-panel mmf-filter-panel" aria-labelledby="mmf-filter-heading">
         <div class="filter-panel-heading">
             <div>
                 <p class="section-label">Step 1 · Query controls</p>
-                <h2 id="mmf-filter-heading">MMF Filter</h2>
+                <h2 id="mmf-filter-heading">Meteorological Data Filter</h2>
             </div>
         </div>
 
@@ -59,8 +59,8 @@
                     <div class="filter-section period-section">
                         <div class="filter-section-heading"><span>3</span><div><strong>Forecast data range</strong><small>Select the start and end date and time.</small></div></div>
                         <div class="date-pair">
-                            <div class="date-time-control"><span>Start</span><div><label><small>Date</small><input type="date" required @bind="StartDate" @bind:format="yyyy-MM-dd" /></label><label><small>Time</small><input type="time" required step="900" @bind="StartTime" /></label></div></div>
-                            <div class="date-time-control"><span>End</span><div><label><small>Date</small><input type="date" required @bind="EndDate" @bind:format="yyyy-MM-dd" /></label><label><small>Time</small><input type="time" required step="900" @bind="EndTime" /></label></div></div>
+                            <div class="date-time-control"><span>Start</span><div><label><small>Date</small><span class="sblss-picker"><span class="sblss-picker-copy"><b>@StartDate.ToString("dd/MM/yyyy")</b><small>day/month/year</small></span><span class="sblss-picker-icon" aria-hidden="true">▣</span><input class="sblss-picker-native" aria-label="Start date in day month year format" type="date" required @bind="StartDate" @bind:format="yyyy-MM-dd" /></span></label><label><small>Time</small><span class="sblss-picker sblss-picker-time"><span class="sblss-picker-copy"><b>@TimeDisplay.TwentyFourHour(StartTime)</b><small>24-hour time</small></span><span class="sblss-picker-icon sblss-clock-icon" aria-hidden="true">◷</span><input class="sblss-picker-native" aria-label="Start time in 24 hour format" type="time" required step="900" @bind="StartTime" /></span></label></div></div>
+                            <div class="date-time-control"><span>End</span><div><label><small>Date</small><span class="sblss-picker"><span class="sblss-picker-copy"><b>@EndDate.ToString("dd/MM/yyyy")</b><small>day/month/year</small></span><span class="sblss-picker-icon" aria-hidden="true">▣</span><input class="sblss-picker-native" aria-label="End date in day month year format" type="date" required @bind="EndDate" @bind:format="yyyy-MM-dd" /></span></label><label><small>Time</small><span class="sblss-picker sblss-picker-time"><span class="sblss-picker-copy"><b>@TimeDisplay.TwentyFourHour(EndTime)</b><small>24-hour time</small></span><span class="sblss-picker-icon sblss-clock-icon" aria-hidden="true">◷</span><input class="sblss-picker-native" aria-label="End time in 24 hour format" type="time" required step="900" @bind="EndTime" /></span></label></div></div>
                         </div>
                     </div>
                 </div>
@@ -94,7 +94,7 @@
                 <div class="data-type-tabs" role="tablist" aria-label="Selected MMF parameters">
                     @foreach (var parameter in AppliedParameters) { <button type="button" role="tab" aria-selected="@(ActiveParameter == parameter)" class="@(ActiveParameter == parameter ? "active" : null)" @onclick="() => SelectParameter(parameter)">@parameter</button> }
                 </div>
-                <div class="excel-sheet-heading mmf-sheet-heading"><div class="excel-sheet-title">@ActiveParameter.ToUpperInvariant()</div><div class="excel-sheet-meta"><span><small>Parameter</small><strong>@ActiveParameter</strong></span><span><small>Data interval</small><strong>@IntervalLabel</strong></span><span><small>Date range</small><strong>@AppliedStart.ToString("dd/MM/yyyy HH:mm") - @AppliedEnd.ToString("dd/MM/yyyy HH:mm")</strong></span><span><small>Unit</small><strong>@UnitForParameter</strong></span></div></div>
+                <div class="excel-sheet-heading mmf-sheet-heading"><div class="excel-sheet-title">@ActiveParameter.ToUpperInvariant()</div><div class="excel-sheet-meta"><span><small>Parameter</small><strong>@ActiveParameter</strong></span><span><small>Submission date &amp; time</small><strong>@SubmissionDateTimeRange</strong></span><span><small>Data interval</small><strong>@IntervalLabel</strong></span><span><small>Data timestamp range</small><strong>@TimeDisplay.DateTime(AppliedStart) - @TimeDisplay.DateTime(AppliedEnd)</strong></span><span><small>Unit</small><strong>@UnitForParameter</strong></span></div></div>
                 @if (DisplayMode == "table")
                 {
                     <div class="mmf-pivot-scroll"><table class="mmf-pivot-table"><thead><tr><th class="sticky-plant">@ScopeColumnHeading</th>@for (var index = 0; index < TimeColumns.Count; index++) { <th title="@TimeHeading(TimeColumns[index])">@HourHeading(index)</th> }</tr></thead><tbody>

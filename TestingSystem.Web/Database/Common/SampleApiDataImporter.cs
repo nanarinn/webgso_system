@@ -64,7 +64,8 @@ public static partial class SampleApiDataImporter
             WHERE job.[Mode] = N'Excel sample import';
 
             UPDATE job
-            SET [SubmissionDate] = CONVERT(date, SWITCHOFFSET(@SampleSubmission, '+08:00'))
+            SET [SubmissionDate] = CONVERT(date, SWITCHOFFSET(@SampleSubmission, '+08:00')),
+                [SubmissionDateTime] = CONVERT(datetime2, SWITCHOFFSET(@SampleSubmission, '+08:00'))
             FROM [CollectionJobs] job
             WHERE job.[Mode] = N'Excel sample import';
             """);
@@ -190,6 +191,7 @@ public static partial class SampleApiDataImporter
             {
                 CollectionId = collectionId, PlantId = plant.Id, DataType = dataType,
                 Mode = "Excel sample import", SubmissionDate = DateOnly.FromDateTime(submission),
+                SubmissionDateTime = submission,
                 StartedAt = DateTimeOffset.UtcNow, CompletedAt = DateTimeOffset.UtcNow, Status = "Completed"
             };
             database.CollectionJobs.Add(job);
@@ -452,7 +454,8 @@ public static partial class SampleApiDataImporter
             {
                 CollectionId = $"MMF-API-TEST-{plant.PlantId}-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
                 PlantId = plant.Id, DataType = "MMF", Mode = "Simulated MMF API",
-                SubmissionDate = DateOnly.FromDateTime(submission), StartedAt = DateTimeOffset.UtcNow,
+                SubmissionDate = DateOnly.FromDateTime(submission), SubmissionDateTime = submission,
+                StartedAt = DateTimeOffset.UtcNow,
                 CompletedAt = DateTimeOffset.UtcNow, Status = "Completed"
             };
             database.CollectionJobs.Add(job); await database.SaveChangesAsync();
@@ -511,6 +514,7 @@ public static partial class SampleApiDataImporter
                         CollectionId = collectionId, PlantId = plant.Id, DataType = dataType,
                         Mode = "Synthetic test completion",
                         SubmissionDate = DateOnly.FromDateTime(timeline[0].Example.SubmissionDateTime),
+                        SubmissionDateTime = timeline[0].Example.SubmissionDateTime,
                         StartedAt = DateTimeOffset.UtcNow, CompletedAt = DateTimeOffset.UtcNow,
                         Status = "Completed"
                     };

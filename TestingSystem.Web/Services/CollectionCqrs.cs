@@ -14,11 +14,12 @@ public sealed record QueueCollectionCommand(
     string ApiType,
     string DataType,
     string Mode,
-    DateOnly SubmissionDate,
+    DateTime SubmissionDateTime,
     string RequestedBy,
     int RetryCount = 0,
     bool ReplaceExisting = false,
-    string? CollectionId = null);
+    string? CollectionId = null,
+    int? CollectionScheduleId = null);
 
 public sealed record QueuedCollection(long JobId, string CollectionId);
 
@@ -42,9 +43,11 @@ public sealed class SqlCollectionCommandBus(IDbContextFactory<ApplicationDbConte
         {
             CollectionId = collectionId,
             PlantId = command.PlantId,
+            CollectionScheduleId = command.CollectionScheduleId,
             DataType = apiType == "MMF" ? "MMF" : command.DataType.Trim(),
             Mode = command.Mode.Trim(),
-            SubmissionDate = command.SubmissionDate,
+            SubmissionDate = DateOnly.FromDateTime(command.SubmissionDateTime),
+            SubmissionDateTime = command.SubmissionDateTime,
             StartedAt = now,
             Status = CollectionJobStatus.Queued,
             ResponseMessage = $"{apiType} {command.DataType.Trim()} collection queued.",
@@ -107,7 +110,7 @@ public sealed class CollectionCommandProcessor(
 
             var intervalMinutes = apiType == "MMF" ? 15 : DdqDatasetPolicy.Get(apiDataType).ReferenceTemplateIntervalMinutes;
             var translated = ScheduledApiPayloadTranslator.Translate(apiResult.Payload, apiType, apiDataType,
-                plant.Id, job.Id, job.StartedAt.LocalDateTime, intervalMinutes, apiResult.ContentType);
+                plant.Id, job.Id, job.SubmissionDateTime, intervalMinutes, apiResult.ContentType);
             if (translated.Readings.Count == 0)
                 throw new InvalidOperationException("The API response did not contain supported numeric readings.");
 
@@ -136,13 +139,12 @@ public sealed class CollectionCommandProcessor(
 
                 database.RawApiResponses.Add(CreateRawResponse(job.Id, apiResult));
                 database.SolarApiReadings.AddRange(translated.Readings);
-                var anomalyCount = await AddAnomaliesAsync(database, job, plant, apiType, translated, cancellationToken);
                 watch.Stop();
                 job.CompletedAt = DateTimeOffset.UtcNow;
                 job.Status = CollectionJobStatus.Completed;
                 job.DurationSeconds = watch.Elapsed.TotalSeconds;
                 job.ResponseMessage = $"HTTP {apiResult.HttpStatusCode}; {translated.Readings.Count:N0} reading(s) saved; "
-                    + $"{replacedReadings:N0} replaced; {anomalyCount:N0} validation issue(s).";
+                    + $"{replacedReadings:N0} replaced. Validation is applied during report generation.";
                 database.AuditEvents.Add(CreateAudit(job, "Success"));
                 await database.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
@@ -194,37 +196,6 @@ public sealed class CollectionCommandProcessor(
         Detail = job.ResponseMessage,
         CorrelationId = job.CollectionId
     };
-
-    private static async Task<int> AddAnomaliesAsync(ApplicationDbContext database, CollectionJobEntity job,
-        LssPlant plant, string apiType, TranslationResult result, CancellationToken cancellationToken)
-    {
-        var issues = result.Issues.ToList();
-        foreach (var reading in result.Readings)
-        {
-            if (reading.Value < 0)
-                issues.Add(new(apiType == "MMF" ? "MMF-015" : "DDQ-004", reading.Parameter,
-                    reading.Value.ToString(CultureInfo.InvariantCulture), "A negative measurement was received."));
-            if (apiType == "DDQ" && reading.Value > plant.CapacityMw)
-                issues.Add(new("DDQ-005", reading.Parameter, reading.Value.ToString(CultureInfo.InvariantCulture),
-                    $"The forecast exceeds the configured plant capacity of {plant.CapacityMw:N2} MW."));
-        }
-        var ruleCodes = issues.Select(issue => issue.RuleCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var rules = ruleCodes.Count == 0 ? new Dictionary<string, ValidationRule>(StringComparer.OrdinalIgnoreCase)
-            : await database.ValidationRules.AsNoTracking().Where(rule => ruleCodes.Contains(rule.Code))
-                .ToDictionaryAsync(rule => rule.Code, StringComparer.OrdinalIgnoreCase, cancellationToken);
-        database.DataAnomalies.AddRange(issues.Select(issue => new DataAnomaly
-        {
-            CollectionJobId = job.Id,
-            ValidationRuleId = rules.GetValueOrDefault(issue.RuleCode)?.Id,
-            DataType = apiType,
-            FieldName = Limit(issue.FieldName, 100),
-            OriginalValue = Limit(issue.OriginalValue, 500),
-            Reason = Limit(issue.Reason, 1000),
-            Status = "Open",
-            DetectedAt = DateTimeOffset.UtcNow
-        }));
-        return issues.Count;
-    }
 
     private static string Limit(string? value, int length) => string.IsNullOrWhiteSpace(value)
         ? string.Empty : value[..Math.Min(value.Length, length)];

@@ -8,9 +8,11 @@ namespace TestingSystem.Web.Services;
 public static class OnDemandCsvExporter
 {
     public static string BuildDdq(string dataType, DateTime submissionDate,
-        IReadOnlyList<LssPlant> plants, IReadOnlyList<SolarApiReading> readings)
+        IReadOnlyList<LssPlant> plants, IReadOnlyList<SolarApiReading> readings, int? requestedInterval = null)
     {
-        var interval = DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes;
+        var interval = requestedInterval is 15 or 30 or 60
+            ? requestedInterval.Value
+            : DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes;
         var latest = Latest(readings.Where(reading => reading.DataType == dataType
             && TotalMinutes(reading.IntervalStart) % interval == 0), includeParameter: false);
         var timestamps = latest.Select(reading => reading.IntervalStart).Distinct().OrderBy(value => value).ToList();
@@ -18,16 +20,16 @@ public static class OnDemandCsvExporter
         var output = new StringBuilder();
         AddRow(output, "SOLAR DATA SUBMISSION / DATA MONITORING");
         AddRow(output, "Data Type", DdqDatasetPolicy.Get(dataType).DisplayName);
-        AddRow(output, "Submission Date", submissionDate.ToString("dd/MM/yyyy"));
+        AddRow(output, "Submission Date & Time", submissionDate.ToString("dd/MM/yyyy HH:mm:ss"));
         AddRow(output, "Data Interval", IntervalText(interval));
         output.AppendLine();
-        AddRow(output, ["Submission Date", "Year", "Month", "Day", "Period",
+        AddRow(output, ["Submission Date & Time", "Year", "Month", "Day", "Period",
             .. plants.Select(plant => TemplatePlantCode(plant.PlantId))]);
         foreach (var timestamp in timestamps)
         {
             var values = new List<object?>
             {
-                submissionDate.ToString("dd/MM/yyyy"), timestamp.Year, timestamp.Month, timestamp.Day,
+                submissionDate.ToString("dd/MM/yyyy HH:mm:ss"), timestamp.Year, timestamp.Month, timestamp.Day,
                 TotalMinutes(timestamp) / interval + 1
             };
             values.AddRange(plants.Select(plant => (object?)index.GetValueOrDefault((plant.Id, timestamp))?.Value));
@@ -37,14 +39,19 @@ public static class OnDemandCsvExporter
     }
 
     public static string BuildMmf(DateTime submissionDate,
-        IReadOnlyList<LssPlant> plants, IReadOnlyList<SolarApiReading> readings)
+        IReadOnlyList<LssPlant> plants, IReadOnlyList<SolarApiReading> readings,
+        DateTime? dataRangeStart = null, DateTime? dataRangeEnd = null)
     {
         var latest = Latest(readings.Where(reading => reading.DataType == "MMF"), includeParameter: true);
         var parameters = latest.Select(reading => reading.Parameter)
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value).ToList();
         var output = new StringBuilder();
         AddRow(output, "MMF DATA MONITORING");
-        AddRow(output, "Submission Date", submissionDate.ToString("dd/MM/yyyy"));
+        if (dataRangeStart.HasValue && dataRangeEnd.HasValue)
+            AddRow(output, "Data Timestamp Range",
+                $"{dataRangeStart:dd/MM/yyyy HH:mm:ss} - {dataRangeEnd:dd/MM/yyyy HH:mm:ss}");
+        else
+            AddRow(output, "Submission Date & Time", submissionDate.ToString("dd/MM/yyyy HH:mm:ss"));
         AddRow(output, "Plant Count", plants.Count);
         output.AppendLine();
 

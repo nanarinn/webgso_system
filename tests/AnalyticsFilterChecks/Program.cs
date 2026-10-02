@@ -109,7 +109,7 @@ if (translatedMmfTestPayload.Readings.Count != 24 * 13
 Console.WriteLine("PASS: MMF sample API payload and scheduled collection translation");
 var ddqFreezeBytes = DdqExcelWorkbookExporter.Build([
     new DdqWorkbookSheet("Day Ahead", "SOLAR DATA SUBMISSION", [],
-        ["Submission Date", "Year", "Month", "Day", "Period", "LSS1"],
+        ["Submission Date & Time", "Year", "Month", "Day", "Period", "LSS1"],
         [new object?[] { "24/09/2026", 2026, 9, 24, 1, 7.4m }], 5)
 ]);
 using var ddqFreezeStream = new MemoryStream(ddqFreezeBytes);
@@ -153,6 +153,11 @@ if (!CollectionSchedulePolicy.IsDue("Daily", "15 minutes", "10:00", "", "", sche
     throw new Exception("An edited schedule must rerun after its new time, but only once for that time slot");
 if (!CollectionSchedulePolicy.IsDue("4 Month", "15 minutes", "10:00", "23", "1,5,9", scheduleNow, null))
     throw new Exception("Four-month collection schedule timing failed");
+if (CollectionSchedulePolicy.SubmissionDateTime("Daily", "10:00", scheduleNow)
+        != new DateTime(2026, 9, 23, 10, 0, 0)
+    || CollectionSchedulePolicy.SubmissionDateTime("Rolling 24 Hour", "00:15",
+        scheduleNow.AddSeconds(37)) != scheduleNow)
+    throw new Exception("Collection schedule must produce the authoritative submission date and minute.");
 Console.WriteLine("PASS: Collection schedule timing and API endpoint mapping");
 var referenceSubmission = new DateTime(2026, 9, 19, 9, 0, 0);
 var dayAheadWindow = DdqDatasetPolicy.ReferenceWindow("Day Ahead", referenceSubmission);
@@ -173,7 +178,7 @@ var translatedDdq = ScheduledApiPayloadTranslator.Translate(
     "DDQ", "Day Ahead", 1, 100, scheduleNow, 15);
 if (translatedDdq.Readings.Count != 1 || translatedDdq.Readings[0].Value != 12.5m
     || translatedDdq.Readings[0].Parameter != "forecastValue"
-    || translatedDdq.Readings[0].SubmissionDateTime != new DateTime(2026, 9, 23, 10, 0, 0))
+    || translatedDdq.Readings[0].SubmissionDateTime != scheduleNow)
     throw new Exception("Scheduled DDQ payload translation failed");
 if (translatedDdq.Issues.Any(issue => issue.RuleCode == "DDQ-009"))
     throw new Exception("A response must not be rejected merely because its API-defined horizon differs from a template");
@@ -184,7 +189,7 @@ if (translatedMmf.Readings.Count != 1 || translatedMmf.Readings[0].Value != 450m
     || translatedMmf.Readings[0].Parameter != "GHI")
     throw new Exception("Scheduled MMF sensor averaging failed");
 var translatedNamedMmf = ScheduledApiPayloadTranslator.Translate(
-    """{"MMFResponse":{"PlantName":"LSS-026","MMFData":[{"Parameter":"IncIrradiance","Time":"2026-09-24T00:00:00","Unit":"W/m2","MMF1":"100","MMF2":"200"},{"Parameter":"AirPressure","Time":"2026-09-24T00:00:00","Unit":"hPa","MMF1":"1006.157"}]}}""",
+    """{"MMFResponse":{"PlantName":"LSS-026","MMFData":[{"Parameter":"IncIrradiance","Time":"2026-09-24T12:00:00","Unit":"W/m2","MMF1":"100","MMF2":"200"},{"Parameter":"AirPressure","Time":"2026-09-24T12:00:00","Unit":"hPa","MMF1":"1006.157"}]}}""",
     "MMF", "MMF", 1, 121, scheduleNow, 30, "application/json");
 if (translatedNamedMmf.Readings.Count != 2
     || translatedNamedMmf.Readings.Any(reading => reading.Parameter == "MMF1" || reading.Parameter == "MMF2")
@@ -411,21 +416,188 @@ var exportPlants = new List<LssPlant>
     new() { Id = 20, PlantId = "LSS-002", Name = "Plant Two", State = "Johor" }
 };
 var exportTimestamp = new DateTime(2026, 9, 24, 0, 30, 0);
-var ddqOnDemandCsv = OnDemandCsvExporter.BuildDdq("Day Ahead", new DateTime(2026, 9, 24), exportPlants,
+var exportSubmission = new DateTime(2026, 9, 24, 10, 40, 0);
+var ddqOnDemandCsv = OnDemandCsvExporter.BuildDdq("Day Ahead", exportSubmission, exportPlants,
 [
     new SolarApiReading { Id = 1, PlantId = 10, DataType = "Day Ahead", IntervalStart = exportTimestamp, Value = 7.4m },
     new SolarApiReading { Id = 2, PlantId = 20, DataType = "Day Ahead", IntervalStart = exportTimestamp, Value = 8.6m }
 ]);
-if (!ddqOnDemandCsv.Contains("\"Submission Date\",\"Year\",\"Month\",\"Day\",\"Period\",\"LSS1\",\"LSS2\"")
-    || !ddqOnDemandCsv.Contains("\"24/09/2026\",\"2026\",\"9\",\"24\",\"2\",\"7.4\",\"8.6\""))
+if (!ddqOnDemandCsv.Contains("\"Submission Date & Time\",\"Year\",\"Month\",\"Day\",\"Period\",\"LSS1\",\"LSS2\"")
+    || !ddqOnDemandCsv.Contains("\"24/09/2026 10:40:00\",\"2026\",\"9\",\"24\",\"2\",\"7.4\",\"8.6\""))
     throw new Exception("On-demand DDQ CSV must use the DDQ Analytics pivot layout");
-var mmfOnDemandCsv = OnDemandCsvExporter.BuildMmf(new DateTime(2026, 9, 24), exportPlants,
+var mmfOnDemandCsv = OnDemandCsvExporter.BuildMmf(exportSubmission, exportPlants,
 [
     new SolarApiReading { Id = 3, PlantId = 10, DataType = "MMF", Parameter = "AmbientTemp", Unit = "C", IntervalStart = exportTimestamp, IntervalMinutes = 30, Value = 24.2m },
     new SolarApiReading { Id = 4, PlantId = 20, DataType = "MMF", Parameter = "AmbientTemp", Unit = "C", IntervalStart = exportTimestamp, IntervalMinutes = 30, Value = 25.1m }
-]);
+], exportTimestamp, exportTimestamp.AddHours(1));
 if (!mmfOnDemandCsv.Contains("\"LSS\",\"HR1\"")
     || !mmfOnDemandCsv.Contains("\"Data Interval\",\"30 minutes\"")
+    || !mmfOnDemandCsv.Contains("\"Data Timestamp Range\",\"24/09/2026 00:30:00 - 24/09/2026 01:30:00\"")
+    || mmfOnDemandCsv.Contains("Submission Date & Time")
     || !mmfOnDemandCsv.Contains("\"LSS1\",\"24.2\""))
-    throw new Exception("On-demand MMF CSV must use the MMF Analytics HR pivot layout");
+    throw new Exception("On-demand MMF CSV must use the MMF Analytics HR layout and data timestamp range without submission date and time.");
 Console.WriteLine("PASS: On-demand DDQ and MMF CSV exports match the analytics layouts");
+
+var intervalFilteredCsv = OnDemandCsvExporter.BuildDdq("Day Ahead", exportSubmission, [exportPlants[0]],
+[
+    new SolarApiReading { Id = 5, PlantId = 10, DataType = "Day Ahead", IntervalStart = exportTimestamp, Value = 7.4m },
+    new SolarApiReading { Id = 6, PlantId = 10, DataType = "Day Ahead", IntervalStart = exportTimestamp.AddMinutes(30), Value = 8.1m }
+], 60);
+if (!intervalFilteredCsv.Contains("\"Data Interval\",\"1 hour\"")
+    || intervalFilteredCsv.Contains("\"7.4\"") || !intervalFilteredCsv.Contains("\"8.1\""))
+    throw new Exception("On-demand DDQ export must apply the user-selected data interval.");
+Console.WriteLine("PASS: On-demand DDQ export applies the selected data interval");
+
+var configuredQualityRule = new ValidationRule
+{
+    Code = "USR-MMF-0001", DataType = "MMF", FieldName = "GHI", RuleSource = "Configured",
+    IsActive = true, MinimumValue = 0m, MaximumValue = 100m, ChangeThreshold = 20m, CheckMissing = true
+};
+var qualityReadings = new List<SolarApiReading>
+{
+    new() { Parameter = "GHI", Value = -1m, IntervalStart = new DateTime(2026, 9, 24, 0, 0, 0), IntervalMinutes = 15 },
+    new() { Parameter = "GHI", Value = 50m, IntervalStart = new DateTime(2026, 9, 24, 0, 15, 0), IntervalMinutes = 15 },
+    new() { Parameter = "GHI", Value = 150m, IntervalStart = new DateTime(2026, 9, 24, 0, 45, 0), IntervalMinutes = 15 }
+};
+var qualityIssues = ConfiguredValidationRuleEvaluator.Evaluate([configuredQualityRule], qualityReadings, "MMF");
+if (!qualityIssues.Any(issue => issue.Reason.Contains("minimum"))
+    || !qualityIssues.Any(issue => issue.Reason.Contains("maximum"))
+    || qualityIssues.Count(issue => issue.Reason.Contains("hysteresis")) != 2
+    || !qualityIssues.Any(issue => issue.Reason.Contains("Missing value")))
+    throw new Exception("Configured quality rules must enforce minimum, maximum, hysteresis and missing intervals.");
+var inactiveQualityIssues = ConfiguredValidationRuleEvaluator.Evaluate(
+    [new ValidationRule { Code = "USR-MMF-0002", DataType = "MMF", FieldName = "*",
+        RuleSource = "Configured", IsActive = false, MaximumValue = 1m }], qualityReadings, "MMF");
+if (inactiveQualityIssues.Count != 0)
+    throw new Exception("Inactive configured quality rules must not produce anomalies.");
+Console.WriteLine("PASS: Configured data-quality rules enforce all checks and respect active status");
+
+var mmfDefaultQuality = MmfSensorQualityPolicy.Evaluate("GHI",
+    new DateTime(2026, 9, 24, 12, 0, 0), [700m, 710m, 2500m],
+    [new ValidationRule { Code = "MMF-005", DataType = "MMF", IsActive = true, RuleSource = "Fixed" }]);
+if (mmfDefaultQuality.ValidValues.Count != 3 || mmfDefaultQuality.Issues.Count != 0)
+    throw new Exception("MMF must not apply a preconfigured sensor range without an administrator-created parameter rule.");
+var configuredMmfRange = MmfSensorQualityPolicy.Evaluate("GHI",
+    new DateTime(2026, 9, 24, 12, 0, 0), [700m, 710m, 2500m],
+    [new ValidationRule { Code = "USR-MMF-0003", DataType = "MMF", FieldName = "GHI",
+        IsActive = true, RuleSource = "Configured", MinimumValue = 0m, MaximumValue = 1000m }]);
+if (!configuredMmfRange.ValidValues.SequenceEqual([700m, 710m])
+    || !configuredMmfRange.Issues.Any(issue => issue.RuleCode == "USR-MMF-0003"))
+    throw new Exception("MMF averaging must apply the administrator's configured range for the selected API parameter.");
+var configuredMmfSensorChange = ConfiguredValidationRuleEvaluator.Evaluate(
+    [new ValidationRule { Code = "USR-MMF-0004", DataType = "MMF", FieldName = "WindSpeed",
+        IsActive = true, RuleSource = "Configured", ChangeThreshold = 5m }],
+    [new SolarApiReading { Parameter = "WindSpeed", Value = 2m, IntervalStart = new DateTime(2026, 9, 24, 10, 0, 0) },
+     new SolarApiReading { Parameter = "WindSpeed", Value = 12m, IntervalStart = new DateTime(2026, 9, 24, 10, 15, 0) }], "MMF");
+if (!configuredMmfSensorChange.Any(issue => issue.RuleCode == "USR-MMF-0004"))
+    throw new Exception("MMF change-rate checks must be evaluated from the administrator's configured parameter rule.");
+Console.WriteLine("PASS: MMF parameter limits and change rates are applied only from administrator-configured rules");
+
+const string rawMmfQualityPayload = """
+[
+  { "timestamp": "2026-09-24T12:00:00", "parameter": "GHI", "value": 700, "unit": "W/m2" },
+  { "timestamp": "2026-09-24T12:00:00", "parameter": "GHI", "value": 710, "unit": "W/m2" },
+  { "timestamp": "2026-09-24T12:00:00", "parameter": "GHI", "value": 2500, "unit": "W/m2" }
+]
+""";
+var mmfFixedRules = Array.Empty<ValidationRule>();
+var storedMmfTranslation = ScheduledApiPayloadTranslator.Translate(rawMmfQualityPayload, "MMF", "MMF",
+    1, 400, new DateTime(2026, 9, 24, 12, 0, 0), 15, "application/json", mmfFixedRules);
+var reportMmfTranslation = ScheduledApiPayloadTranslator.Translate(rawMmfQualityPayload, "MMF", "MMF",
+    1, 400, new DateTime(2026, 9, 24, 12, 0, 0), 15, "application/json", mmfFixedRules,
+    applyValidation: true);
+if (storedMmfTranslation.Readings.Single().Value != decimal.Round((700m + 710m + 2500m) / 3m, 6)
+    || reportMmfTranslation.Readings.Single().Value != decimal.Round((700m + 710m + 2500m) / 3m, 6)
+    || reportMmfTranslation.Issues.Count != 0)
+    throw new Exception("MMF values must remain unfiltered until an administrator creates a parameter rule.");
+var configuredMmfTranslation = ScheduledApiPayloadTranslator.Translate(rawMmfQualityPayload, "MMF", "MMF",
+    1, 401, new DateTime(2026, 9, 24, 12, 0, 0), 15, "application/json",
+    [new ValidationRule { Code = "USR-MMF-0003", DataType = "MMF", FieldName = "GHI",
+        IsActive = true, RuleSource = "Configured", MinimumValue = 0m, MaximumValue = 1000m }], applyValidation: true);
+if (configuredMmfTranslation.Readings.Single().Value != 705m
+    || !configuredMmfTranslation.Issues.Any(issue => issue.RuleCode == "USR-MMF-0003"))
+    throw new Exception("MMF reporting must exclude only readings outside the administrator-configured parameter range.");
+Console.WriteLine("PASS: MMF collection stores original readings and reports apply only configured parameter limits");
+
+var reportPlant = new LssPlant { Id = 1, PlantId = "LSS-001", Name = "Report Plant", CapacityMw = 100m };
+var reportSubmission = new DateTime(2026, 9, 24);
+var currentDdq = new List<SolarApiReading>
+{
+    new() { Id = 10, PlantId = 1, DataType = "Day Ahead", SubmissionDateTime = reportSubmission,
+        IntervalStart = reportSubmission, IntervalMinutes = 30, Parameter = "MW", Value = -5m, Unit = "MW" }
+};
+var previousDdq = new List<SolarApiReading>
+{
+    new() { Id = 9, PlantId = 1, DataType = "Day Ahead", SubmissionDateTime = reportSubmission.AddDays(-1),
+        IntervalStart = reportSubmission, IntervalMinutes = 30, Parameter = "MW", Value = 25m, Unit = "MW" }
+};
+var preparedDdq = ReportSubstitutionPolicy.PrepareDdq("Day Ahead", reportSubmission,
+    [reportPlant], currentDdq, previousDdq);
+if (preparedDdq.Readings.Single(item => item.IntervalStart == reportSubmission).Value != 25m
+    || !preparedDdq.Readings.Single(item => item.IntervalStart == reportSubmission).IsSynthetic
+    || preparedDdq.Summary.PreviousDayValues != 1
+    || preparedDdq.Summary.ZeroFallbackValues == 0
+    || currentDdq[0].Value != -5m)
+    throw new Exception("DDQ email preparation must use previous-day then zero without modifying stored readings.");
+Console.WriteLine("PASS: DDQ report-only substitution uses previous-day then zero and preserves database values");
+
+var currentMmf = new List<SolarApiReading>
+{
+    new() { Id = 20, PlantId = 1, DataType = "MMF", SubmissionDateTime = reportSubmission,
+        IntervalStart = reportSubmission, IntervalMinutes = 15, Parameter = "GHI", Value = 700m, Unit = "W/m2" }
+};
+var previousMmf = new List<SolarApiReading>
+{
+    new() { Id = 19, PlantId = 1, DataType = "MMF", SubmissionDateTime = reportSubmission.AddDays(-1),
+        IntervalStart = reportSubmission.AddDays(-1).AddMinutes(15), IntervalMinutes = 15,
+        Parameter = "GHI", Value = 650m, Unit = "W/m2" }
+};
+var preparedMmf = ReportSubstitutionPolicy.PrepareMmf(reportSubmission, 15,
+    [reportPlant], currentMmf, previousMmf);
+if (preparedMmf.Readings.Single(item => item.IntervalStart == reportSubmission).Value != 700m
+    || preparedMmf.Readings.Single(item => item.IntervalStart == reportSubmission.AddMinutes(15)).Value != 650m
+    || preparedMmf.Readings.Single(item => item.IntervalStart == reportSubmission.AddMinutes(30)).Value != 0m)
+    throw new Exception("MMF email preparation must retain valid averages and use previous-day then zero for missing averages.");
+Console.WriteLine("PASS: MMF report-only substitution uses valid average, previous-day and zero fallback");
+
+var reportAnomalyCsv = ReportAnomalyCsvExporter.Build("DDQ", "Day Ahead", reportSubmission,
+    [reportPlant], currentDdq, preparedDdq,
+    [new ReportDetectedAnomaly("COL-001", reportPlant.Id, "MW", "-5",
+        "Active power cannot be below 0 MW.", "Open", DateTimeOffset.UtcNow)]);
+if (!reportAnomalyCsv.Contains("\"Validation anomaly\"")
+    || !reportAnomalyCsv.Contains("\"Report substitution\"")
+    || !reportAnomalyCsv.Contains("\"-5\",\"25\"")
+    || !reportAnomalyCsv.Contains("previous-day submission used"))
+    throw new Exception("Scheduled anomaly report must include validation anomalies and applied substitutions.");
+Console.WriteLine("PASS: Scheduled anomaly report includes validation anomalies and report substitutions");
+
+const string payloadSubmissionTimes = """
+[
+  { "submissionDateTime": "2026-09-24T10:10:00", "timestamp": "2026-09-25T00:00:00", "parameter": "MW", "value": 10 },
+  { "submissionDateTime": "2026-09-24T10:40:00", "timestamp": "2026-09-25T00:00:00", "parameter": "MW", "value": 11 }
+]
+""";
+var scheduleSubmission1010 = new DateTime(2026, 9, 24, 10, 10, 0);
+var scheduledTranslation = ScheduledApiPayloadTranslator.Translate(payloadSubmissionTimes,
+    "DDQ", "Day Ahead", 1, 500, scheduleSubmission1010, 30, "application/json");
+const string duplicateSubmissionTime = """
+[
+  { "submissionDateTime": "2026-09-24T10:10:00", "timestamp": "2026-09-25T00:00:00", "parameter": "MW", "value": 10 },
+  { "submissionDateTime": "2026-09-24T10:10:00", "timestamp": "2026-09-25T00:00:00", "parameter": "MW", "value": 11 }
+]
+""";
+var duplicateSubmissionTranslation = ScheduledApiPayloadTranslator.Translate(duplicateSubmissionTime,
+    "DDQ", "Day Ahead", 1, 501, reportSubmission, 30, "application/json");
+if (scheduledTranslation.Readings.Count != 1
+    || scheduledTranslation.Readings[0].SubmissionDateTime != scheduleSubmission1010
+    || !scheduledTranslation.Issues.Any(issue => issue.RuleCode == "DDQ-002")
+    || !duplicateSubmissionTranslation.Issues.Any(issue => issue.RuleCode == "DDQ-002"
+        && issue.Reason.Contains("24/09/2026 00:00:00")))
+    throw new Exception("Collection schedule time must be authoritative and duplicate validation must use it.");
+Console.WriteLine("PASS: Submission date and time comes from the collection schedule and drives duplicate validation");
+
+if (TimeDisplay.TwelveHour(new TimeOnly(0, 0)) != "12:00 AM"
+    || TimeDisplay.TwelveHour(new TimeOnly(13, 5)) != "01:05 PM"
+    || TimeDisplay.TwelveHour("23:45") != "11:45 PM")
+    throw new Exception("Calendar and schedule time must be displayed using the 12-hour AM/PM format.");
+Console.WriteLine("PASS: Calendar and schedule fields use the 12-hour AM/PM display");

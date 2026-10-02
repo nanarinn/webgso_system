@@ -17,10 +17,12 @@ public static class ScheduledApiPayloadTranslator
     private static readonly string[] UnitNames = ["unit", "valueUnit", "measurementUnit"];
 
     public static TranslationResult Translate(string payload, string apiType, string dataType, int plantId,
-        long collectionJobId, DateTime collectedAt, int intervalMinutes, string? contentType = null)
+        long collectionJobId, DateTime collectedAt, int intervalMinutes, string? contentType = null,
+        IReadOnlyCollection<ValidationRule>? validationRules = null, bool applyValidation = false)
     {
         if (string.IsNullOrWhiteSpace(payload))
-            return Build([], [], "Empty", apiType, dataType, plantId, collectionJobId, collectedAt, intervalMinutes);
+            return Build([], [], "Empty", apiType, dataType, plantId, collectionJobId, collectedAt,
+                intervalMinutes, validationRules, applyValidation);
 
         var candidates = new List<ReadingCandidate>();
         var issues = new List<TranslationIssue>();
@@ -53,34 +55,61 @@ public static class ScheduledApiPayloadTranslator
             issues.Add(new(apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase) ? "MMF-001" : "DDQ-001",
                 "API payload", "0", $"The {format} response was saved, but no numeric measurement fields were found."));
 
-        return Build(candidates, issues, format, apiType, dataType, plantId, collectionJobId, collectedAt, intervalMinutes);
+        return Build(candidates, issues, format, apiType, dataType, plantId, collectionJobId, collectedAt,
+            intervalMinutes, validationRules, applyValidation);
     }
 
     private static TranslationResult Build(List<ReadingCandidate> candidates, List<TranslationIssue> issues, string format,
-        string apiType, string dataType, int plantId, long collectionJobId, DateTime collectedAt, int intervalMinutes)
+        string apiType, string dataType, int plantId, long collectionJobId, DateTime collectedAt, int intervalMinutes,
+        IReadOnlyCollection<ValidationRule>? validationRules, bool applyValidation)
     {
         var sourceIntervalMinutes = DetectSourceIntervalMinutes(candidates, intervalMinutes);
+        // Submission date and time is owned by the collection schedule/job. Values supplied by
+        // an external payload must not move a reading into another submission run.
         var normalized = candidates
             .GroupBy(item => new
             {
+                SubmissionDateTime = collectedAt,
                 Timestamp = AlignToInterval(item.Timestamp, sourceIntervalMinutes),
                 Parameter = NormalizeParameter(item.Parameter).ToUpperInvariant(),
                 Unit = item.Unit.ToUpperInvariant()
             })
-            .Select(group =>
+            .SelectMany(group =>
             {
                 if (group.Count() > 1 && !apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase))
                     issues.Add(new("DDQ-002", group.Key.Parameter, group.Count().ToString(CultureInfo.InvariantCulture),
-                        "Duplicate readings were received for the same plant, parameter and timestamp."));
-                return new SolarApiReading
+                        $"Duplicate readings were received for submission date and time {group.Key.SubmissionDateTime:dd/MM/yyyy HH:mm:ss}, the same plant, parameter and data timestamp."));
+                var values = group.Select(item => item.Value).ToList();
+                if (applyValidation && apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase))
                 {
-                    CollectionJobId = collectionJobId, PlantId = plantId,
-                    DataType = apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase) ? "MMF" : dataType,
-                    SubmissionDateTime = group.Max(item => item.SubmissionDateTime), IntervalStart = group.Key.Timestamp,
-                    IntervalEnd = group.First().EndTimestamp ?? group.Key.Timestamp.AddMinutes(sourceIntervalMinutes),
-                    IntervalMinutes = sourceIntervalMinutes, Parameter = NormalizeParameter(group.First().Parameter),
-                    Value = decimal.Round(group.Average(item => item.Value), 6), Unit = group.First().Unit,
-                    ErrorCode = 0, ErrorMessage = "OK", IsSynthetic = false
+                    var quality = MmfSensorQualityPolicy.Evaluate(group.First().Parameter,
+                        group.Key.Timestamp, values, validationRules);
+                    issues.AddRange(quality.Issues);
+                    values = quality.ValidValues.ToList();
+                    if (values.Count == 0)
+                    {
+                        issues.Add(new("MMF-001", group.First().Parameter, null,
+                            "No valid MMF sensor value remained after report validation."));
+                        return Array.Empty<SolarApiReading>();
+                    }
+                }
+                return new[]
+                {
+                    new SolarApiReading
+                    {
+                        CollectionJobId = collectionJobId, PlantId = plantId,
+                        DataType = apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase) ? "MMF" : dataType,
+                        SubmissionDateTime = group.Key.SubmissionDateTime, IntervalStart = group.Key.Timestamp,
+                        IntervalEnd = group.First().EndTimestamp ?? group.Key.Timestamp.AddMinutes(sourceIntervalMinutes),
+                        IntervalMinutes = sourceIntervalMinutes, Parameter = NormalizeParameter(group.First().Parameter),
+                        Value = decimal.Round(values.Average(), 6), Unit = group.First().Unit,
+                        ErrorCode = 0, ErrorMessage = "OK", IsSynthetic = false,
+                        SyntheticReason = apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase)
+                            ? applyValidation
+                                ? $"Report average of {values.Count} MMF sensor reading(s) after validation."
+                                : $"Stored average of {values.Count} MMF sensor reading(s) exactly as received from the API."
+                            : null
+                    }
                 };
             }).OrderBy(item => item.IntervalStart).ThenBy(item => item.Parameter).ToList();
         if (!apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase) && normalized.Count > 1)
@@ -162,8 +191,8 @@ public static class ScheduledApiPayloadTranslator
                 .Where(property => IsMmfSensorField(property.Name) && TryDecimal(property.Value, out _))
                 .Select(property => TryDecimal(property.Value, out var value) ? value : 0m).ToArray();
             if (sensorValues.Length > 0)
-                readings.Add(new(timestamp, endTimestamp, submissionTimestamp, parameter!,
-                    sensorValues.Average(), unit));
+                foreach (var sensorValue in sensorValues)
+                    readings.Add(new(timestamp, endTimestamp, submissionTimestamp, parameter!, sensorValue, unit));
             else
                 foreach (var property in element.EnumerateObject())
                     if (TryDecimal(property.Value, out var value)

@@ -6,6 +6,7 @@ using System.Text;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Demo;
 using TestingSystem.Web.Database.Entities;
+using TestingSystem.Web.Models;
 using TestingSystem.Web.Services;
 using TestingSystem.Web.Backend.UseCases.UCLSS027Audit;
 
@@ -24,8 +25,13 @@ public partial class OnDemandReport : ComponentBase
     private string SummaryFilter { get; set; } = "All";
     private string SelectedType { get; set; } = "DDQ";
     private static readonly string[] DdqDataTypes = ["Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month Ahead"];
+    private static readonly (string Label, int Value)[] DataIntervals =
+        [("15 minutes", 15), ("30 minutes", 30), ("1 hour", 60)];
     private string SelectedDataType { get; set; } = DdqDataTypes[0];
+    private int SelectedInterval { get; set; } = 15;
     private DateTime SelectedSubmissionDate { get; set; } = DateTime.Today;
+    private DateTime MmfRangeStart { get; set; } = DateTime.Today;
+    private DateTime MmfRangeEnd { get; set; } = DateTime.Today.AddDays(1).AddMinutes(-15);
     private int GenerationSequence { get; set; } = 3;
     private int ActivePlantCount { get; set; }
     private string FormError { get; set; } = string.Empty;
@@ -52,18 +58,54 @@ public partial class OnDemandReport : ComponentBase
                 .OrderByDescending(x => x.RequestedAt).Select(x => new DemoAnalysisResult(x.ReportId, x.Name, x.DataType,
                     x.SubmissionDate, x.RequestedAt.LocalDateTime, x.Description,
                     x.GenerationStatus == "Completed" ? "Successful" : x.GenerationStatus,
-                    x.DataSelection, x.PlantCount, x.RecordCount, x.AnomalyCount)).ToListAsync();
+                    x.DataSelection, x.PlantCount, x.RecordCount, x.AnomalyCount,
+                    x.IntervalMinutes, x.DataRangeStart, x.DataRangeEnd)).ToListAsync();
         GenerationSequence = Math.Max(GenerationSequence, Results.Count);
         ActivePlantCount = await database.LssPlants.AsNoTracking().CountAsync(x => x.IsActive);
     }
 
-    private void OpenGenerateDialog()
+    private async Task OpenGenerateDialog()
     {
         SelectedType = "DDQ";
         SelectedDataType = DdqDataTypes[0];
-        SelectedSubmissionDate = DateTime.Today;
+        SelectedInterval = 15;
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        var latestDdqRun = await database.CollectionJobs.AsNoTracking()
+            .Where(job => job.Status == CollectionJobStatus.Completed && job.DataType != "MMF"
+                && database.SolarApiReadings.Any(reading => reading.CollectionJobId == job.Id))
+            .OrderByDescending(job => job.SubmissionDateTime)
+            .Select(job => new { job.DataType, job.SubmissionDateTime })
+            .FirstOrDefaultAsync();
+        if (latestDdqRun is not null)
+        {
+            SelectedDataType = DdqDatasetPolicy.CanonicalName(latestDdqRun.DataType);
+            SelectedSubmissionDate = TruncateToMinute(latestDdqRun.SubmissionDateTime);
+            SelectedInterval = DdqDatasetPolicy.Get(SelectedDataType).ReferenceTemplateIntervalMinutes;
+        }
+        else
+        {
+            SelectedSubmissionDate = DateTime.Today;
+        }
+        MmfRangeStart = DateTime.Today;
+        MmfRangeEnd = DateTime.Today.AddDays(1).AddMinutes(-15);
         FormError = string.Empty;
         IsGenerateDialogOpen = true;
+    }
+
+    private async Task OnDdqDataTypeChanged(ChangeEventArgs args)
+    {
+        var requestedType = DdqDatasetPolicy.CanonicalName(args.Value?.ToString());
+        SelectedDataType = requestedType;
+        SelectedInterval = DdqDatasetPolicy.Get(requestedType).ReferenceTemplateIntervalMinutes;
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        var latestSubmission = await database.CollectionJobs.AsNoTracking()
+            .Where(job => job.Status == CollectionJobStatus.Completed && job.DataType == requestedType
+                && database.SolarApiReadings.Any(reading => reading.CollectionJobId == job.Id))
+            .OrderByDescending(job => job.SubmissionDateTime)
+            .Select(job => (DateTime?)job.SubmissionDateTime)
+            .FirstOrDefaultAsync();
+        if (latestSubmission.HasValue)
+            SelectedSubmissionDate = TruncateToMinute(latestSubmission.Value);
     }
 
     private void CloseGenerateDialog() => IsGenerateDialogOpen = false;
@@ -85,25 +127,34 @@ public partial class OnDemandReport : ComponentBase
         if (IsGenerating) return;
         FormError = string.Empty;
         if (string.IsNullOrWhiteSpace(CurrentRequesterKey)) { FormError = "Your signed-in account could not be identified. Sign out and sign in again."; return; }
-        if (SelectedSubmissionDate.Date > DateTime.Today) { FormError = "Submission date cannot be in the future."; return; }
+        if (SelectedType == "DDQ" && SelectedSubmissionDate > DateTime.Now.AddMinutes(1)) { FormError = "Submission date and time cannot be in the future."; return; }
+        if (!DataIntervals.Any(interval => interval.Value == SelectedInterval)) { FormError = "Select a valid data interval."; return; }
+        if (SelectedType == "MMF" && MmfRangeEnd < MmfRangeStart) { FormError = "MMF data range end must be the same as or later than the start."; return; }
         IsGenerating = true;
         try
         {
             await using var database = await ContextFactory.CreateDbContextAsync();
-            var start = SelectedSubmissionDate.Date;
-            var end = start.AddDays(1);
             var activePlantIds = await database.LssPlants.AsNoTracking().Where(x => x.IsActive).Select(x => x.Id).ToListAsync();
             var storedDataType = SelectedType == "DDQ" ? SelectedDataType : "MMF";
+            var selectedSubmissionEnd = SelectedSubmissionDate.AddMinutes(1);
             var query = database.PublishedReadings().Where(x => activePlantIds.Contains(x.PlantId)
-                && x.DataType == storedDataType && x.SubmissionDateTime >= start && x.SubmissionDateTime < end);
+                && x.DataType == storedDataType
+                && (x.IntervalStart.Hour * 60 + x.IntervalStart.Minute) % SelectedInterval == 0);
+            if (SelectedType == "MMF")
+                query = query.Where(x => x.IntervalStart >= MmfRangeStart && x.IntervalStart <= MmfRangeEnd);
+            else
+                query = query.Where(x => x.SubmissionDateTime >= SelectedSubmissionDate
+                    && x.SubmissionDateTime < selectedSubmissionEnd);
             var recordCount = await query.CountAsync();
-            var submissionDate = DateOnly.FromDateTime(SelectedSubmissionDate);
             var anomalyCount = await (from anomaly in database.DataAnomalies.AsNoTracking()
                 join job in database.CollectionJobs.AsNoTracking() on anomaly.CollectionJobId equals job.Id
                 where activePlantIds.Contains(job.PlantId)
-                    && job.SubmissionDate == submissionDate
                     && anomaly.DataType == SelectedType
                     && (SelectedType == "MMF" || job.DataType == storedDataType)
+                    && (SelectedType == "MMF"
+                        ? job.SubmissionDateTime >= MmfRangeStart && job.SubmissionDateTime <= MmfRangeEnd
+                        : job.SubmissionDateTime >= SelectedSubmissionDate
+                            && job.SubmissionDateTime < selectedSubmissionEnd)
                 select anomaly.Id).CountAsync();
             GenerationSequence++;
             var generatedAt = DateTime.Now;
@@ -111,20 +162,30 @@ public partial class OnDemandReport : ComponentBase
             var selection = SelectedType == "DDQ" ? SelectedDataType : "All MMF parameters";
             var result = DemoData.CreateAnalysis(
                 SelectedType,
-                SelectedSubmissionDate,
+                SelectedType == "MMF" ? MmfRangeStart : SelectedSubmissionDate,
                 generatedAt,
                 status,
                 GenerationSequence,
                 selection,
                 activePlantIds.Count,
                 recordCount,
-                anomalyCount) with { Reference = OnDemandReportReference.Create(SelectedType, generatedAt) };
+                anomalyCount,
+                SelectedInterval,
+                SelectedType == "MMF" ? MmfRangeStart : null,
+                SelectedType == "MMF" ? MmfRangeEnd : null) with
+                { Reference = OnDemandReportReference.Create(SelectedType, generatedAt) };
+            var preparedExport = await PrepareExportAsync(result);
+            result = result with
+            {
+                AnomalyCount = preparedExport.DetectedAnomalies.Count + preparedExport.Prepared.Details.Count
+            };
             database.ReportExecutions.Add(new ReportExecution
             {
                 ReportId = result.Reference, ReportType = "On-Demand", DataType = result.Type, RequestedBy = CurrentRequesterKey,
                 RequestedAt = generatedAt, GenerationStatus = status == "Successful" ? "Completed" : "Failed",
                 DeliveryStatus = "NotRequired", Name = result.Name, SubmissionDate = result.SubmissionDate,
                 DataSelection = result.DataSelection, Description = result.Description, PlantCount = result.PlantCount,
+                IntervalMinutes = result.IntervalMinutes, DataRangeStart = result.DataRangeStart, DataRangeEnd = result.DataRangeEnd,
                 RecordCount = result.RecordCount, AnomalyCount = result.AnomalyCount,
                 ErrorMessage = status == "Failed" ? "No matching MS SQL readings were found." : null
             });
@@ -148,68 +209,106 @@ public partial class OnDemandReport : ComponentBase
 
     private async Task ExportResultAsync(DemoAnalysisResult result)
     {
-        await using var database = await ContextFactory.CreateDbContextAsync();
-        var start = result.SubmissionDate.Date;
-        var end = start.AddDays(1);
-        var plants = await database.LssPlants.AsNoTracking().Where(x => x.IsActive)
-            .OrderBy(x => x.PlantId).ThenBy(x => x.Name).ToListAsync();
-        var plantIds = plants.Select(plant => plant.Id).ToList();
-        var storedDataType = result.Type == "DDQ" ? result.DataSelection : "MMF";
-        if (string.IsNullOrWhiteSpace(storedDataType)) storedDataType = result.Type == "DDQ" ? "Rolling 24 Hour" : "MMF";
-        var query = database.PublishedReadings().Where(x => plantIds.Contains(x.PlantId)
-            && x.DataType == storedDataType && x.SubmissionDateTime >= start && x.SubmissionDateTime < end);
-        var readings = await query.OrderByDescending(x => x.Id).ToListAsync();
+        var export = await PrepareExportAsync(result);
         var csv = result.Type == "DDQ"
-            ? OnDemandCsvExporter.BuildDdq(storedDataType, result.SubmissionDate, plants, readings)
-            : OnDemandCsvExporter.BuildMmf(result.SubmissionDate, plants, readings);
+            ? OnDemandCsvExporter.BuildDdq(export.StoredDataType, result.SubmissionDate, export.Plants,
+                export.Prepared.Readings, result.IntervalMinutes)
+            : OnDemandCsvExporter.BuildMmf(result.SubmissionDate, export.Plants, export.Prepared.Readings,
+                result.DataRangeStart, result.DataRangeEnd);
         var bytes = new UTF8Encoding(true).GetBytes(csv);
         var fileName = GetCsvFileName(result);
         await JavaScript.InvokeVoidAsync("sblssDownloadBase64", fileName, "text/csv;charset=utf-8", Convert.ToBase64String(bytes));
         var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         await AuditTrail.RecordAsync(authenticationState.User, "Download on-demand analysis", "Success",
             "Download", fileName,
-            $"Downloaded {result.Type} {result.DataSelection} analysis for submission date {result.SubmissionDate:dd MMM yyyy}; report {result.Reference}.");
+            result.Type == "MMF"
+                ? $"Downloaded MMF {result.DataSelection} analysis at {IntervalText(result.IntervalMinutes)} interval for data timestamps {result.DataRangeStart:dd MMM yyyy HH:mm} to {result.DataRangeEnd:dd MMM yyyy HH:mm}; report {result.Reference}."
+                : $"Downloaded DDQ {result.DataSelection} analysis at {IntervalText(result.IntervalMinutes)} interval for submission date and time {result.SubmissionDate:dd MMM yyyy HH:mm}; report {result.Reference}.");
     }
 
     private static string GetCsvFileName(DemoAnalysisResult result)
         => $"{GetFileStem(result)}.csv";
 
+    private static string IntervalText(int minutes) => minutes == 60 ? "1 hour" : $"{minutes} minutes";
+
+    private static DateTime TruncateToMinute(DateTime value) =>
+        new(value.Year, value.Month, value.Day, value.Hour, value.Minute, 0, value.Kind);
+
     private async Task ExportAnomalyResultAsync(DemoAnalysisResult result)
     {
-        await using var database = await ContextFactory.CreateDbContextAsync();
-        var submissionDate = DateOnly.FromDateTime(result.SubmissionDate);
-        var storedDataType = result.Type == "DDQ" ? result.DataSelection : "MMF";
-        if (string.IsNullOrWhiteSpace(storedDataType)) storedDataType = result.Type == "DDQ" ? "Rolling 24 Hour" : "MMF";
-
-        var rows = await (from anomaly in database.DataAnomalies.AsNoTracking()
-            join job in database.CollectionJobs.AsNoTracking() on anomaly.CollectionJobId equals job.Id
-            join plant in database.LssPlants.AsNoTracking() on job.PlantId equals plant.Id
-            where plant.IsActive
-                && job.SubmissionDate == submissionDate
-                && anomaly.DataType == result.Type
-                && (result.Type == "MMF" || job.DataType == storedDataType)
-            orderby anomaly.DetectedAt, plant.PlantId, anomaly.FieldName
-            select new AnomalyCsvRow(job.CollectionId, plant.PlantId, plant.Name, anomaly.FieldName,
-                anomaly.OriginalValue, anomaly.Reason, anomaly.Status, anomaly.DetectedAt)).ToListAsync();
-
-        var csv = new StringBuilder();
-        AddCsvRow(csv, "Collection ID", "Plant ID", "Plant Name", "API Type", "Data Type", "Submission Date",
-            "Field / Parameter", "Original Value", "Reason", "Status", "Detected At");
-        foreach (var row in rows)
-        {
-            AddCsvRow(csv, row.CollectionId, row.PlantId, row.PlantName, result.Type, result.DataSelection,
-                result.SubmissionDate.ToString("yyyy-MM-dd"), row.FieldName, row.OriginalValue ?? "Missing",
-                row.Reason, row.Status, row.DetectedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"));
-        }
-
-        var bytes = new UTF8Encoding(true).GetBytes(csv.ToString());
+        var export = await PrepareExportAsync(result);
+        var csv = ReportAnomalyCsvExporter.Build(result.Type, export.StoredDataType,
+            result.Type == "MMF" ? result.DataRangeStart ?? result.SubmissionDate : result.SubmissionDate,
+            export.Plants, export.OriginalReadings, export.Prepared, export.DetectedAnomalies);
+        var bytes = new UTF8Encoding(true).GetBytes(csv);
         var fileName = $"{GetFileStem(result)}_Anomaly.csv";
         await JavaScript.InvokeVoidAsync("sblssDownloadBase64", fileName,
             "text/csv;charset=utf-8", Convert.ToBase64String(bytes));
         var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         await AuditTrail.RecordAsync(authenticationState.User, "Download anomaly report", "Success",
             "Download", fileName,
-            $"Downloaded {rows.Count} anomaly record(s) for {result.Type} {result.DataSelection}; report {result.Reference}.");
+            $"Downloaded {export.DetectedAnomalies.Count + export.Prepared.Details.Count} anomaly and substitution record(s) for {result.Type} {result.DataSelection}; report {result.Reference}.");
+    }
+
+    private async Task<OnDemandPreparedExport> PrepareExportAsync(DemoAnalysisResult result)
+    {
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        var plants = await database.LssPlants.AsNoTracking().Where(x => x.IsActive)
+            .OrderBy(x => x.PlantId).ThenBy(x => x.Name).ToListAsync();
+        var plantIds = plants.Select(plant => plant.Id).ToList();
+        var storedDataType = result.Type == "DDQ" ? result.DataSelection : "MMF";
+        if (string.IsNullOrWhiteSpace(storedDataType)) storedDataType = result.Type == "DDQ" ? "Rolling 24 Hour" : "MMF";
+        var submissionEnd = result.SubmissionDate.AddMinutes(1);
+        var query = database.PublishedReadings().Where(x => plantIds.Contains(x.PlantId)
+            && x.DataType == storedDataType
+            && (x.IntervalStart.Hour * 60 + x.IntervalStart.Minute) % result.IntervalMinutes == 0);
+        if (result.Type == "MMF" && result.DataRangeStart.HasValue && result.DataRangeEnd.HasValue)
+            query = query.Where(x => x.IntervalStart >= result.DataRangeStart.Value
+                && x.IntervalStart <= result.DataRangeEnd.Value);
+        else
+            query = query.Where(x => x.SubmissionDateTime >= result.SubmissionDate
+                && x.SubmissionDateTime < submissionEnd);
+        var readings = await query.OrderByDescending(x => x.Id).ToListAsync();
+        List<SolarApiReading> previousReadings;
+        if (result.Type == "MMF" && result.DataRangeStart.HasValue && result.DataRangeEnd.HasValue)
+        {
+            var previousStart = result.DataRangeStart.Value.AddDays(-1);
+            var previousEnd = result.DataRangeEnd.Value.AddDays(-1);
+            previousReadings = await database.PublishedReadings().Where(x => plantIds.Contains(x.PlantId)
+                && x.DataType == "MMF" && x.IntervalStart >= previousStart && x.IntervalStart <= previousEnd)
+                .OrderByDescending(x => x.Id).ToListAsync();
+        }
+        else
+        {
+            var previousSubmission = result.SubmissionDate.AddDays(-1);
+            var previousSubmissionEnd = previousSubmission.AddMinutes(1);
+            previousReadings = await database.PublishedReadings().Where(x => plantIds.Contains(x.PlantId)
+                && x.DataType == storedDataType && x.SubmissionDateTime >= previousSubmission
+                && x.SubmissionDateTime < previousSubmissionEnd)
+                .OrderByDescending(x => x.Id).ToListAsync();
+        }
+        var rules = await database.ValidationRules.AsNoTracking()
+            .Where(rule => rule.DataType == result.Type && rule.IsActive).ToListAsync();
+        var prepared = result.Type == "MMF" && result.DataRangeStart.HasValue && result.DataRangeEnd.HasValue
+            ? ReportSubstitutionPolicy.PrepareMmfRange(result.DataRangeStart.Value, result.DataRangeEnd.Value,
+                result.IntervalMinutes, plants, readings, previousReadings, rules)
+            : ReportSubstitutionPolicy.PrepareDdq(storedDataType, result.SubmissionDate,
+                plants, readings, previousReadings, rules);
+        var detected = await (from anomaly in database.DataAnomalies.AsNoTracking()
+            join job in database.CollectionJobs.AsNoTracking() on anomaly.CollectionJobId equals job.Id
+            join rule in database.ValidationRules.AsNoTracking() on anomaly.ValidationRuleId equals rule.Id into ruleGroup
+            from rule in ruleGroup.DefaultIfEmpty()
+            where plantIds.Contains(job.PlantId) && anomaly.DataType == result.Type
+                && (result.Type == "MMF" || job.DataType == storedDataType)
+                && (result.Type == "MMF"
+                    ? result.DataRangeStart.HasValue && result.DataRangeEnd.HasValue
+                        && job.SubmissionDateTime >= result.DataRangeStart.Value && job.SubmissionDateTime <= result.DataRangeEnd.Value
+                    : job.SubmissionDateTime >= result.SubmissionDate
+                        && job.SubmissionDateTime < submissionEnd)
+            select new ReportDetectedAnomaly(job.CollectionId, job.PlantId, anomaly.FieldName,
+                anomaly.OriginalValue, anomaly.Reason, anomaly.Status, anomaly.DetectedAt,
+                rule == null ? "" : rule.Code, rule == null ? "" : rule.Name)).ToListAsync();
+        return new(plants, storedDataType, readings, prepared, detected);
     }
 
     private static string GetFileStem(DemoAnalysisResult result)
@@ -222,12 +321,10 @@ public partial class OnDemandReport : ComponentBase
             Path.GetInvalidFileNameChars().Concat([' ']).ToArray(),
             StringSplitOptions.RemoveEmptyEntries));
 
-        return $"{reportType}_{safeDataType}_{result.SubmissionDate:yyyyMMdd}";
+        return $"{reportType}_{safeDataType}_{result.SubmissionDate:yyyyMMdd_HHmm}";
     }
 
-    private static void AddCsvRow(StringBuilder output, params string[] values)
-        => output.AppendJoin(',', values.Select(value => $"\"{value.Replace("\"", "\"\"")}\"")).Append("\r\n");
-
-    private sealed record AnomalyCsvRow(string CollectionId, string PlantId, string PlantName, string FieldName,
-        string? OriginalValue, string Reason, string Status, DateTimeOffset DetectedAt);
+    private sealed record OnDemandPreparedExport(IReadOnlyList<LssPlant> Plants, string StoredDataType,
+        IReadOnlyList<SolarApiReading> OriginalReadings, PreparedReportReadings Prepared,
+        IReadOnlyList<ReportDetectedAnomaly> DetectedAnomalies);
 }

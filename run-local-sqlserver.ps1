@@ -109,24 +109,28 @@ elseif (Test-Path -LiteralPath $clearCollectionRequestPath) {
     Write-Host "Collection Management is ready for a fresh API test." -ForegroundColor Green
 }
 
-$availableNetworkInterfaces = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-    Where-Object {
-        $_.IPAddress -ne '127.0.0.1' -and
-        $_.IPAddress -notlike '169.254.*' -and
-        $_.InterfaceAlias -notmatch 'Loopback|vEthernet|Docker|WSL'
-    })
-$networkInterface = if ([string]::IsNullOrWhiteSpace($ShareAddress)) {
-    $availableNetworkInterfaces | Sort-Object -Property InterfaceMetric | Select-Object -First 1
-}
-else {
-    $parsedShareAddress = [System.Net.IPAddress]::None
-    if (-not [System.Net.IPAddress]::TryParse($ShareAddress, [ref]$parsedShareAddress) -or
-        $parsedShareAddress.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
-        throw "ShareAddress must be a valid IPv4 address."
+$networkInterface = $null
+$networkAddress = $null
+if ($Share) {
+    $availableNetworkInterfaces = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.IPAddress -ne '127.0.0.1' -and
+            $_.IPAddress -notlike '169.254.*' -and
+            $_.InterfaceAlias -notmatch 'Loopback|vEthernet|Docker|WSL'
+        })
+    $networkInterface = if ([string]::IsNullOrWhiteSpace($ShareAddress)) {
+        $availableNetworkInterfaces | Sort-Object -Property InterfaceMetric | Select-Object -First 1
     }
-    $availableNetworkInterfaces | Where-Object { $_.IPAddress -eq $ShareAddress } | Select-Object -First 1
+    else {
+        $parsedShareAddress = [System.Net.IPAddress]::None
+        if (-not [System.Net.IPAddress]::TryParse($ShareAddress, [ref]$parsedShareAddress) -or
+            $parsedShareAddress.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
+            throw "ShareAddress must be a valid IPv4 address."
+        }
+        $availableNetworkInterfaces | Where-Object { $_.IPAddress -eq $ShareAddress } | Select-Object -First 1
+    }
+    $networkAddress = $networkInterface.IPAddress
 }
-$networkAddress = $networkInterface.IPAddress
 
 if ($Share) {
     if ([string]::IsNullOrWhiteSpace($networkAddress)) {
@@ -193,17 +197,11 @@ elseif ($httpsReady) {
     Write-Host "See the Microsoft Entra ID sign-in section in README.md." -ForegroundColor Yellow
 }
 if ($networkAddress) {
-    if ($Share) {
-        Write-Host "Team network access: http://$($networkAddress):$port" -ForegroundColor Green
-        if ($ShareEntra) {
-            Write-Host "Team Microsoft Entra access: https://$ShareHostName`:$httpsPort/login" -ForegroundColor Green
-        }
-        Write-Host "Keep this terminal running while teammates use the system." -ForegroundColor DarkYellow
+    Write-Host "Team network access: http://$($networkAddress):$port" -ForegroundColor Green
+    if ($ShareEntra) {
+        Write-Host "Team Microsoft Entra access: https://$ShareHostName`:$httpsPort/login" -ForegroundColor Green
     }
-    else {
-        Write-Host "Network URL detected: http://$($networkAddress):$port" -ForegroundColor Cyan
-        Write-Host "Run this script with -Share in an Administrator terminal to allow teammate access." -ForegroundColor Yellow
-    }
+    Write-Host "Keep this terminal running while teammates use the system." -ForegroundColor DarkYellow
 }
 
 $env:DOTNET_WATCH_RESTART_ON_RUDE_EDIT = "1"
@@ -213,10 +211,12 @@ Write-Host "Open the system with http://localhost:$port (do not use 0.0.0.0 in t
 Write-Host "Press Ctrl + C only when you want to stop the system." -ForegroundColor DarkYellow
 $applicationUrls = if ($httpsReady) {
     $httpsBindHost = if ($ShareEntra) { "0.0.0.0" } else { "localhost" }
-    "https://$httpsBindHost`:$httpsPort;http://0.0.0.0:$port"
+    $httpBindHost = if ($Share) { "0.0.0.0" } else { "localhost" }
+    "https://$httpsBindHost`:$httpsPort;http://$httpBindHost`:$port"
 }
 else {
-    "http://0.0.0.0:$port"
+    $httpBindHost = if ($Share) { "0.0.0.0" } else { "localhost" }
+    "http://$httpBindHost`:$port"
 }
 $watchLogPath = Join-Path $projectRoot ".sblss-watch.log"
 dotnet watch --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-hot-reload run --no-launch-profile --urls `

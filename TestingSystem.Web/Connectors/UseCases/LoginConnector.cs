@@ -10,6 +10,13 @@ public static class LoginConnector
     public static IEndpointRouteBuilder MapLoginEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/account/logout", LogoutAsync).RequireAuthorization();
+        // This endpoint must remain anonymous. When the application cookie has already
+        // expired, requiring authorization first redirects to Microsoft sign-in. The
+        // successful callback then returns here and signs the new session out again,
+        // which makes the user appear to need two sign-ins.
+        endpoints.MapGet("/account/session/timeout", TimeoutLogoutAsync).AllowAnonymous();
+        // Compatibility for browser tabs that loaded the earlier timeout script.
+        endpoints.MapGet("/account/logout", TimeoutLogoutAsync).AllowAnonymous();
         endpoints.MapGet("/account/session/keep-alive", (HttpContext context) =>
         {
             context.Response.Headers.CacheControl = "no-store, no-cache";
@@ -32,6 +39,23 @@ public static class LoginConnector
             detail: timedOut ? "Signed out automatically after 15 minutes of inactivity." : null,
             correlationId: context.TraceIdentifier);
         return Results.LocalRedirect("/login");
+    }
+
+    private static async Task<IResult> TimeoutLogoutAsync(
+        HttpContext context,
+        SignInManager<ApplicationUser> signInManager,
+        IAuditTrailService auditTrail)
+    {
+        var actor = context.User;
+        var wasAuthenticated = actor.Identity?.IsAuthenticated == true;
+        await signInManager.SignOutAsync();
+        if (wasAuthenticated)
+        {
+            await auditTrail.RecordAsync(actor, "Session timeout", "Success",
+                detail: "Signed out automatically after 15 minutes of inactivity.",
+                correlationId: context.TraceIdentifier);
+        }
+        return Results.LocalRedirect("/login?reason=session-timeout");
     }
 
 }

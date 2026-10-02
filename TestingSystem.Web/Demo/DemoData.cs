@@ -4,13 +4,18 @@ namespace TestingSystem.Web.Demo;
 public static class DemoData
 {
     public static DemoAnalysisResult CreateAnalysis(string type, DateTime submissionDate, DateTime generatedAt, string status, int sequence,
-        string dataSelection = "", int plantCount = 0, int recordCount = 0, int anomalyCount = 0)
+        string dataSelection = "", int plantCount = 0, int recordCount = 0, int anomalyCount = 0,
+        int intervalMinutes = 15, DateTime? dataRangeStart = null, DateTime? dataRangeEnd = null)
     {
         var reference = $"ODA-{type}-{generatedAt:yyyyMMdd}-{sequence:000}";
         var selection = string.IsNullOrWhiteSpace(dataSelection) ? (type == "DDQ" ? "Rolling 24 Hour" : "All MMF parameters") : dataSelection;
-        var description = $"{type} {selection} data generated for all {plantCount} active LSS plant(s) from the {submissionDate:dd MMM yyyy} submission ({recordCount:N0} records).";
+        var interval = intervalMinutes == 60 ? "1 hour" : $"{intervalMinutes} minutes";
+        var description = type == "MMF" && dataRangeStart.HasValue && dataRangeEnd.HasValue
+            ? $"MMF {selection} data generated at {interval} interval for all {plantCount} active LSS plant(s) between {dataRangeStart:dd MMM yyyy HH:mm} and {dataRangeEnd:dd MMM yyyy HH:mm} ({recordCount:N0} records)."
+            : $"{type} {selection} data generated at {interval} interval for all {plantCount} active LSS plant(s) from the {submissionDate:dd MMM yyyy HH:mm} scheduled submission ({recordCount:N0} records).";
         if (status == "Failed") description += " Generation completed with validation errors and requires review.";
-        return new(reference, $"{type} On-Demand Analysis {sequence:000}", type, submissionDate, generatedAt, description, status, selection, plantCount, recordCount, anomalyCount);
+        return new(reference, $"{type} On-Demand Analysis {sequence:000}", type, submissionDate, generatedAt, description,
+            status, selection, plantCount, recordCount, anomalyCount, intervalMinutes, dataRangeStart, dataRangeEnd);
     }
 
     public static DemoCollectionJob CreateCollectionJob(string plant, string state, string mode, string status, DateTime runAt, int sequence)
@@ -27,7 +32,8 @@ public sealed record DemoCollectionJob(string CollectionId, string PlantName, st
     string ScheduleName = "", int ReadingCount = 0, int AnomalyCount = 0, int? HttpStatusCode = null, string ContentType = "",
     long DatabaseId = 0, string ErrorMessage = "");
 public sealed record DemoAnalysisResult(string Reference, string Name, string Type, DateTime SubmissionDate, DateTime GeneratedAt,
-    string Description, string Status, string DataSelection = "", int PlantCount = 0, int RecordCount = 0, int AnomalyCount = 0);
+    string Description, string Status, string DataSelection = "", int PlantCount = 0, int RecordCount = 0, int AnomalyCount = 0,
+    int IntervalMinutes = 15, DateTime? DataRangeStart = null, DateTime? DataRangeEnd = null);
 public sealed record DemoReportRecord(string ReportId, string Name, string Source, string Type, DateTime SubmissionDate, DateTime GeneratedAt, string Status, string RequestedBy, int AnomalyCount, string Description);
 public sealed record DemoReportSchedule(
     string Id,

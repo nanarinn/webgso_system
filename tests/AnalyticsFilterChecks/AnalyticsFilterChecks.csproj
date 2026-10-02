@@ -12,6 +12,7 @@
     <Compile Include="../../TestingSystem.Web/Connectors/UseCases/AnalyticsGraphScale.cs" Link="AnalyticsGraphScale.cs" />
     <Compile Include="../../TestingSystem.Web/Database/UseCases/MmfSensorAveraging.cs" Link="MmfSensorAveraging.cs" />
     <Compile Include="../../TestingSystem.Web/Database/UseCases/SolarApiReadingTable.cs" Link="SolarApiReading.cs" />
+    <Compile Include="../../TestingSystem.Web/Database/UseCases/OperationalTables.cs" Link="OperationalTables.cs" />
     <Compile Include="../../TestingSystem.Web/Database/UseCases/MmfLocationAveraging.cs" Link="MmfLocationAveraging.cs" />
     <Compile Include="../../TestingSystem.Web/Backend/UseCases/Exports/DdqExcelWorkbookExporter.cs" Link="DdqExcelWorkbookExporter.cs" />
     <Compile Include="../../TestingSystem.Web/Services/CollectionSchedulePolicy.cs" Link="CollectionSchedulePolicy.cs" />
@@ -28,7 +29,13 @@
     <Compile Include="../../TestingSystem.Web/Services/OnDemandReportOwnership.cs" Link="OnDemandReportOwnership.cs" />
     <Compile Include="../../TestingSystem.Web/Services/LssPlantApiConfigurationPolicy.cs" Link="LssPlantApiConfigurationPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/LssApiPayloadVerifier.cs" Link="LssApiPayloadVerifier.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/ConfiguredValidationRuleEvaluator.cs" Link="ConfiguredValidationRuleEvaluator.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/MmfSensorQualityPolicy.cs" Link="MmfSensorQualityPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/CollectionValidationPolicy.cs" Link="CollectionValidationPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/ReportSubstitutionPolicy.cs" Link="ReportSubstitutionPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/ReportAnomalyCsvExporter.cs" Link="ReportAnomalyCsvExporter.cs" />
     <Compile Include="../../TestingSystem.Web/Services/ReportScheduleTimePolicy.cs" Link="ReportScheduleTimePolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/ReportScheduleDuePolicy.cs" Link="ReportScheduleDuePolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/TimeDisplay.cs" Link="TimeDisplay.cs" />
   </ItemGroup>
 </Project>

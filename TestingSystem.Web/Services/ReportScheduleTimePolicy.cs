@@ -4,7 +4,7 @@ namespace TestingSystem.Web.Services;
 
 public static class ReportScheduleTimePolicy
 {
-    private static readonly string[] SupportedFormats = ["H:mm", "HH:mm", "h:mm tt", "hh:mm tt"];
+    private static readonly string[] SupportedFormats = ["H:mm", "HH:mm"];
 
     public static bool TryNormalize(string? value, out string normalized)
     {

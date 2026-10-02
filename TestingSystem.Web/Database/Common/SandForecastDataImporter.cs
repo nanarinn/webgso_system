@@ -75,6 +75,7 @@ public static class SandForecastDataImporter
             {
                 CollectionId = collectionId, PlantId = plant.Id, DataType = source.DataType,
                 Mode = "SAND API workbook import", SubmissionDate = DateOnly.FromDateTime(submission),
+                SubmissionDateTime = submission,
                 StartedAt = DateTimeOffset.Now, CompletedAt = DateTimeOffset.Now, Status = "Completed"
             };
             database.CollectionJobs.Add(job);

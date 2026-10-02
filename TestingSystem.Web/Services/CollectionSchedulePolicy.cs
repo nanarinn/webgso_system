@@ -2,6 +2,14 @@ namespace TestingSystem.Web.Services;
 
 public static class CollectionSchedulePolicy
 {
+    public static DateTime SubmissionDateTime(string dataType, string runTime, DateTime localNow)
+    {
+        if (dataType is not ("Rolling 24 Hour" or "MMF") && TimeOnly.TryParse(runTime, out var scheduledTime))
+            return localNow.Date.Add(scheduledTime.ToTimeSpan());
+        return new DateTime(localNow.Year, localNow.Month, localNow.Day,
+            localNow.Hour, localNow.Minute, 0, DateTimeKind.Unspecified);
+    }
+
     public static string ApiDataType(string apiType, string scheduleDataType) =>
         apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase)
             ? "MMF"

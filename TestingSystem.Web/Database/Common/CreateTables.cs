@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TestingSystem.Web.Models;
+using TestingSystem.Web.Services;
 
 namespace TestingSystem.Web.Data;
 
@@ -12,12 +13,18 @@ public static class DatabaseInitializer
         var serviceProvider = scope.ServiceProvider;
         var database = serviceProvider.GetRequiredService<ApplicationDbContext>();
 
+        // Schema upgrades can legitimately take longer than normal page queries when an
+        // existing installation contains a large reading history. Keep the larger timeout
+        // scoped to startup; normal application commands retain their configured timeout.
+        database.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
+
         await database.Database.EnsureCreatedAsync();
         await EnsureUserAccessSchemaAsync(database);
         await EnsurePlantTableAsync(database);
         await EnsurePlantApiConfigurationsAsync(database);
         await EnsureSolarApiReadingTableAsync(database);
         await EnsureFsdCoreTablesAsync(database);
+        await ValidationRuleCatalog.SynchronizeAsync(database);
         await SeedUsersAsync(serviceProvider, configuration);
         if (configuration.GetValue<bool>("Authentication:MicrosoftOnly"))
             await RemoveLocalUsersAsync(serviceProvider);
@@ -183,11 +190,18 @@ public static class DatabaseInitializer
                 [Result] nvarchar(40) NOT NULL, [Detail] nvarchar(2000) NULL,
                 [CorrelationId] nvarchar(100) NULL);
 
+            IF OBJECT_ID(N'[SchemaUpgrades]', N'U') IS NULL
+            CREATE TABLE [SchemaUpgrades] (
+                [Name] nvarchar(160) NOT NULL PRIMARY KEY,
+                [CompletedAt] datetimeoffset NOT NULL);
+
             IF OBJECT_ID(N'[CollectionJobs]', N'U') IS NULL
             CREATE TABLE [CollectionJobs] (
                 [Id] bigint IDENTITY PRIMARY KEY, [CollectionId] nvarchar(60) NOT NULL UNIQUE,
-                [PlantId] int NOT NULL, [DataType] nvarchar(10) NOT NULL, [Mode] nvarchar(20) NOT NULL,
-                [SubmissionDate] date NOT NULL, [StartedAt] datetimeoffset NOT NULL,
+                [PlantId] int NOT NULL, [CollectionScheduleId] int NULL,
+                [DataType] nvarchar(10) NOT NULL, [Mode] nvarchar(20) NOT NULL,
+                [SubmissionDate] date NOT NULL, [SubmissionDateTime] datetime2 NOT NULL,
+                [StartedAt] datetimeoffset NOT NULL,
                 [CompletedAt] datetimeoffset NULL, [Status] nvarchar(30) NOT NULL,
                 [ErrorMessage] nvarchar(1000) NULL);
 
@@ -204,11 +218,30 @@ public static class DatabaseInitializer
                 [DataType] nvarchar(10) NOT NULL, [FieldName] nvarchar(100) NOT NULL,
                 [Name] nvarchar(200) NOT NULL, [Description] nvarchar(1000) NOT NULL, [Condition] nvarchar(300) NOT NULL,
                 [Operator] nvarchar(30) NOT NULL, [MinimumValue] decimal(18,4) NULL,
-                [MaximumValue] decimal(18,4) NULL, [Severity] nvarchar(20) NOT NULL,
-                [IsActive] bit NOT NULL);
+                [MaximumValue] decimal(18,4) NULL, [ChangeThreshold] decimal(18,4) NULL,
+                [CheckMissing] bit NOT NULL DEFAULT 0, [RuleSource] nvarchar(20) NOT NULL DEFAULT N'Fixed',
+                [Severity] nvarchar(20) NOT NULL, [IsActive] bit NOT NULL,
+                [CreatedBy] nvarchar(160) NULL, [CreatedAt] datetimeoffset NOT NULL DEFAULT SYSUTCDATETIME(),
+                [UpdatedAt] datetimeoffset NULL);
             IF COL_LENGTH('ValidationRules', 'Name') IS NULL ALTER TABLE [ValidationRules] ADD [Name] nvarchar(200) NOT NULL CONSTRAINT [DF_ValidationRules_Name] DEFAULT '';
             IF COL_LENGTH('ValidationRules', 'Description') IS NULL ALTER TABLE [ValidationRules] ADD [Description] nvarchar(1000) NOT NULL CONSTRAINT [DF_ValidationRules_Description] DEFAULT '';
             IF COL_LENGTH('ValidationRules', 'Condition') IS NULL ALTER TABLE [ValidationRules] ADD [Condition] nvarchar(300) NOT NULL CONSTRAINT [DF_ValidationRules_Condition] DEFAULT '';
+            IF COL_LENGTH('ValidationRules', 'ChangeThreshold') IS NULL ALTER TABLE [ValidationRules] ADD [ChangeThreshold] decimal(18,4) NULL;
+            IF COL_LENGTH('ValidationRules', 'CheckMissing') IS NULL ALTER TABLE [ValidationRules] ADD [CheckMissing] bit NOT NULL CONSTRAINT [DF_ValidationRules_CheckMissing] DEFAULT 0;
+            IF COL_LENGTH('ValidationRules', 'RuleSource') IS NULL ALTER TABLE [ValidationRules] ADD [RuleSource] nvarchar(20) NOT NULL CONSTRAINT [DF_ValidationRules_RuleSource] DEFAULT N'Fixed';
+            IF COL_LENGTH('ValidationRules', 'CreatedBy') IS NULL ALTER TABLE [ValidationRules] ADD [CreatedBy] nvarchar(160) NULL;
+            IF COL_LENGTH('ValidationRules', 'CreatedAt') IS NULL ALTER TABLE [ValidationRules] ADD [CreatedAt] datetimeoffset NOT NULL CONSTRAINT [DF_ValidationRules_CreatedAt] DEFAULT SYSUTCDATETIME();
+            IF COL_LENGTH('ValidationRules', 'UpdatedAt') IS NULL ALTER TABLE [ValidationRules] ADD [UpdatedAt] datetimeoffset NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ValidationRules_ConfiguredSignature' AND [object_id] = OBJECT_ID(N'[ValidationRules]'))
+               AND NOT EXISTS (
+                    SELECT [DataType], UPPER(LTRIM(RTRIM([FieldName]))), [MinimumValue], [MaximumValue], [ChangeThreshold], [CheckMissing]
+                    FROM [ValidationRules]
+                    WHERE [RuleSource] = N'Configured'
+                    GROUP BY [DataType], UPPER(LTRIM(RTRIM([FieldName]))), [MinimumValue], [MaximumValue], [ChangeThreshold], [CheckMissing]
+                    HAVING COUNT(*) > 1)
+                CREATE UNIQUE INDEX [IX_ValidationRules_ConfiguredSignature]
+                    ON [ValidationRules] ([DataType], [FieldName], [MinimumValue], [MaximumValue], [ChangeThreshold], [CheckMissing])
+                    WHERE [RuleSource] = N'Configured';
 
             IF OBJECT_ID(N'[DataAnomalies]', N'U') IS NULL
             CREATE TABLE [DataAnomalies] (
@@ -233,6 +266,7 @@ public static class DatabaseInitializer
             IF COL_LENGTH('CollectionSchedules', 'ApiType') IS NULL ALTER TABLE [CollectionSchedules] ADD [ApiType] nvarchar(10) NOT NULL CONSTRAINT [DF_CollectionSchedules_ApiType] DEFAULT 'DDQ';
             IF COL_LENGTH('CollectionSchedules', 'Interval') IS NULL ALTER TABLE [CollectionSchedules] ADD [Interval] nvarchar(30) NOT NULL CONSTRAINT [DF_CollectionSchedules_Interval] DEFAULT '15 minutes';
             IF COL_LENGTH('CollectionSchedules', 'RunTime') IS NULL ALTER TABLE [CollectionSchedules] ADD [RunTime] nvarchar(5) NOT NULL CONSTRAINT [DF_CollectionSchedules_RunTime] DEFAULT '00:15';
+            IF COL_LENGTH('CollectionSchedules', 'RunTime') IS NOT NULL ALTER TABLE [CollectionSchedules] ALTER COLUMN [RunTime] nvarchar(5) NOT NULL;
             IF COL_LENGTH('CollectionSchedules', 'ScheduleDay') IS NULL ALTER TABLE [CollectionSchedules] ADD [ScheduleDay] nvarchar(20) NOT NULL CONSTRAINT [DF_CollectionSchedules_ScheduleDay] DEFAULT '';
             IF COL_LENGTH('CollectionSchedules', 'ScheduleMonths') IS NULL ALTER TABLE [CollectionSchedules] ADD [ScheduleMonths] nvarchar(50) NOT NULL CONSTRAINT [DF_CollectionSchedules_ScheduleMonths] DEFAULT '';
             IF COL_LENGTH('CollectionSchedules', 'DataType') IS NOT NULL ALTER TABLE [CollectionSchedules] ALTER COLUMN [DataType] nvarchar(40) NOT NULL;
@@ -247,6 +281,17 @@ public static class DatabaseInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CollectionSchedules_ScheduleCode' AND [object_id] = OBJECT_ID(N'[CollectionSchedules]'))
                 CREATE UNIQUE INDEX [IX_CollectionSchedules_ScheduleCode] ON [CollectionSchedules] ([ScheduleCode]);
 
+            IF COL_LENGTH('CollectionJobs', 'CollectionScheduleId') IS NULL
+                EXEC(N'ALTER TABLE [CollectionJobs] ADD [CollectionScheduleId] int NULL;');
+            EXEC(N'UPDATE job SET [CollectionScheduleId] = scheduleRow.[Id]
+                FROM [CollectionJobs] job
+                INNER JOIN [CollectionSchedules] scheduleRow
+                    ON job.[CollectionId] LIKE CONCAT(N''COL-SCH-'', scheduleRow.[Id], N''-%'')
+                WHERE job.[CollectionScheduleId] IS NULL;');
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CollectionJobs_CollectionSchedule' AND [object_id] = OBJECT_ID(N'[CollectionJobs]'))
+                EXEC(N'CREATE INDEX [IX_CollectionJobs_CollectionSchedule]
+                    ON [CollectionJobs] ([CollectionScheduleId], [SubmissionDateTime], [Status]);');
+
             IF OBJECT_ID(N'[ReportExecutions]', N'U') IS NULL
             CREATE TABLE [ReportExecutions] (
                 [Id] bigint IDENTITY PRIMARY KEY, [ReportId] nvarchar(60) NOT NULL UNIQUE,
@@ -257,6 +302,24 @@ public static class DatabaseInitializer
                 [ErrorMessage] nvarchar(1000) NULL);
 
             IF COL_LENGTH('CollectionJobs', 'ResponseMessage') IS NULL ALTER TABLE [CollectionJobs] ADD [ResponseMessage] nvarchar(1000) NOT NULL CONSTRAINT [DF_CollectionJobs_ResponseMessage] DEFAULT '';
+            IF COL_LENGTH('CollectionJobs', 'SubmissionDateTime') IS NULL
+            BEGIN
+                ALTER TABLE [CollectionJobs] ADD [SubmissionDateTime] datetime2 NULL;
+                EXEC(N'UPDATE [CollectionJobs] SET [SubmissionDateTime] = DATEADD(minute, DATEDIFF(minute, 0, CONVERT(datetime2, SWITCHOFFSET([StartedAt], ''+08:00''))), 0) WHERE [SubmissionDateTime] IS NULL');
+                ALTER TABLE [CollectionJobs] ALTER COLUMN [SubmissionDateTime] datetime2 NOT NULL;
+            END;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionJobs_SubmissionDateTime' AND object_id = OBJECT_ID(N'[CollectionJobs]'))
+                CREATE INDEX [IX_CollectionJobs_SubmissionDateTime] ON [CollectionJobs] ([DataType], [SubmissionDateTime], [PlantId]);
+            IF NOT EXISTS (SELECT 1 FROM [SchemaUpgrades] WHERE [Name] = N'AlignReadingSubmissionDateTimeWithSchedule')
+            BEGIN
+                UPDATE reading SET [SubmissionDateTime] = job.[SubmissionDateTime]
+                FROM [SolarApiReadings] reading
+                INNER JOIN [CollectionJobs] job ON job.[Id] = reading.[CollectionJobId]
+                WHERE reading.[SubmissionDateTime] <> job.[SubmissionDateTime];
+
+                INSERT INTO [SchemaUpgrades] ([Name], [CompletedAt])
+                VALUES (N'AlignReadingSubmissionDateTimeWithSchedule', SYSDATETIMEOFFSET());
+            END;
             IF COL_LENGTH('CollectionJobs', 'DurationSeconds') IS NULL ALTER TABLE [CollectionJobs] ADD [DurationSeconds] float NOT NULL CONSTRAINT [DF_CollectionJobs_DurationSeconds] DEFAULT 0;
             IF COL_LENGTH('CollectionJobs', 'RequestedBy') IS NULL ALTER TABLE [CollectionJobs] ADD [RequestedBy] nvarchar(160) NOT NULL CONSTRAINT [DF_CollectionJobs_RequestedBy] DEFAULT N'System';
             IF COL_LENGTH('CollectionJobs', 'RetryCount') IS NULL ALTER TABLE [CollectionJobs] ADD [RetryCount] int NOT NULL CONSTRAINT [DF_CollectionJobs_RetryCount] DEFAULT 0;
@@ -265,6 +328,9 @@ public static class DatabaseInitializer
             IF COL_LENGTH('ReportExecutions', 'Name') IS NULL ALTER TABLE [ReportExecutions] ADD [Name] nvarchar(200) NOT NULL CONSTRAINT [DF_ReportExecutions_Name] DEFAULT '';
             IF COL_LENGTH('ReportExecutions', 'SubmissionDate') IS NULL ALTER TABLE [ReportExecutions] ADD [SubmissionDate] datetime2 NOT NULL CONSTRAINT [DF_ReportExecutions_SubmissionDate] DEFAULT '2000-01-01';
             IF COL_LENGTH('ReportExecutions', 'DataSelection') IS NULL ALTER TABLE [ReportExecutions] ADD [DataSelection] nvarchar(100) NOT NULL CONSTRAINT [DF_ReportExecutions_DataSelection] DEFAULT '';
+            IF COL_LENGTH('ReportExecutions', 'IntervalMinutes') IS NULL ALTER TABLE [ReportExecutions] ADD [IntervalMinutes] int NOT NULL CONSTRAINT [DF_ReportExecutions_IntervalMinutes] DEFAULT 15;
+            IF COL_LENGTH('ReportExecutions', 'DataRangeStart') IS NULL ALTER TABLE [ReportExecutions] ADD [DataRangeStart] datetime2 NULL;
+            IF COL_LENGTH('ReportExecutions', 'DataRangeEnd') IS NULL ALTER TABLE [ReportExecutions] ADD [DataRangeEnd] datetime2 NULL;
             IF COL_LENGTH('ReportExecutions', 'Description') IS NULL ALTER TABLE [ReportExecutions] ADD [Description] nvarchar(2000) NOT NULL CONSTRAINT [DF_ReportExecutions_Description] DEFAULT '';
             IF COL_LENGTH('ReportExecutions', 'PlantCount') IS NULL ALTER TABLE [ReportExecutions] ADD [PlantCount] int NOT NULL CONSTRAINT [DF_ReportExecutions_PlantCount] DEFAULT 0;
             IF COL_LENGTH('ReportExecutions', 'RecordCount') IS NULL ALTER TABLE [ReportExecutions] ADD [RecordCount] int NOT NULL CONSTRAINT [DF_ReportExecutions_RecordCount] DEFAULT 0;
@@ -275,6 +341,7 @@ public static class DatabaseInitializer
                 [ApiType] nvarchar(10) NOT NULL, [DataType] nvarchar(50) NOT NULL, [IntervalMinutes] int NOT NULL,
                 [ScheduleType] nvarchar(30) NOT NULL, [ScheduleDay] nvarchar(20) NOT NULL, [ScheduleMonths] nvarchar(50) NOT NULL,
                 [ExecutionTime] nvarchar(5) NOT NULL, [IsActive] bit NOT NULL, [CreatedAt] datetimeoffset NOT NULL);
+            IF COL_LENGTH('ReportSchedules', 'ExecutionTime') IS NOT NULL ALTER TABLE [ReportSchedules] ALTER COLUMN [ExecutionTime] nvarchar(5) NOT NULL;
             IF OBJECT_ID(N'[ReportScheduleRecipients]', N'U') IS NULL CREATE TABLE [ReportScheduleRecipients] (
                 [Id] int IDENTITY PRIMARY KEY, [ReportScheduleId] int NOT NULL, [Email] nvarchar(320) NOT NULL,
                 CONSTRAINT [FK_ReportScheduleRecipients_ReportSchedules] FOREIGN KEY ([ReportScheduleId]) REFERENCES [ReportSchedules]([Id]) ON DELETE CASCADE,
@@ -303,6 +370,7 @@ public static class DatabaseInitializer
             IF OBJECT_ID(N'[FK_DataAnomalies_CollectionJobs]', N'F') IS NULL ALTER TABLE [DataAnomalies] WITH CHECK ADD CONSTRAINT [FK_DataAnomalies_CollectionJobs] FOREIGN KEY ([CollectionJobId]) REFERENCES [CollectionJobs]([Id]) ON DELETE CASCADE;
             IF OBJECT_ID(N'[FK_DataAnomalies_ValidationRules]', N'F') IS NULL ALTER TABLE [DataAnomalies] WITH CHECK ADD CONSTRAINT [FK_DataAnomalies_ValidationRules] FOREIGN KEY ([ValidationRuleId]) REFERENCES [ValidationRules]([Id]) ON DELETE SET NULL;
             IF OBJECT_ID(N'[FK_CollectionSchedules_LssPlants]', N'F') IS NULL ALTER TABLE [CollectionSchedules] WITH CHECK ADD CONSTRAINT [FK_CollectionSchedules_LssPlants] FOREIGN KEY ([PlantId]) REFERENCES [LssPlants]([Id]) ON DELETE CASCADE;
+            IF OBJECT_ID(N'[FK_CollectionJobs_CollectionSchedules]', N'F') IS NULL EXEC(N'ALTER TABLE [CollectionJobs] WITH CHECK ADD CONSTRAINT [FK_CollectionJobs_CollectionSchedules] FOREIGN KEY ([CollectionScheduleId]) REFERENCES [CollectionSchedules]([Id]) ON DELETE SET NULL;');
             IF OBJECT_ID(N'[StoredDataRecords]', N'U') IS NOT NULL DROP TABLE [StoredDataRecords];
             IF OBJECT_ID(N'[SolarDocuments]', N'U') IS NOT NULL DROP TABLE [SolarDocuments];
 

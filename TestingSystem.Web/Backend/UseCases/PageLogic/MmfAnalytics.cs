@@ -249,7 +249,19 @@ public partial class MmfAnalytics : ComponentBase
         ? catalogUnit
         : ReadingIndex.Values.FirstOrDefault(x =>
             x.Parameter.Equals(ActiveParameter, StringComparison.OrdinalIgnoreCase))?.Unit ?? "";
-    private string TimeHeading(DateTime value) => AppliedStart.Date == AppliedEnd.Date ? value.ToString("HH:mm") : value.ToString("dd/MM HH:mm");
+    private string SubmissionDateTimeRange
+    {
+        get
+        {
+            if (ReadingIndex.Count == 0) return "No submission selected";
+            var start = ReadingIndex.Values.Min(reading => reading.SubmissionDateTime);
+            var end = ReadingIndex.Values.Max(reading => reading.SubmissionDateTime);
+            return start == end ? TimeDisplay.DateTime(start)
+                : $"{start:dd/MM/yyyy HH:mm} - {end:dd/MM/yyyy HH:mm}";
+        }
+    }
+    private string TimeHeading(DateTime value) => AppliedStart.Date == AppliedEnd.Date
+        ? value.ToString("HH:mm") : value.ToString("dd/MM HH:mm");
     private static string HourHeading(int index) => $"HR{index + 1}";
     private void ToggleGraphPlant(int id) { if (!HiddenGraphPlantIds.Add(id)) HiddenGraphPlantIds.Remove(id); RecalculateGraphBounds(); }
     private void ShowAllGraphPlants() { HiddenGraphPlantIds.Clear(); RecalculateGraphBounds(); }
@@ -323,11 +335,61 @@ public partial class MmfAnalytics : ComponentBase
         IsExporting = true;
         try
         {
+            await using var database = await ContextFactory.CreateDbContextAsync();
+            var sourcePlants = IsLocationAverage
+                ? RegisteredPlants.Where(plant => AppliedScope == "State"
+                    ? SelectedStates.Contains(plant.State)
+                    : SelectedRegions.Contains(AnalyticsPlantFilter.RegionFor(plant.State))).ToList()
+                : ResultPlants;
+            var sourcePlantIds = sourcePlants.Select(plant => plant.Id).ToArray();
+            var current = await database.PublishedReadings().Where(reading => reading.DataType == "MMF"
+                    && sourcePlantIds.Contains(reading.PlantId) && AppliedParameters.Contains(reading.Parameter)
+                    && reading.IntervalStart >= AppliedStart && reading.IntervalStart <= AppliedEnd
+                    && reading.IntervalStart.Second == 0 && reading.IntervalStart.Minute % AppliedInterval == 0)
+                .OrderByDescending(reading => reading.Id).ToListAsync();
+            var previousStart = AppliedStart.AddDays(-1);
+            var previousEnd = AppliedEnd.AddDays(-1);
+            var previous = await database.PublishedReadings().Where(reading => reading.DataType == "MMF"
+                    && sourcePlantIds.Contains(reading.PlantId) && AppliedParameters.Contains(reading.Parameter)
+                    && reading.IntervalStart >= previousStart && reading.IntervalStart <= previousEnd)
+                .OrderByDescending(reading => reading.Id).ToListAsync();
+            var rules = await database.ValidationRules.AsNoTracking()
+                .Where(rule => rule.DataType == "MMF" && rule.IsActive).ToListAsync();
+            var prepared = ReportSubstitutionPolicy.PrepareMmfRange(AppliedStart, AppliedEnd,
+                AppliedInterval, sourcePlants, current, previous, rules);
+            var exportReadings = prepared.Readings.ToList();
+            if (IsLocationAverage)
+            {
+                var averaged = new List<SolarApiReading>();
+                var locations = (AppliedScope == "State" ? SelectedStates : SelectedRegions)
+                    .OrderBy(value => value).ToList();
+                for (var index = 0; index < locations.Count; index++)
+                {
+                    var location = locations[index];
+                    var ids = sourcePlants.Where(plant => AppliedScope == "State"
+                            ? plant.State.Equals(location, StringComparison.OrdinalIgnoreCase)
+                            : AnalyticsPlantFilter.RegionFor(plant.State).Equals(location, StringComparison.OrdinalIgnoreCase))
+                        .Select(plant => plant.Id).ToHashSet();
+                    averaged.AddRange(MmfLocationAveraging.AverageLatestByLocation(
+                        exportReadings.Where(reading => ids.Contains(reading.PlantId)), -(index + 1)));
+                }
+                exportReadings = averaged;
+            }
+            var exportIndex = exportReadings.GroupBy(reading =>
+                    new ReadingKey(reading.Parameter.ToUpperInvariant(), reading.PlantId, reading.IntervalStart))
+                .ToDictionary(group => group.Key, group => group.OrderByDescending(reading => reading.Id).First());
             var sheets = new List<DdqWorkbookSheet>();
-            var anomalies = new List<IReadOnlyList<object?>>();
+            var anomalies = prepared.Details.Select(detail => (IReadOnlyList<object?>)new object?[]
+            {
+                detail.Parameter, detail.DataTimestamp.ToString("dd/MM/yyyy HH:mm"),
+                sourcePlants.FirstOrDefault(plant => plant.Id == detail.PlantId)?.PlantId ?? detail.PlantId.ToString(),
+                sourcePlants.FirstOrDefault(plant => plant.Id == detail.PlantId)?.Name ?? "Unknown plant",
+                detail.OriginalValue, detail.ReportValue, detail.RuleCode, detail.RuleName,
+                detail.AnomalyDetail, detail.SubstitutionSource, detail.SourceReference
+            }).ToList();
             foreach (var parameter in AppliedParameters)
             {
-                var times = ReadingIndex.Values.Where(x => x.Parameter.Equals(parameter, StringComparison.OrdinalIgnoreCase))
+                var times = exportIndex.Values.Where(x => x.Parameter.Equals(parameter, StringComparison.OrdinalIgnoreCase))
                     .Select(x => x.IntervalStart).Distinct().OrderBy(x => x).ToList();
                 var headers = new List<string> { ScopeColumnHeading };
                 headers.AddRange(times.Select((_, index) => HourHeading(index)));
@@ -337,17 +399,16 @@ public partial class MmfAnalytics : ComponentBase
                     var values = new List<object?> { ResultRowLabel(plant) };
                     foreach (var time in times)
                     {
-                        var reading = ReadingFor(parameter, plant.Id, time);
+                        var reading = exportIndex.GetValueOrDefault(new(parameter.ToUpperInvariant(), plant.Id, time));
                         values.Add(reading?.Value);
-                        if (reading is null) anomalies.Add(new object?[] { parameter, time.ToString("yyyy-MM-dd HH:mm"),
-                            plant.PlantId, plant.Name, "Missing reading", null, "No reading was supplied for this plant and interval." });
                     }
                     rows.Add(values);
                 }
                 sheets.Add(new(parameter, parameter.ToUpperInvariant(), Metadata(parameter), headers, rows, 1));
             }
             sheets.Add(new("Anomaly Report", "ANOMALY REPORT", Metadata("All selected parameters"),
-                ["Parameter", "Data Timestamp", "Plant ID", "Plant Name", "Anomaly Type", "Value", "Reason"], anomalies));
+                ["Parameter", "Data Timestamp", "Plant ID", "Plant Name", "Original Value", "Report Value",
+                 "Rule Code", "Rule Name", "Anomaly Detail", "Substitution Source", "Source Reference"], anomalies));
             var bytes = DdqExcelWorkbookExporter.Build(sheets);
             const string fileName = "SBLSS-MMF-Filtered-Data.xlsx";
             await JavaScript.InvokeVoidAsync("sblssDownloadBase64", fileName,
@@ -366,6 +427,7 @@ public partial class MmfAnalytics : ComponentBase
 
     private (string Label, string Value)[] Metadata(string parameter) =>
         [("Parameter", parameter), ("Data Interval", IntervalLabel),
+         ("Submission Date & Time", SubmissionDateTimeRange),
          ("Result Scope", IsLocationAverage ? $"{ResultPlants.Count} {AppliedScope.ToLowerInvariant()} average(s) across {AppliedSourcePlantCount} LSS plant(s)" : $"{ResultPlants.Count} selected LSS plant(s)"),
          ("Date Range", $"{AppliedStart:dd/MM/yyyy HH:mm} - {AppliedEnd:dd/MM/yyyy HH:mm}")];
 

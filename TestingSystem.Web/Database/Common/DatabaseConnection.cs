@@ -93,9 +93,13 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.ErrorMessage).HasMaxLength(1000);
             item.Property(x => x.ResponseMessage).HasMaxLength(1000);
             item.Property(x => x.RequestedBy).HasMaxLength(160);
+            item.HasIndex(x => new { x.DataType, x.SubmissionDateTime, x.PlantId });
             item.HasIndex(x => x.CollectionId).IsUnique();
             item.HasIndex(x => new { x.Status, x.StartedAt });
+            item.HasIndex(x => new { x.CollectionScheduleId, x.SubmissionDateTime, x.Status });
             item.HasOne<LssPlant>().WithMany().HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Restrict);
+            item.HasOne(x => x.CollectionSchedule).WithMany(x => x.CollectionJobs)
+                .HasForeignKey(x => x.CollectionScheduleId).OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<RawApiResponse>(item =>
@@ -119,6 +123,9 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.Severity).HasMaxLength(20);
             item.Property(x => x.MinimumValue).HasPrecision(18, 4);
             item.Property(x => x.MaximumValue).HasPrecision(18, 4);
+            item.Property(x => x.ChangeThreshold).HasPrecision(18, 4);
+            item.Property(x => x.RuleSource).HasMaxLength(20);
+            item.Property(x => x.CreatedBy).HasMaxLength(160);
             item.HasIndex(x => x.Code).IsUnique();
         });
 

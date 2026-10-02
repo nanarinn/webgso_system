@@ -2,11 +2,11 @@
 @attribute [Authorize(Roles = "SuperAdministrator,Administrator")]
 @rendermode InteractiveServer
 
-<PageTitle>LSS Plant Configuration | SBLSS System</PageTitle>
+<PageTitle>Large Scale Solar Plant Configuration | SBLSS System</PageTitle>
 
 <div class="admin-page">
     <header class="page-heading">
-        <div><p class="section-label">Administration</p><h1>LSS Plant Configuration</h1><p class="page-subtitle">Manage configured plants and their DDQ/MMF integration endpoints.</p></div>
+        <div><p class="section-label">Plant administration</p><h1>Large Scale Solar (LSS) Plant Configuration</h1><p class="page-subtitle">Manage Large Scale Solar plants and their Declared Daily Quantity (DDQ) and Meteorological Measuring Facility (MMF) API endpoints.</p></div>
         <div class="admin-header-actions">
             <button class="test-api-action" type="button" @onclick="OpenApiTestDialog">Test API</button>
             <button class="primary-action admin-primary" type="button" @onclick="OpenAddDialog">+ Add Plant</button>

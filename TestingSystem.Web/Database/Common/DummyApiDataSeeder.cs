@@ -100,6 +100,7 @@ public static class DummyApiDataSeeder
                     {
                         CollectionId = $"API-DUMMY-{plant.PlantId}-{compactType}-{day:yyyyMMdd}", PlantId = plant.Id,
                         DataType = dataType, Mode = "Simulated API", SubmissionDate = DateOnly.FromDateTime(submission),
+                        SubmissionDateTime = submission,
                         StartedAt = DateTimeOffset.UtcNow, CompletedAt = DateTimeOffset.UtcNow, Status = "Completed"
                     };
                     database.CollectionJobs.Add(job);
@@ -145,6 +146,7 @@ public static class DummyApiDataSeeder
                 {
                     CollectionId = $"API-DUMMY-{plant.PlantId}-MMF-{day:yyyyMMdd}", PlantId = plant.Id,
                     DataType = "MMF", Mode = "Simulated API", SubmissionDate = DateOnly.FromDateTime(submission),
+                    SubmissionDateTime = submission,
                     StartedAt = DateTimeOffset.UtcNow, CompletedAt = DateTimeOffset.UtcNow, Status = "Completed"
                 };
                 database.CollectionJobs.Add(job);

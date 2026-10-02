@@ -10,7 +10,7 @@
         <div>
             <p class="section-label">API data operations</p>
             <h1>Collection Management</h1>
-            <p class="page-subtitle">Monitor DDQ and MMF API collection, translation and validation for every LSS plant.</p>
+            <p class="page-subtitle">Monitor scheduled and manual DDQ/MMF API collection, response translation and database storage for every Large Scale Solar plant.</p>
         </div>
         <button class="primary-action collection-run-action" type="button" @onclick="OpenRunDialogAsync" disabled="@IsLoadingJobs">
             <span class="collection-run-icon">&#9654;</span> Run Manual
@@ -82,14 +82,14 @@
                             <strong>@(string.IsNullOrWhiteSpace(job.DataType) ? "General data" : job.DataType)</strong>
                         </div>
                         <div class="collection-schedule">
-                            <strong>@job.Mode</strong>
-                            <small>@job.SubmissionDate.ToString("dd MMM yyyy")</small>
+                            <strong>@(string.IsNullOrWhiteSpace(job.ScheduleName) ? job.Mode : job.ScheduleName)</strong>
+                            <small>@(string.IsNullOrWhiteSpace(job.ScheduleName) ? "Manual / imported" : job.Mode) · @TimeDisplay.DateTimeLong(job.SubmissionDate)</small>
                         </div>
                         <div class="collection-reference">
                             <strong>@job.CollectionId</strong>
                             <small>@job.Description</small>
                         </div>
-                        <time datetime="@job.RunAt.ToString("O")">@job.RunAt.ToString("dd MMM yyyy, HH:mm:ss")</time>
+                        <time datetime="@job.RunAt.ToString("O")">@TimeDisplay.DateTimeWithSeconds(job.RunAt)</time>
                         <span>
                             <button class="collection-status-button" type="button" @onclick="() => OpenJobDetail(job)"
                                     aria-label="View @job.Status collection details">
@@ -126,8 +126,8 @@
                         <div><dt>API type</dt><dd>@SelectedJob.ApiType</dd></div>
                         <div><dt>Data type</dt><dd>@(string.IsNullOrWhiteSpace(SelectedJob.DataType) ? "General data" : SelectedJob.DataType)</dd></div>
                         <div><dt>Mode</dt><dd>@SelectedJob.Mode</dd></div>
-                        <div><dt>Submission date</dt><dd>@SelectedJob.SubmissionDate.ToString("dd MMM yyyy")</dd></div>
-                        <div><dt>Run timestamp</dt><dd>@SelectedJob.RunAt.ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
+                        <div><dt>Submission date &amp; time</dt><dd>@TimeDisplay.DateTimeLong(SelectedJob.SubmissionDate)</dd></div>
+                        <div><dt>Run timestamp</dt><dd>@TimeDisplay.DateTimeWithSeconds(SelectedJob.RunAt)</dd></div>
                         <div><dt>Duration</dt><dd>@SelectedJob.DurationSeconds.ToString("0.00") seconds</dd></div>
                     </dl>
                     <section class="job-message @(SelectedJob.Status == "Failed" ? "job-message-failed" : "")">
@@ -166,7 +166,7 @@
                             <div class="summary-item-copy">
                                 <strong>@job.PlantName</strong>
                                 <p>@job.Description</p>
-                                <small>@job.CollectionId · @job.Mode · @job.RunAt.ToString("dd MMM yyyy, HH:mm:ss")</small>
+                                <small>@job.CollectionId · @job.Mode · @TimeDisplay.DateTimeWithSeconds(job.RunAt)</small>
                             </div>
                             <span class="status-pill status-@job.Status.ToLowerInvariant()">@job.Status</span>
                         </article>

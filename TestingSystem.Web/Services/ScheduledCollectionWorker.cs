@@ -30,13 +30,13 @@ public sealed class ScheduledCollectionWorker(
         var schedules = await database.CollectionSchedules.AsNoTracking().Where(item => item.IsActive)
             .OrderBy(item => item.Id).ToListAsync(cancellationToken);
         var priorRuns = await database.CollectionJobs.AsNoTracking()
-            .Where(item => item.CollectionId.StartsWith("COL-SCH-"))
-            .Select(item => new { item.CollectionId, item.StartedAt }).ToListAsync(cancellationToken);
+            .Where(item => item.CollectionScheduleId != null)
+            .Select(item => new { item.CollectionScheduleId, item.StartedAt }).ToListAsync(cancellationToken);
 
         foreach (var schedule in schedules)
         {
             var prefix = $"COL-SCH-{schedule.Id}-";
-            var lastRun = priorRuns.Where(item => item.CollectionId.StartsWith(prefix))
+            var lastRun = priorRuns.Where(item => item.CollectionScheduleId == schedule.Id)
                 .OrderByDescending(item => item.StartedAt).Select(item => (DateTimeOffset?)item.StartedAt).FirstOrDefault();
             var timeZone = ResolveTimeZone(schedule.TimeZoneId);
             var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZone).DateTime;
@@ -46,7 +46,9 @@ public sealed class ScheduledCollectionWorker(
                     schedule.ScheduleDay, schedule.ScheduleMonths, localNow, lastRunLocal))
                 continue;
 
-            var collectionId = $"{prefix}{localNow:yyyyMMddHHmm}";
+            var submissionDateTime = CollectionSchedulePolicy.SubmissionDateTime(
+                schedule.DataType, schedule.RunTime, localNow);
+            var collectionId = $"{prefix}{submissionDateTime:yyyyMMddHHmm}";
             if (await database.CollectionJobs.AnyAsync(item => item.CollectionId == collectionId, cancellationToken))
                 continue;
 
@@ -55,8 +57,9 @@ public sealed class ScheduledCollectionWorker(
             {
                 await commandBus.EnqueueAsync(new QueueCollectionCommand(
                     schedule.PlantId, schedule.ApiType, dataType, $"Scheduled {schedule.ApiType}",
-                    DateOnly.FromDateTime(localNow), "System Scheduler", schedule.RetryCount,
-                    ReplaceExisting: false, CollectionId: collectionId), cancellationToken);
+                    submissionDateTime, "System Scheduler", schedule.RetryCount,
+                    ReplaceExisting: true, CollectionId: collectionId,
+                    CollectionScheduleId: schedule.Id), cancellationToken);
                 logger.LogInformation("Schedule {ScheduleCode} queued collection {CollectionId}.",
                     schedule.ScheduleCode, collectionId);
             }

@@ -68,6 +68,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         : Jobs.Where(job => job.PlantName.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
                 || job.State.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
                 || job.CollectionId.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+                || job.ScheduleName.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
                 || job.Mode.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
                 || job.Status.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
                 || job.Description.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
@@ -124,28 +125,32 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     private async Task LoadJobsAsync()
     {
         await using var database = await ContextFactory.CreateDbContextAsync();
-        Jobs = await database.CollectionJobs.AsNoTracking().OrderByDescending(x => x.StartedAt)
-            .Join(database.LssPlants, job => job.PlantId, plant => plant.Id, (job, plant) => new { job, plant })
-            .Select(x => new DemoCollectionJob(
-                x.job.CollectionId,
-                x.plant.Name,
-                x.plant.State,
-                x.job.Mode,
-                x.job.SubmissionDate.ToDateTime(TimeOnly.MinValue),
-                x.job.CompletedAt.HasValue ? x.job.CompletedAt.Value.LocalDateTime : x.job.StartedAt.LocalDateTime,
-                x.job.Status == "Completed" ? "Successful" : x.job.Status,
-                x.job.Status == "Completed" ? "API data collected and stored in MS SQL." : (x.job.ErrorMessage ?? "Collection is still being processed."),
-                x.job.ResponseMessage,
-                x.job.DurationSeconds,
-                x.job.Mode.Contains("MMF") || x.job.DataType == "MMF" ? "MMF" : "DDQ",
-                x.job.DataType,
-                "",
+        Jobs = await (from job in database.CollectionJobs.AsNoTracking()
+            join plant in database.LssPlants.AsNoTracking() on job.PlantId equals plant.Id
+            join schedule in database.CollectionSchedules.AsNoTracking()
+                on job.CollectionScheduleId equals (int?)schedule.Id into scheduleGroup
+            from schedule in scheduleGroup.DefaultIfEmpty()
+            orderby job.StartedAt descending
+            select new DemoCollectionJob(
+                job.CollectionId,
+                plant.Name,
+                plant.State,
+                job.Mode,
+                job.SubmissionDateTime,
+                job.CompletedAt.HasValue ? job.CompletedAt.Value.LocalDateTime : job.StartedAt.LocalDateTime,
+                job.Status == "Completed" ? "Successful" : job.Status,
+                job.Status == "Completed" ? "API data collected and stored in MS SQL." : (job.ErrorMessage ?? "Collection is still being processed."),
+                job.ResponseMessage,
+                job.DurationSeconds,
+                job.Mode.Contains("MMF") || job.DataType == "MMF" ? "MMF" : "DDQ",
+                job.DataType,
+                schedule == null ? "" : schedule.Name,
                 0,
                 0,
                 null,
                 "",
-                x.job.Id,
-                x.job.ErrorMessage ?? string.Empty))
+                job.Id,
+                job.ErrorMessage ?? string.Empty))
             .Take(500)
             .ToListAsync();
         Sequence = Math.Max(Sequence, Jobs.Count);
@@ -284,7 +289,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 {
                     var queued = await CollectionCommands.EnqueueAsync(new QueueCollectionCommand(
                         item.PlantDatabaseId, item.ApiType, item.DataType,
-                        ManualBatchCollectionPolicy.Mode(item.ApiType), DateOnly.FromDateTime(DateTime.Today),
+                        ManualBatchCollectionPolicy.Mode(item.ApiType), SubmissionMinute(DateTime.Now),
                         "Current user", ReplaceExisting: true));
                     item.JobId = queued.JobId;
                     item.Status = "Start";
@@ -352,6 +357,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
             DataType = item.DataType,
             Mode = ManualBatchCollectionPolicy.Mode(item.ApiType),
             SubmissionDate = submissionDate,
+            SubmissionDateTime = SubmissionMinute(startedAt),
             StartedAt = DateTimeOffset.Now,
             Status = "Running",
             ResponseMessage = $"Manual {item.ApiType} {item.DataType} collection started."
@@ -370,7 +376,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 ? 15
                 : DdqDatasetPolicy.Get(item.DataType).ReferenceTemplateIntervalMinutes;
             var translated = ScheduledApiPayloadTranslator.Translate(apiResult.Payload, item.ApiType, item.DataType,
-                item.PlantDatabaseId, entity.Id, startedAt, intervalMinutes, apiResult.ContentType);
+                item.PlantDatabaseId, entity.Id, entity.SubmissionDateTime, intervalMinutes, apiResult.ContentType);
             if (translated.Readings.Count == 0)
                 throw new InvalidOperationException("API responded, but no supported numeric readings were found.");
 
@@ -393,12 +399,11 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
 
                 database.RawApiResponses.Add(CreateRawResponse(entity.Id, apiResult));
                 database.SolarApiReadings.AddRange(translated.Readings);
-                var anomalyCount = await AddBatchAnomaliesAsync(database, entity, item, translated);
                 watch.Stop();
                 entity.CompletedAt = DateTimeOffset.Now;
                 entity.Status = "Completed";
                 entity.DurationSeconds = watch.Elapsed.TotalSeconds;
-                entity.ResponseMessage = $"HTTP {apiResult.HttpStatusCode}; {translated.Readings.Count:N0} reading(s) saved; {replacedReadings:N0} replaced; {anomalyCount:N0} issue(s).";
+                entity.ResponseMessage = $"HTTP {apiResult.HttpStatusCode}; {translated.Readings.Count:N0} reading(s) saved; {replacedReadings:N0} replaced. Validation is applied during report generation.";
                 database.AuditEvents.Add(new AuditEvent
                 {
                     OccurredAt = DateTimeOffset.UtcNow, Actor = "Current user",
@@ -438,35 +443,6 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         }
     }
 
-    private static async Task<int> AddBatchAnomaliesAsync(ApplicationDbContext database,
-        CollectionJobEntity job, ManualBatchItem item, TranslationResult result)
-    {
-        var issues = result.Issues.ToList();
-        foreach (var reading in result.Readings)
-        {
-            if (reading.Value < 0)
-                issues.Add(new(item.ApiType == "MMF" ? "MMF-015" : "DDQ-004", reading.Parameter,
-                    reading.Value.ToString(CultureInfo.InvariantCulture), "A negative measurement was received."));
-            if (item.ApiType == "DDQ" && reading.Value > item.CapacityMw)
-                issues.Add(new("DDQ-005", reading.Parameter, reading.Value.ToString(CultureInfo.InvariantCulture),
-                    $"The forecast exceeds the configured plant capacity of {item.CapacityMw:N2} MW."));
-        }
-
-        var ruleCodes = issues.Select(issue => issue.RuleCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var rules = ruleCodes.Count == 0
-            ? new Dictionary<string, ValidationRule>(StringComparer.OrdinalIgnoreCase)
-            : await database.ValidationRules.AsNoTracking().Where(rule => ruleCodes.Contains(rule.Code))
-                .ToDictionaryAsync(rule => rule.Code, StringComparer.OrdinalIgnoreCase);
-        database.DataAnomalies.AddRange(issues.Select(issue => new DataAnomaly
-        {
-            CollectionJobId = job.Id, ValidationRuleId = rules.GetValueOrDefault(issue.RuleCode)?.Id,
-            DataType = item.ApiType, FieldName = Limit(issue.FieldName, 100),
-            OriginalValue = Limit(issue.OriginalValue, 500), Reason = Limit(issue.Reason, 1000),
-            Status = "Open", DetectedAt = DateTimeOffset.UtcNow
-        }));
-        return issues.Count;
-    }
-
     private void OpenSummaryDialog(string filter)
     {
         SummaryFilter = filter;
@@ -504,7 +480,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
             .Where(job => job.PlantId == SelectedPlant.DatabaseId
                 && job.DataType == SelectedManualDataType
                 && job.SubmissionDate == submissionDate
-                && (job.Mode == "Scheduled DDQ" || job.CollectionId.StartsWith("COL-SCH-")))
+                && job.CollectionScheduleId != null)
             .Select(job => job.Status)
             .ToListAsync();
         var dayStart = submissionDate.ToDateTime(TimeOnly.MinValue);
@@ -552,7 +528,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         try
         {
             var queued = await CollectionCommands.EnqueueAsync(new QueueCollectionCommand(
-                plant.DatabaseId, "DDQ", dataType, "Manual DDQ", DateOnly.FromDateTime(DateTime.Today),
+                plant.DatabaseId, "DDQ", dataType, "Manual DDQ", SubmissionMinute(DateTime.Now),
                 "Current user", ReplaceExisting: true));
             var finalStatus = await WaitForCollectionAsync(queued.JobId);
             if (finalStatus.Status == CollectionJobStatus.Failed)
@@ -594,41 +570,11 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         Sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apiResult.Payload)))
     };
 
-    private static async Task<int> AddManualDdqAnomaliesAsync(ApplicationDbContext database,
-        CollectionJobEntity job, PlantConnection plant, TranslationResult result)
-    {
-        var issues = result.Issues.ToList();
-        foreach (var reading in result.Readings)
-        {
-            if (reading.Value < 0)
-                issues.Add(new("DDQ-004", reading.Parameter, reading.Value.ToString(CultureInfo.InvariantCulture),
-                    "A negative forecast value was received."));
-            if (reading.Value > plant.CapacityMw)
-                issues.Add(new("DDQ-005", reading.Parameter, reading.Value.ToString(CultureInfo.InvariantCulture),
-                    $"The forecast exceeds the configured plant capacity of {plant.CapacityMw:N2} MW."));
-        }
-
-        var ruleCodes = issues.Select(issue => issue.RuleCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var rules = ruleCodes.Count == 0
-            ? new Dictionary<string, ValidationRule>(StringComparer.OrdinalIgnoreCase)
-            : await database.ValidationRules.AsNoTracking().Where(rule => ruleCodes.Contains(rule.Code))
-                .ToDictionaryAsync(rule => rule.Code, StringComparer.OrdinalIgnoreCase);
-        database.DataAnomalies.AddRange(issues.Select(issue => new DataAnomaly
-        {
-            CollectionJobId = job.Id,
-            ValidationRuleId = rules.GetValueOrDefault(issue.RuleCode)?.Id,
-            DataType = "DDQ",
-            FieldName = Limit(issue.FieldName, 100),
-            OriginalValue = Limit(issue.OriginalValue, 500),
-            Reason = Limit(issue.Reason, 1000),
-            Status = "Open",
-            DetectedAt = DateTimeOffset.UtcNow
-        }));
-        return issues.Count;
-    }
-
     private static string Limit(string? value, int length) =>
         string.IsNullOrWhiteSpace(value) ? string.Empty : value[..Math.Min(value.Length, length)];
+
+    private static DateTime SubmissionMinute(DateTime value) => new(value.Year, value.Month, value.Day,
+        value.Hour, value.Minute, 0, DateTimeKind.Unspecified);
 
     private static string GetPlantCode(string plantName) => string.Concat(
         plantName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(word => word[0]));

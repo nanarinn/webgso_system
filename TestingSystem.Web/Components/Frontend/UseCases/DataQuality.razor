@@ -1,63 +1,69 @@
 @page "/admin/data-quality"
 @attribute [Authorize(Roles = "SuperAdministrator,Administrator")]
 @rendermode InteractiveServer
-
+@using TestingSystem.Web.Services
 <PageTitle>Data Quality | SBLSS System</PageTitle>
 
 <div class="admin-page data-quality-page">
-    <header class="page-heading">
-        <div><p class="section-label">System data policy</p><h1>Data Quality Rules</h1><p class="page-subtitle">Review the fixed rules used by the system to detect DDQ and MMF data anomalies.</p></div>
-        <div class="system-managed-badge"><span>&#10003;</span><div><strong>System managed</strong><small>Rules are applied automatically</small></div></div>
-    </header>
+ <header class="page-heading">
+  <div><p class="section-label">Report validation management</p><h1>Data Quality Rules</h1><p class="page-subtitle">Create and manage DDQ/MMF validation and substitution rules applied when reports are prepared; collected database values remain unchanged.</p></div>
+  <div class="system-managed-badge"><span>&#10003;</span><div><strong>Report validation active</strong><small>Database values remain unchanged</small></div></div>
+ </header>
+ @if (Notice is not null) { <div class="quality-notice"><span>&#10003;</span>@Notice<button type="button" @onclick="() => Notice = null">&#215;</button></div> }
+ <section class="admin-summary"><div><small>Total rules</small><strong>@Rules.Count</strong></div><div><small>Fixed structural</small><strong>@FixedRules.Count</strong></div><div><small>Admin-created</small><strong>@ConfiguredRules.Count</strong></div><div><small>Active rules</small><strong>@Rules.Count(x => x.IsActive)</strong></div></section>
 
-    <section class="admin-summary"><div><small>Detection rules</small><strong>@SystemRules.Count</strong></div><div><small>DDQ rules</small><strong>@SystemRules.Count(x => x.ApiType == "DDQ")</strong></div><div><small>MMF rules</small><strong>@SystemRules.Count(x => x.ApiType == "MMF")</strong></div><div><small>Open anomalies</small><strong>@Anomalies.Count(x => x.Status == "Open")</strong></div></section>
-
-    <nav class="report-section-tabs quality-section-tabs" aria-label="Data quality sections">
-        <button class="@(ActiveSection == "Rules" ? "active" : null)" type="button" @onclick="ShowRules">Detection rules <small>@SystemRules.Count</small></button>
-        <button class="@(ActiveSection == "History" ? "active" : null)" type="button" @onclick="ShowHistory">Anomaly history <small>@Anomalies.Count</small></button>
-    </nav>
-
-    @if (ActiveSection == "Rules")
-    {
-        <section class="table-panel quality-rule-panel">
-            <div class="admin-table-heading quality-panel-heading"><div><p class="section-label">Anomaly detection policy</p><h2>Rules applied automatically</h2></div><span>Read-only system configuration</span></div>
-            <div class="quality-inner-tabs"><span>View rules for</span><div class="api-type-switch" role="group" aria-label="Data quality API type">@foreach (var type in new[] { "DDQ", "MMF" }) { <button type="button" class="@(SelectedApiType == type ? "active" : null)" @onclick="() => SelectedApiType = type"><span class="api-switch-dot api-switch-@type.ToLowerInvariant()"></span>@type rules<small>@SystemRules.Count(x => x.ApiType == type)</small></button> }</div></div>
-            <div class="quality-list-heading"><div><p class="section-label">@SelectedApiType rules</p><strong>@VisibleRules.Count configured detection rule(s)</strong></div><span>Condition</span><span>Severity</span><span>Status</span></div>
-            <div class="quality-rule-list">
-                @foreach (var rule in TablePaging.Slice(VisibleRules, RulePage))
-                {
-                    <article class="quality-rule-card">
-                        <div class="quality-rule-code"><span>@rule.ApiType</span><strong>@rule.Code</strong></div>
-                        <div class="quality-rule-copy"><strong>@rule.Name</strong><p>@rule.Description</p><small>Applied to: @rule.AppliesTo</small></div>
-                        <div class="quality-rule-condition"><small>Detection condition</small><strong>@rule.Condition</strong></div>
-                        <span class="quality-severity severity-@rule.Severity.ToLowerInvariant()">@rule.Severity</span>
-                        <span class="quality-active"><i></i>Active</span>
-                    </article>
-                }
-            </div>
-            <TablePagination TotalItems="@VisibleRules.Count" @bind-Page="RulePage" />
-            <div class="quality-policy-note"><span>i</span><p><strong>How these rules work</strong>The checks run when analytics data is prepared. Any value that fails a rule is included in the anomaly report with its plant, timestamp, original value and reason.</p></div>
-        </section>
-    }
-    else
-    {
-        <section class="quality-history-overview">
-            <div><span class="quality-history-icon">!</span><p><small>Open anomalies</small><strong>@Anomalies.Count(x => x.Status == "Open")</strong></p></div>
-            <div><span class="quality-history-icon ddq">DQ</span><p><small>DDQ detected</small><strong>@Anomalies.Count(x => x.DataType == "DDQ")</strong></p></div>
-            <div><span class="quality-history-icon mmf">MF</span><p><small>MMF detected</small><strong>@Anomalies.Count(x => x.DataType == "MMF")</strong></p></div>
-        </section>
-        <section class="table-panel quality-anomaly-panel">
-            <div class="admin-table-heading"><div><p class="section-label">Detected data issues</p><h2>@SelectedApiType Anomaly History</h2></div><span>@VisibleAnomalies.Count record(s) · Latest detected first</span></div>
-            <section class="quality-history-controls"><div class="api-type-switch" role="group" aria-label="Anomaly API type">@foreach (var type in new[] { "DDQ", "MMF" }) { <button type="button" class="@(SelectedApiType == type ? "active" : null)" @onclick="() => SelectedApiType = type"><span class="api-switch-dot api-switch-@type.ToLowerInvariant()"></span>@type anomalies<small>@Anomalies.Count(x => x.DataType == type)</small></button> }</div><label class="admin-search"><span>&#8981;</span><input type="search" placeholder="Search field, reason or status..." @bind="SearchTerm" @bind:event="oninput" /></label></section>
-            <div class="quality-anomaly-row quality-anomaly-header"><span>Detected</span><span>API type</span><span>Field / parameter</span><span>Original value</span><span>Detection reason</span><span>Status</span></div>
-            @if (VisibleAnomalies.Count == 0) { <div class="collection-empty"><strong>No @SelectedApiType anomalies recorded</strong><span>Detected data issues will appear here after the collection and analytics checks run.</span></div> }
-            @foreach (var item in TablePaging.Slice(VisibleAnomalies, AnomalyPage)) { <div class="quality-anomaly-row"><time>@item.DetectedAt.ToLocalTime().ToString("dd MMM yyyy")<small>@item.DetectedAt.ToLocalTime().ToString("HH:mm:ss")</small></time><span class="quality-api-badge quality-api-@item.DataType.ToLowerInvariant()">@item.DataType</span><strong>@item.FieldName</strong><span>@(item.OriginalValue ?? "Missing")</span><span>@item.Reason</span><span class="status-pill @(item.Status == "Open" ? "status-failed" : "status-successful")">@item.Status</span></div> }
-            <TablePagination TotalItems="@VisibleAnomalies.Count" @bind-Page="AnomalyPage" />
-        </section>
-    }
+ <section class="table-panel quality-rule-panel">
+  <div class="admin-table-heading quality-panel-heading">
+   <div><p class="section-label">Validation and substitution policy</p><h2>@SelectedApiType rules</h2><p class="quality-report-only-copy">Fixed and administrator-configured rules are shown together with the action used in generated reports.</p></div>
+   <button class="quality-create-button" type="button" @onclick="CreateRule"><span>+</span> Create configured rule</button>
+  </div>
+  <div class="quality-rule-toolbar">
+   <div class="api-type-switch">@foreach (var type in new[] { "DDQ", "MMF" }) { <button type="button" class="@(SelectedApiType == type ? "active" : null)" @onclick="() => SelectApiType(type)">@type <small>@Rules.Count(x => x.DataType == type)</small></button> }</div>
+   <span class="quality-report-only-title">Applied during report generation</span>
+  </div>
+  <div class="quality-combined-scroll">
+   <div class="quality-combined-row quality-combined-header"><span>Rule</span><span>Validation condition</span><span>Report substitution / action</span><span>Severity</span><span>Status / actions</span></div>
+   @if (VisibleRules.Count == 0) { <div class="collection-empty"><strong>No @SelectedApiType rules</strong><span>Create a configured rule to validate report data.</span></div> }
+   @foreach (var rule in TablePaging.Slice(VisibleRules, RulePage))
+   {
+    <article class="quality-combined-row @(rule.IsActive ? null : "is-inactive")">
+     <div class="quality-rule-copy"><span class="quality-rule-origin @(!IsFixed(rule) ? "configured" : "fixed")">@SourceLabel(rule)</span><strong>@rule.Code · @rule.Name</strong><small>@(rule.FieldName == "*" ? "All parameters" : rule.FieldName)</small></div>
+     <div class="quality-rule-condition"><strong>@rule.Condition</strong><small>@rule.Description</small></div>
+     <div class="quality-substitution-copy">@SubstitutionFor(rule)</div>
+     <span class="quality-severity severity-@rule.Severity.ToLowerInvariant()">@rule.Severity</span>
+     <div class="quality-rule-actions"><button class="quality-toggle @(rule.IsActive ? "active" : null)" type="button" @onclick="() => ToggleRuleAsync(rule)"><i></i><span>@(rule.IsActive ? "Active" : "Inactive")</span></button>@if (CanEdit(rule)) { <button class="quality-icon-action" type="button" @onclick="() => EditRule(rule)">Edit</button> }@if (CanDelete(rule)) { <button class="quality-icon-action delete" type="button" @onclick="() => DeleteTarget = rule">Delete</button> }</div>
+    </article>
+   }
+  </div>
+  <TablePagination TotalItems="@VisibleRules.Count" @bind-Page="RulePage" />
+  <div class="quality-policy-note"><span>i</span><p><strong>Collection and reporting flow</strong>The API response and translated readings are saved as received. Fixed structural rules protect duplicate keys, timestamps and formats. For MMF, parameter names are detected from API readings; administrators create rules for those parameters and configure their own minimum, maximum and change-rate limits.</p></div>
+ </section>
 </div>
+@if (EditorOpen)
+{
+ <div class="quality-modal-overlay"><section class="quality-rule-modal" role="dialog" aria-modal="true">
+  <header><div><p class="section-label">Configurable validation</p><h2>@(Editor.Id.HasValue ? "Edit rule" : "Create rule")</h2></div><button type="button" @onclick="() => EditorOpen = false">&#215;</button></header>
+  <div class="quality-rule-form">
+   @if (FormError is not null) { <div class="quality-form-error">@FormError</div> }
+   <div class="quality-form-grid">
+    <label><span>Rule name *</span><input maxlength="200" @bind="Editor.Name" placeholder="Example: GHI operating limits" /></label>
+    <label><span>API type *</span><select @bind="Editor.DataType"><option>DDQ</option><option>MMF</option></select></label>
+    <label><span>Field / parameter *</span><input maxlength="100" @bind="Editor.FieldName" list="detected-mmf-parameters" placeholder="Choose or type a parameter" /><datalist id="detected-mmf-parameters">@foreach (var parameter in DetectedMmfParameters) { <option value="@parameter"></option> }</datalist><small>@(Editor.DataType == "MMF" ? DetectedMmfParameters.Count == 0 ? "No MMF parameters detected yet; you can still type the API parameter name." : "Detected from MMF API readings. Choose a parameter or type its exact API name." : "Use the API field name, or * for all fields.")</small></label>
+   </div>
+   <label class="quality-description"><span>Description</span><textarea maxlength="1000" rows="2" @bind="Editor.Description"></textarea></label>
+   <fieldset class="quality-check-builder"><legend>Checks to apply</legend>
+    <label class="quality-check-row"><input type="checkbox" @bind="Editor.UseMinimum" /><span><strong>Minimum threshold</strong><small>Flag values below this number.</small></span><input type="number" step="any" disabled="@(!Editor.UseMinimum)" @bind="Editor.MinimumValue" placeholder="Min" /></label>
+    <label class="quality-check-row"><input type="checkbox" @bind="Editor.UseMaximum" /><span><strong>Maximum threshold</strong><small>Flag values above this number.</small></span><input type="number" step="any" disabled="@(!Editor.UseMaximum)" @bind="Editor.MaximumValue" placeholder="Max" /></label>
+    <label class="quality-check-row"><input type="checkbox" @bind="Editor.UseChange" /><span><strong>Changing value / hysteresis</strong><small>Flag changes above this limit.</small></span><input type="number" min="0" step="any" disabled="@(!Editor.UseChange)" @bind="Editor.ChangeThreshold" placeholder="Change" /></label>
+    <label class="quality-check-row missing"><input type="checkbox" @bind="Editor.CheckMissing" /><span><strong>Missing / null data</strong><small>Flag missing parameters and interval gaps.</small></span></label>
+   </fieldset>
+   <label class="quality-active-choice"><input type="checkbox" @bind="Editor.IsActive" /><span><strong>Activate this rule</strong><small>Apply it when the next matching report is generated.</small></span></label>
+  </div>
+  <footer><button class="quality-secondary-button" type="button" disabled="@SavingRule" @onclick="() => EditorOpen = false">Cancel</button><button class="quality-primary-button" type="button" disabled="@SavingRule" @onclick="SaveRuleAsync">@(SavingRule ? "Saving…" : "Save rule")</button></footer>
+ </section></div>
+}
 
-@code {
-    private int RulePage { get; set; } = 1;
-    private int AnomalyPage { get; set; } = 1;
+@if (DeleteTarget is not null)
+{
+ <div class="quality-modal-overlay"><section class="quality-delete-modal" role="alertdialog" aria-modal="true"><span class="quality-delete-icon">!</span><div><p class="section-label">Delete configured rule</p><h2>Delete @DeleteTarget.Code?</h2><p>The rule “@DeleteTarget.Name” will no longer be applied to newly generated reports.</p></div><footer><button class="quality-secondary-button" type="button" @onclick="() => DeleteTarget = null">Keep rule</button><button class="quality-delete-button" type="button" @onclick="DeleteRuleAsync">Confirm delete</button></footer></section></div>
 }

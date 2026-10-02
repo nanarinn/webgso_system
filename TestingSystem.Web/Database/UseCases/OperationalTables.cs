@@ -5,9 +5,11 @@ public sealed class CollectionJobEntity
     public long Id { get; set; }
     public string CollectionId { get; set; } = string.Empty;
     public int PlantId { get; set; }
+    public int? CollectionScheduleId { get; set; }
     public string DataType { get; set; } = "DDQ";
     public string Mode { get; set; } = "Manual";
     public DateOnly SubmissionDate { get; set; }
+    public DateTime SubmissionDateTime { get; set; }
     public DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string Status { get; set; } = "Pending";
@@ -17,6 +19,7 @@ public sealed class CollectionJobEntity
     public string RequestedBy { get; set; } = "System";
     public int RetryCount { get; set; }
     public bool ReplaceExisting { get; set; }
+    public CollectionSchedule? CollectionSchedule { get; set; }
 }
 
 public sealed class RawApiResponse
@@ -42,8 +45,14 @@ public sealed class ValidationRule
     public string Operator { get; set; } = string.Empty;
     public decimal? MinimumValue { get; set; }
     public decimal? MaximumValue { get; set; }
-    public string Severity { get; set; } = "Warning";
+    public decimal? ChangeThreshold { get; set; }
+    public bool CheckMissing { get; set; }
+    public string RuleSource { get; set; } = "Fixed";
+    public string Severity { get; set; } = "Error";
     public bool IsActive { get; set; } = true;
+    public string? CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAt { get; set; }
 }
 
 public sealed class DataAnomaly
@@ -75,6 +84,7 @@ public sealed class CollectionSchedule
     public string TimeZoneId { get; set; } = "Asia/Kuala_Lumpur";
     public int RetryCount { get; set; } = 3;
     public bool IsActive { get; set; } = true;
+    public List<CollectionJobEntity> CollectionJobs { get; set; } = [];
 }
 
 public sealed class ReportExecution
@@ -93,6 +103,9 @@ public sealed class ReportExecution
     public string Name { get; set; } = string.Empty;
     public DateTime SubmissionDate { get; set; }
     public string DataSelection { get; set; } = string.Empty;
+    public int IntervalMinutes { get; set; } = 15;
+    public DateTime? DataRangeStart { get; set; }
+    public DateTime? DataRangeEnd { get; set; }
     public string Description { get; set; } = string.Empty;
     public int PlantCount { get; set; }
     public int RecordCount { get; set; }
