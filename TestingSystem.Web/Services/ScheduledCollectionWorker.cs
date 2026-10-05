@@ -29,15 +29,20 @@ public sealed class ScheduledCollectionWorker(
         await using var database = await contextFactory.CreateDbContextAsync(cancellationToken);
         var schedules = await database.CollectionSchedules.AsNoTracking().Where(item => item.IsActive)
             .OrderBy(item => item.Id).ToListAsync(cancellationToken);
-        var priorRuns = await database.CollectionJobs.AsNoTracking()
-            .Where(item => item.CollectionScheduleId != null)
-            .Select(item => new { item.CollectionScheduleId, item.StartedAt }).ToListAsync(cancellationToken);
+        var scheduleIds = schedules.Select(item => item.Id).ToArray();
+        var lastRuns = await database.CollectionJobs.AsNoTracking()
+            .Where(item => item.CollectionScheduleId.HasValue
+                && scheduleIds.Contains(item.CollectionScheduleId.Value))
+            .GroupBy(item => item.CollectionScheduleId!.Value)
+            .Select(group => new { ScheduleId = group.Key, StartedAt = group.Max(item => item.StartedAt) })
+            .ToDictionaryAsync(item => item.ScheduleId, item => item.StartedAt, cancellationToken);
+        var dueCommands = new List<(string ScheduleCode, string CollectionId, QueueCollectionCommand Command)>();
 
         foreach (var schedule in schedules)
         {
             var prefix = $"COL-SCH-{schedule.Id}-";
-            var lastRun = priorRuns.Where(item => item.CollectionScheduleId == schedule.Id)
-                .OrderByDescending(item => item.StartedAt).Select(item => (DateTimeOffset?)item.StartedAt).FirstOrDefault();
+            var lastRun = lastRuns.TryGetValue(schedule.Id, out var storedLastRun)
+                ? (DateTimeOffset?)storedLastRun : null;
             var timeZone = ResolveTimeZone(schedule.TimeZoneId);
             var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZone).DateTime;
             var lastRunLocal = lastRun.HasValue
@@ -49,24 +54,33 @@ public sealed class ScheduledCollectionWorker(
             var submissionDateTime = CollectionSchedulePolicy.SubmissionDateTime(
                 schedule.DataType, schedule.RunTime, localNow);
             var collectionId = $"{prefix}{submissionDateTime:yyyyMMddHHmm}";
-            if (await database.CollectionJobs.AnyAsync(item => item.CollectionId == collectionId, cancellationToken))
-                continue;
-
             var dataType = CollectionSchedulePolicy.ApiDataType(schedule.ApiType, schedule.DataType);
-            try
-            {
-                await commandBus.EnqueueAsync(new QueueCollectionCommand(
-                    schedule.PlantId, schedule.ApiType, dataType, $"Scheduled {schedule.ApiType}",
-                    submissionDateTime, "System Scheduler", schedule.RetryCount,
-                    ReplaceExisting: true, CollectionId: collectionId,
-                    CollectionScheduleId: schedule.Id), cancellationToken);
+            dueCommands.Add((schedule.ScheduleCode, collectionId, new QueueCollectionCommand(
+                schedule.PlantId, schedule.ApiType, dataType, $"Scheduled {schedule.ApiType}",
+                submissionDateTime, "System Scheduler", schedule.RetryCount,
+                ReplaceExisting: true, CollectionId: collectionId,
+                CollectionScheduleId: schedule.Id)));
+        }
+
+        if (dueCommands.Count == 0) return;
+        var candidateIds = dueCommands.Select(item => item.CollectionId).ToArray();
+        var storedCollectionIds = await database.CollectionJobs.AsNoTracking()
+            .Where(item => candidateIds.Contains(item.CollectionId))
+            .Select(item => item.CollectionId)
+            .ToListAsync(cancellationToken);
+        var existingCollectionIds = storedCollectionIds.ToHashSet(StringComparer.Ordinal);
+        dueCommands.RemoveAll(item => existingCollectionIds.Contains(item.CollectionId));
+        if (dueCommands.Count == 0) return;
+        try
+        {
+            await commandBus.EnqueueManyAsync(dueCommands.Select(item => item.Command).ToList(), cancellationToken);
+            foreach (var due in dueCommands)
                 logger.LogInformation("Schedule {ScheduleCode} queued collection {CollectionId}.",
-                    schedule.ScheduleCode, collectionId);
-            }
-            catch (DbUpdateException exception)
-            {
-                logger.LogDebug(exception, "Collection slot {CollectionId} was already queued.", collectionId);
-            }
+                    due.ScheduleCode, due.CollectionId);
+        }
+        catch (DbUpdateException exception)
+        {
+            logger.LogDebug(exception, "One or more scheduled collection slots were already queued; the batch will be retried.");
         }
     }
 

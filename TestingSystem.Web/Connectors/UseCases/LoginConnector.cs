@@ -35,8 +35,10 @@ public static class LoginConnector
         var actor = context.User;
         var timedOut = string.Equals(context.Request.Query["reason"], "timeout", StringComparison.OrdinalIgnoreCase);
         await signInManager.SignOutAsync();
-        await auditTrail.RecordAsync(actor, timedOut ? "Session timeout" : "Logout", "Success",
-            detail: timedOut ? "Signed out automatically after 15 minutes of inactivity." : null,
+        await auditTrail.RecordAsync(actor, "Logout", "Success", "Authentication",
+            detail: timedOut
+                ? "Session timeout — user logged out automatically after 15 minutes of inactivity."
+                : "User logged out manually.",
             correlationId: context.TraceIdentifier);
         return Results.LocalRedirect("/login");
     }
@@ -51,8 +53,8 @@ public static class LoginConnector
         await signInManager.SignOutAsync();
         if (wasAuthenticated)
         {
-            await auditTrail.RecordAsync(actor, "Session timeout", "Success",
-                detail: "Signed out automatically after 15 minutes of inactivity.",
+            await auditTrail.RecordAsync(actor, "Logout", "Success", "Authentication",
+                detail: "Session timeout — user logged out automatically after 15 minutes of inactivity.",
                 correlationId: context.TraceIdentifier);
         }
         return Results.LocalRedirect("/login?reason=session-timeout");

@@ -26,6 +26,9 @@ public sealed record QueuedCollection(long JobId, string CollectionId);
 public interface ICollectionCommandBus
 {
     Task<QueuedCollection> EnqueueAsync(QueueCollectionCommand command, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<QueuedCollection>> EnqueueManyAsync(
+        IReadOnlyList<QueueCollectionCommand> commands,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class SqlCollectionCommandBus(IDbContextFactory<ApplicationDbContext> contextFactory)
@@ -35,29 +38,43 @@ public sealed class SqlCollectionCommandBus(IDbContextFactory<ApplicationDbConte
         QueueCollectionCommand command,
         CancellationToken cancellationToken = default)
     {
+        var queued = await EnqueueManyAsync([command], cancellationToken);
+        return queued[0];
+    }
+
+    public async Task<IReadOnlyList<QueuedCollection>> EnqueueManyAsync(
+        IReadOnlyList<QueueCollectionCommand> commands,
+        CancellationToken cancellationToken = default)
+    {
+        if (commands.Count == 0) return [];
+
         await using var database = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var apiType = command.ApiType.Equals("MMF", StringComparison.OrdinalIgnoreCase) ? "MMF" : "DDQ";
-        var collectionId = CollectionCommandIdentity.Create(apiType, now, command.CollectionId);
-        var job = new CollectionJobEntity
+        var batchStartedAt = DateTimeOffset.UtcNow;
+        var jobs = commands.Select((command, index) =>
         {
-            CollectionId = collectionId,
-            PlantId = command.PlantId,
-            CollectionScheduleId = command.CollectionScheduleId,
-            DataType = apiType == "MMF" ? "MMF" : command.DataType.Trim(),
-            Mode = command.Mode.Trim(),
-            SubmissionDate = DateOnly.FromDateTime(command.SubmissionDateTime),
-            SubmissionDateTime = command.SubmissionDateTime,
-            StartedAt = now,
-            Status = CollectionJobStatus.Queued,
-            ResponseMessage = $"{apiType} {command.DataType.Trim()} collection queued.",
-            RequestedBy = Limit(command.RequestedBy, 160),
-            RetryCount = Math.Clamp(command.RetryCount, 0, 5),
-            ReplaceExisting = command.ReplaceExisting
-        };
-        database.CollectionJobs.Add(job);
+            var queuedAt = batchStartedAt.AddMilliseconds(index);
+            var apiType = command.ApiType.Equals("MMF", StringComparison.OrdinalIgnoreCase) ? "MMF" : "DDQ";
+            return new CollectionJobEntity
+            {
+                CollectionId = CollectionCommandIdentity.Create(apiType, queuedAt, command.CollectionId),
+                PlantId = command.PlantId,
+                CollectionScheduleId = command.CollectionScheduleId,
+                DataType = apiType == "MMF" ? "MMF" : command.DataType.Trim(),
+                Mode = command.Mode.Trim(),
+                SubmissionDate = DateOnly.FromDateTime(command.SubmissionDateTime),
+                SubmissionDateTime = command.SubmissionDateTime,
+                StartedAt = queuedAt,
+                Status = CollectionJobStatus.Queued,
+                ResponseMessage = $"{apiType} {command.DataType.Trim()} collection queued.",
+                RequestedBy = Limit(command.RequestedBy, 160),
+                RetryCount = Math.Clamp(command.RetryCount, 0, 5),
+                ReplaceExisting = command.ReplaceExisting
+            };
+        }).ToList();
+
+        database.CollectionJobs.AddRange(jobs);
         await database.SaveChangesAsync(cancellationToken);
-        return new(job.Id, job.CollectionId);
+        return jobs.Select(job => new QueuedCollection(job.Id, job.CollectionId)).ToList();
     }
 
     private static string Limit(string? value, int length) => string.IsNullOrWhiteSpace(value)
@@ -77,6 +94,10 @@ public sealed class CollectionCommandProcessor(
     ILssDataApiClient apiClient,
     ILogger<CollectionCommandProcessor> logger)
 {
+    private static readonly SemaphoreSlim DatabaseWriteGate = new(
+        CollectionProcessingPolicy.MaximumConcurrentDatabaseWrites,
+        CollectionProcessingPolicy.MaximumConcurrentDatabaseWrites);
+
     public async Task ProcessAsync(long jobId, CancellationToken cancellationToken)
     {
         var watch = Stopwatch.StartNew();
@@ -114,41 +135,49 @@ public sealed class CollectionCommandProcessor(
             if (translated.Readings.Count == 0)
                 throw new InvalidOperationException("The API response did not contain supported numeric readings.");
 
-            var strategy = database.Database.CreateExecutionStrategy();
-            await strategy.ExecuteAsync(async () =>
+            await DatabaseWriteGate.WaitAsync(cancellationToken);
+            try
             {
-                await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-                var replacedReadings = 0;
-                if (job.ReplaceExisting)
+                var strategy = database.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
                 {
-                    var dayStart = job.SubmissionDate.ToDateTime(TimeOnly.MinValue);
-                    var dayEnd = dayStart.AddDays(1);
-                    var replacedJobIds = await database.CollectionJobs.AsNoTracking()
-                        .Where(item => item.Id != job.Id && item.PlantId == job.PlantId
-                            && item.DataType == job.DataType && item.SubmissionDate == job.SubmissionDate)
-                        .Select(item => item.Id).ToListAsync(cancellationToken);
-                    replacedReadings = await database.SolarApiReadings
-                        .Where(reading => reading.CollectionJobId != job.Id && reading.PlantId == job.PlantId
-                            && reading.DataType == job.DataType
-                            && reading.SubmissionDateTime >= dayStart && reading.SubmissionDateTime < dayEnd)
-                        .ExecuteDeleteAsync(cancellationToken);
-                    if (replacedJobIds.Count > 0)
-                        await database.DataAnomalies.Where(item => replacedJobIds.Contains(item.CollectionJobId))
+                    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+                    var replacedReadings = 0;
+                    if (job.ReplaceExisting)
+                    {
+                        var dayStart = job.SubmissionDate.ToDateTime(TimeOnly.MinValue);
+                        var dayEnd = dayStart.AddDays(1);
+                        var replacedJobIds = await database.CollectionJobs.AsNoTracking()
+                            .Where(item => item.Id != job.Id && item.PlantId == job.PlantId
+                                && item.DataType == job.DataType && item.SubmissionDate == job.SubmissionDate)
+                            .Select(item => item.Id).ToListAsync(cancellationToken);
+                        replacedReadings = await database.SolarApiReadings
+                            .Where(reading => reading.CollectionJobId != job.Id && reading.PlantId == job.PlantId
+                                && reading.DataType == job.DataType
+                                && reading.SubmissionDateTime >= dayStart && reading.SubmissionDateTime < dayEnd)
                             .ExecuteDeleteAsync(cancellationToken);
-                }
+                        if (replacedJobIds.Count > 0)
+                            await database.DataAnomalies.Where(item => replacedJobIds.Contains(item.CollectionJobId))
+                                .ExecuteDeleteAsync(cancellationToken);
+                    }
 
-                database.RawApiResponses.Add(CreateRawResponse(job.Id, apiResult));
-                database.SolarApiReadings.AddRange(translated.Readings);
-                watch.Stop();
-                job.CompletedAt = DateTimeOffset.UtcNow;
-                job.Status = CollectionJobStatus.Completed;
-                job.DurationSeconds = watch.Elapsed.TotalSeconds;
-                job.ResponseMessage = $"HTTP {apiResult.HttpStatusCode}; {translated.Readings.Count:N0} reading(s) saved; "
-                    + $"{replacedReadings:N0} replaced. Validation is applied during report generation.";
-                database.AuditEvents.Add(CreateAudit(job, "Success"));
-                await database.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
-            });
+                    database.RawApiResponses.Add(CreateRawResponse(job.Id, apiResult));
+                    database.SolarApiReadings.AddRange(translated.Readings);
+                    watch.Stop();
+                    job.CompletedAt = DateTimeOffset.UtcNow;
+                    job.Status = CollectionJobStatus.Completed;
+                    job.DurationSeconds = watch.Elapsed.TotalSeconds;
+                    job.ResponseMessage = $"HTTP {apiResult.HttpStatusCode}; {translated.Readings.Count:N0} reading(s) saved; "
+                        + $"{replacedReadings:N0} replaced. Validation is applied during report generation.";
+                    database.AuditEvents.Add(CreateAudit(job, "Success"));
+                    await database.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                });
+            }
+            finally
+            {
+                DatabaseWriteGate.Release();
+            }
             logger.LogInformation("Collection command {CollectionId} completed with {ReadingCount} readings.",
                 job.CollectionId, translated.Readings.Count);
         }
@@ -210,24 +239,58 @@ public sealed class CollectionCommandWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await RecoverInterruptedJobsAsync(stoppingToken);
-        var concurrency = Math.Clamp(configuration.GetValue("CollectionProcessing:MaxConcurrency", 3), 1, 8);
-        while (!stoppingToken.IsCancellationRequested)
+        var concurrency = CollectionProcessingPolicy.NormalizeConcurrency(configuration.GetValue(
+            "CollectionProcessing:MaxConcurrency", CollectionProcessingPolicy.DefaultMaxConcurrency));
+        var activeJobs = new Dictionary<long, Task>();
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                var jobIds = await ClaimAsync(concurrency, stoppingToken);
-                if (jobIds.Count == 0)
+                try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
-                    continue;
+                    var freeSlots = concurrency - activeJobs.Count;
+                    if (freeSlots > 0)
+                    {
+                        var jobIds = await ClaimAsync(freeSlots, stoppingToken);
+                        foreach (var jobId in jobIds)
+                            activeJobs[jobId] = ProcessOneAsync(jobId, stoppingToken);
+                    }
+
+                    if (activeJobs.Count == 0)
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(500), stoppingToken);
+                        continue;
+                    }
+
+                    await Task.WhenAny(activeJobs.Values);
+                    foreach (var completed in activeJobs.Where(item => item.Value.IsCompleted).ToList())
+                    {
+                        activeJobs.Remove(completed.Key);
+                        await completed.Value;
+                    }
                 }
-                await Task.WhenAll(jobIds.Select(jobId => ProcessOneAsync(jobId, stoppingToken)));
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+                catch (Exception exception)
+                {
+                    logger.LogError(exception, "Collection command worker cycle failed.");
+                    await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+                }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
-            catch (Exception exception)
+        }
+        finally
+        {
+            if (activeJobs.Count > 0)
             {
-                logger.LogError(exception, "Collection command worker cycle failed.");
-                await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                try
+                {
+                    await Task.WhenAll(activeJobs.Values).WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+                }
+                catch (TimeoutException)
+                {
+                    logger.LogWarning("Collection worker shutdown timed out with {Count} collection(s) still active.",
+                        activeJobs.Count);
+                }
+                catch (OperationCanceledException) { }
             }
         }
     }

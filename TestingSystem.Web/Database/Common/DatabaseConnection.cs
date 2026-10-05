@@ -93,6 +93,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.ErrorMessage).HasMaxLength(1000);
             item.Property(x => x.ResponseMessage).HasMaxLength(1000);
             item.Property(x => x.RequestedBy).HasMaxLength(160);
+            item.HasIndex(x => x.PlantId);
             item.HasIndex(x => new { x.DataType, x.SubmissionDateTime, x.PlantId });
             item.HasIndex(x => x.CollectionId).IsUnique();
             item.HasIndex(x => new { x.Status, x.StartedAt });
@@ -136,6 +137,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.OriginalValue).HasMaxLength(500);
             item.Property(x => x.Reason).HasMaxLength(1000);
             item.Property(x => x.Status).HasMaxLength(30);
+            item.HasIndex(x => x.CollectionJobId);
             item.HasIndex(x => x.DetectedAt);
             item.HasOne<CollectionJobEntity>().WithMany().HasForeignKey(x => x.CollectionJobId).OnDelete(DeleteBehavior.Cascade);
             item.HasOne<ValidationRule>().WithMany().HasForeignKey(x => x.ValidationRuleId).OnDelete(DeleteBehavior.SetNull);
@@ -153,6 +155,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.ScheduleMonths).HasMaxLength(50);
             item.Property(x => x.CronExpression).HasMaxLength(100);
             item.Property(x => x.TimeZoneId).HasMaxLength(100);
+            item.HasIndex(x => x.PlantId);
             item.HasIndex(x => x.ScheduleCode).IsUnique();
             item.HasOne<LssPlant>().WithMany().HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -209,6 +212,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.Unit).HasMaxLength(30);
             item.Property(x => x.ErrorMessage).HasMaxLength(500);
             item.Property(x => x.SyntheticReason).HasMaxLength(500);
+            item.HasIndex(x => x.CollectionJobId);
             item.HasIndex(x => new { x.DataType, x.PlantId, x.IntervalStart });
             item.HasIndex(x => new { x.DataType, x.PlantId, x.Parameter, x.IntervalStart });
             item.HasIndex(x => new { x.DataType, x.SubmissionDateTime });

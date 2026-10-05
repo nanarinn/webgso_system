@@ -363,6 +363,16 @@ public static class DatabaseInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionJobs_Queue' AND object_id = OBJECT_ID(N'[CollectionJobs]'))
                 CREATE INDEX [IX_CollectionJobs_Queue] ON [CollectionJobs] ([Status], [StartedAt])
                     INCLUDE ([PlantId], [DataType], [Mode], [RetryCount], [ReplaceExisting]);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionJobs_PlantId' AND object_id = OBJECT_ID(N'[CollectionJobs]'))
+                CREATE INDEX [IX_CollectionJobs_PlantId] ON [CollectionJobs] ([PlantId]);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_RawApiResponses_CollectionJobId' AND object_id = OBJECT_ID(N'[RawApiResponses]'))
+                CREATE INDEX [IX_RawApiResponses_CollectionJobId] ON [RawApiResponses] ([CollectionJobId]);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SolarApiReadings_CollectionJobId' AND object_id = OBJECT_ID(N'[SolarApiReadings]'))
+                CREATE INDEX [IX_SolarApiReadings_CollectionJobId] ON [SolarApiReadings] ([CollectionJobId]);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DataAnomalies_CollectionJobId' AND object_id = OBJECT_ID(N'[DataAnomalies]'))
+                CREATE INDEX [IX_DataAnomalies_CollectionJobId] ON [DataAnomalies] ([CollectionJobId]);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionSchedules_PlantId' AND object_id = OBJECT_ID(N'[CollectionSchedules]'))
+                CREATE INDEX [IX_CollectionSchedules_PlantId] ON [CollectionSchedules] ([PlantId]);
             IF OBJECT_ID(N'[FK_CollectionJobs_LssPlants]', N'F') IS NULL ALTER TABLE [CollectionJobs] WITH CHECK ADD CONSTRAINT [FK_CollectionJobs_LssPlants] FOREIGN KEY ([PlantId]) REFERENCES [LssPlants]([Id]);
             IF OBJECT_ID(N'[FK_RawApiResponses_CollectionJobs]', N'F') IS NULL ALTER TABLE [RawApiResponses] WITH CHECK ADD CONSTRAINT [FK_RawApiResponses_CollectionJobs] FOREIGN KEY ([CollectionJobId]) REFERENCES [CollectionJobs]([Id]) ON DELETE CASCADE;
             IF OBJECT_ID(N'[FK_SolarApiReadings_CollectionJobs]', N'F') IS NULL ALTER TABLE [SolarApiReadings] WITH CHECK ADD CONSTRAINT [FK_SolarApiReadings_CollectionJobs] FOREIGN KEY ([CollectionJobId]) REFERENCES [CollectionJobs]([Id]) ON DELETE CASCADE;

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
+using TestingSystem.Web.Backend.UseCases.UCLSS027Audit;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Models;
 using TestingSystem.Web.Services;
@@ -10,6 +12,8 @@ public partial class LssPlants : ComponentBase
 {
     [Inject] private IDbContextFactory<ApplicationDbContext> ContextFactory { get; set; } = default!;
     [Inject] private ILssDataApiClient ApiClient { get; set; } = default!;
+    [Inject] private AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
+    [Inject] private IAuditTrailService AuditTrail { get; set; } = default!;
 
     private static readonly string[] States = ["Johor", "Kedah", "Melaka", "Negeri Sembilan", "Pahang", "Perak", "Perlis", "Pulau Pinang", "Sabah", "Sarawak", "Selangor", "Terengganu", "Kelantan"];
     private static readonly string[] ApiTypes = ["DDQ", "MMF"];
@@ -187,6 +191,11 @@ public partial class LssPlants : ComponentBase
             plant.LastApiTestMessage = LastTestResult.Message;
             plant.LastApiTestAt = DateTimeOffset.UtcNow;
             await database.SaveChangesAsync();
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal, "Test plant API connection",
+                LastTestResult.IsConnected ? "Success" : "Failed", "LssPlant", plant.PlantId,
+                $"{TestApiSource} {TestDataType} endpoint test: {LastTestResult.Message}",
+                $"plant:{plant.PlantId}");
             await LoadPlantsAsync();
         }
         finally
@@ -284,11 +293,25 @@ public partial class LssPlants : ComponentBase
             database.PlantApiConfigurations.Add(new PlantApiConfiguration
                 { PlantId = plant.Id, ApiType = "MMF", DataType = "MMF", ApiLink = mmfApiLink });
             await database.SaveChangesAsync();
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal, wasEditing ? "Update LSS plant configuration" : "Create LSS plant configuration",
+                "Success", "LssPlant", plant.PlantId,
+                $"Plant {plant.Name}; state {plant.State}; capacity {plant.CapacityMw:0.##} MW; {ddqLinks.Count} DDQ endpoint(s); 1 MMF endpoint.",
+                $"plant:{plant.PlantId}");
             IsDialogOpen = false;
             await LoadPlantsAsync();
             SelectedApiType = "DDQ";
             SuccessMessage = $"{NewName.Trim()} DDQ and MMF API configurations were verified and successfully {(wasEditing ? "updated" : "added")} in MS SQL.";
             SuccessTitle = "Successfully verified and saved";
+        }
+        catch (Exception exception)
+        {
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal,
+                EditingPlantId.HasValue ? "Update LSS plant configuration" : "Create LSS plant configuration",
+                "Failed", "LssPlant", NewPlantId, exception.GetBaseException().Message,
+                $"plant:{NewPlantId}");
+            FormError = $"The plant configuration could not be saved: {exception.GetBaseException().Message}";
         }
         finally
         {
@@ -303,11 +326,23 @@ public partial class LssPlants : ComponentBase
         try
         {
             await using var database = await ContextFactory.CreateDbContextAsync();
-            var plant = await database.LssPlants.SingleOrDefaultAsync(x => x.Id == EditingPlantId.Value);
+            var plant = await database.LssPlants.AsNoTracking()
+                .Where(x => x.Id == EditingPlantId.Value)
+                .Select(x => new { x.Id, x.Name, x.PlantId })
+                .SingleOrDefaultAsync();
             if (plant is null)
             {
                 FormError = "This plant no longer exists in MS SQL.";
                 IsDeleteConfirmationOpen = false;
+                return;
+            }
+
+            var collectionInProgress = await database.CollectionJobs.AsNoTracking().AnyAsync(x =>
+                x.PlantId == plant.Id && x.Status == CollectionJobStatus.Processing);
+            if (collectionInProgress)
+            {
+                IsDeleteConfirmationOpen = false;
+                FormError = "This plant is currently collecting API data. Wait until the collection finishes, then delete it again.";
                 return;
             }
 
@@ -317,18 +352,20 @@ public partial class LssPlants : ComponentBase
             await strategy.ExecuteAsync(async () =>
             {
                 await using var transaction = await database.Database.BeginTransactionAsync();
-                var plantJobIds = database.CollectionJobs.Where(x => x.PlantId == plant.Id).Select(x => x.Id);
-                await database.DataAnomalies.Where(x => plantJobIds.Contains(x.CollectionJobId)).ExecuteDeleteAsync();
-                await database.SolarApiReadings.Where(x => plantJobIds.Contains(x.CollectionJobId)).ExecuteDeleteAsync();
-                await database.RawApiResponses.Where(x => plantJobIds.Contains(x.CollectionJobId)).ExecuteDeleteAsync();
+                // Collection job dependants use ON DELETE CASCADE, so SQL Server can remove
+                // responses, readings and anomalies without repeated table scans here.
                 await database.CollectionJobs.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
-                await database.SolarApiReadings.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
                 await database.CollectionSchedules.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
                 await database.PlantApiConfigurations.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
-                database.LssPlants.Remove(plant);
-                await database.SaveChangesAsync();
+                await database.LssPlants.Where(x => x.Id == plant.Id).ExecuteDeleteAsync();
                 await transaction.CommitAsync();
             });
+
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal, "Delete LSS plant configuration", "Success",
+                "LssPlant", deletedPlantId,
+                $"Deleted {deletedName} and its API configurations, collection schedules, collection jobs, readings and anomalies.",
+                $"plant:{deletedPlantId}");
 
             IsDialogOpen = false;
             IsDeleteConfirmationOpen = false;
@@ -338,6 +375,9 @@ public partial class LssPlants : ComponentBase
         }
         catch (Exception exception)
         {
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal, "Delete LSS plant configuration", "Failed",
+                "LssPlant", NewPlantId, exception.GetBaseException().Message, $"plant:{NewPlantId}");
             IsDeleteConfirmationOpen = false;
             FormError = $"The plant could not be deleted: {exception.GetBaseException().Message}";
         }

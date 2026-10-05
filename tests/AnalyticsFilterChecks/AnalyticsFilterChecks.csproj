@@ -17,6 +17,7 @@
     <Compile Include="../../TestingSystem.Web/Backend/UseCases/Exports/DdqExcelWorkbookExporter.cs" Link="DdqExcelWorkbookExporter.cs" />
     <Compile Include="../../TestingSystem.Web/Services/CollectionSchedulePolicy.cs" Link="CollectionSchedulePolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/CollectionCommandIdentity.cs" Link="CollectionCommandIdentity.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/CollectionProcessingPolicy.cs" Link="CollectionProcessingPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/DdqDatasetPolicy.cs" Link="DdqDatasetPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/ScheduledApiPayloadTranslator.cs" Link="ScheduledApiPayloadTranslator.cs" />
     <Compile Include="../../TestingSystem.Web/Services/MmfTestApiPayload.cs" Link="MmfTestApiPayload.cs" />

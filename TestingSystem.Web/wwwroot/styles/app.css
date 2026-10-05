@@ -455,63 +455,6 @@ a {
     line-height: 1.45;
 }
 
-.access-assurance {
-    display: grid;
-    margin-top: 24px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    border: 1px solid #dce8f1;
-    border-radius: 14px;
-    background: #f8fbfd;
-}
-
-.access-assurance > div {
-    display: flex;
-    min-width: 0;
-    min-height: 76px;
-    padding: 15px;
-    align-items: flex-start;
-    gap: 10px;
-}
-
-.access-assurance > div + div {
-    border-left: 1px solid #dce8f1;
-}
-
-.access-assurance > div > span:last-child {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.access-assurance strong {
-    color: var(--sb-navy);
-    font-size: 0.74rem;
-}
-
-.access-assurance small {
-    display: block;
-    color: #64748b;
-    font: 0.68rem "Aptos", "Trebuchet MS", sans-serif;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
-    text-overflow: clip;
-    white-space: normal;
-}
-
-.assurance-icon {
-    display: grid;
-    flex: 0 0 auto;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    color: #087a50;
-    background: #e6f8ef;
-    place-items: center;
-    font-size: 0.72rem;
-    font-weight: 900;
-}
-
 .first-access-note {
     display: flex;
     margin-top: 16px;
@@ -546,6 +489,46 @@ a {
     display: block;
     margin-bottom: 2px;
     color: #50420f;
+}
+
+.login-disclaimer {
+    display: flex;
+    margin-top: 16px;
+    padding: 14px;
+    align-items: flex-start;
+    gap: 11px;
+    border: 1px solid #cddfed;
+    border-left: 3px solid var(--sb-blue);
+    border-radius: 8px;
+    color: #465c72;
+    background: #f5f9fc;
+    font-family: "Aptos", "Trebuchet MS", sans-serif;
+}
+
+.login-disclaimer-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--sb-blue);
+    place-items: center;
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+
+.login-disclaimer strong {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--sb-navy);
+    font-size: 0.76rem;
+}
+
+.login-disclaimer p {
+    margin: 0;
+    font-size: 0.7rem;
+    line-height: 1.48;
 }
 
 .login-button:hover,
@@ -3301,15 +3284,6 @@ a {
 
     .identity-provider {
         margin-bottom: 24px;
-    }
-
-    .access-assurance {
-        grid-template-columns: 1fr;
-    }
-
-    .access-assurance > div + div {
-        border-top: 1px solid #dce8f1;
-        border-left: 0;
     }
 
     .security-note {

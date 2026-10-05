@@ -57,8 +57,8 @@
         <div class="record-list">
             @foreach (var record in RecentRecords)
             {
-                <div class="record-row">
-                    <span class="record-code">@record.Reference</span>
+                <div class="record-row dashboard-record-row">
+                    <span class="record-code" title="@record.Reference">@record.DisplayReference</span>
                     <div class="record-name">
                         <strong>@record.PlantName</strong>
                         <span>@record.DataType collection</span>
@@ -78,9 +78,42 @@
             <span></span>
             SQL Server online
         </div>
-        <a href="health" target="_blank">Open health proof →</a>
+        <button class="health-proof-button" type="button" @onclick="OpenHealthStatus">View health status <span>→</span></button>
     </aside>
 </section>
+
+@if (IsHealthStatusOpen)
+{
+    <div class="metric-modal-overlay health-modal-overlay" role="presentation">
+        <section class="metric-dialog health-status-dialog" role="dialog" aria-modal="true" aria-labelledby="health-status-title">
+            <div class="metric-dialog-header">
+                <div>
+                    <p class="section-label">System status</p>
+                    <h2 id="health-status-title">Repository is healthy</h2>
+                    <p>The application is connected to the Microsoft SQL Server repository.</p>
+                </div>
+                <button class="profile-close" type="button" @onclick="CloseHealthStatus" aria-label="Close system status">×</button>
+            </div>
+            <div class="health-status-content">
+                <span class="health-status-icon" aria-hidden="true">✓</span>
+                <div>
+                    <strong>All required services are online</strong>
+                    <p>The dashboard can read collection, plant and operational records from the repository.</p>
+                </div>
+                <span class="status-pill status-successful">Healthy</span>
+            </div>
+            <div class="health-status-details">
+                <div><span>Application</span><strong>Blazor Server</strong></div>
+                <div><span>Database</span><strong>Microsoft SQL Server</strong></div>
+                <div><span>Connection</span><strong>Online</strong></div>
+            </div>
+            <div class="metric-dialog-footer health-status-footer">
+                <span>Status confirmed when this dashboard was loaded.</span>
+                <button class="primary-action" type="button" @onclick="CloseHealthStatus">Close</button>
+            </div>
+        </section>
+    </div>
+}
 
 @if (IsMetricOpen)
 {

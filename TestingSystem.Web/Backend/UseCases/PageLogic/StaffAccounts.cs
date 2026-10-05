@@ -91,6 +91,8 @@ public partial class StaffAccounts : ComponentBase
     private async Task ConfirmDecisionAsync()
     {
         if (DecisionUser is null) return;
+        var decisionTarget = DecisionUser;
+        var auditAction = UserAuditAction(decisionTarget, DecisionStatus, DecisionRole);
         IsSaving = true;
         Message = string.Empty;
         try
@@ -124,8 +126,10 @@ public partial class StaffAccounts : ComponentBase
             Check(await userManager.UpdateAsync(user));
             if (DecisionStatus is UserAccessStatus.Inactive or UserAccessStatus.Rejected)
                 Check(await userManager.UpdateSecurityStampAsync(user));
-            await AuditTrail.RecordAsync(CurrentActor, "ReviewUserAccess", "Success", "ApplicationUser", user.Id,
-                $"Access status changed to {DecisionStatus}; role {requestedRole}.");
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal, auditAction, "Success", "ApplicationUser", user.Id,
+                $"User {user.DisplayName} ({user.Email}); status {decisionTarget.Status} to {DecisionStatus}; role {currentRole} to {requestedRole}.",
+                $"user:{user.Id}");
             if (DecisionStatus is UserAccessStatus.Approved or UserAccessStatus.Rejected)
                 await Notifications.QueueDecisionAsync(user, DecisionStatus, DecisionStatus == UserAccessStatus.Approved ? requestedRole : null);
 
@@ -137,6 +141,9 @@ public partial class StaffAccounts : ComponentBase
         }
         catch (Exception exception)
         {
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal, auditAction, "Failed", "ApplicationUser", decisionTarget.Id,
+                exception.GetBaseException().Message, $"user:{decisionTarget.Id}");
             Message = exception.Message;
             IsError = true;
         }
@@ -163,6 +170,15 @@ public partial class StaffAccounts : ComponentBase
     private static string RoleLabel(string role) => role switch { SystemRoles.SuperAdministrator => "Super Admin", SystemRoles.Administrator => "Administrator", SystemRoles.Staff or SystemRoles.LegacyReviewer => "Staff", _ => "Not assigned" };
     private static string RoleCss(string role) => role.ToLowerInvariant().Replace("superadministrator", "superadmin");
     private static string StatusCss(string status) => status switch { UserAccessStatus.Approved => "status-successful", UserAccessStatus.Pending => "status-warning", _ => "status-failed" };
+    private static string UserAuditAction(UserRow user, string decisionStatus, string requestedRole) => decisionStatus switch
+    {
+        UserAccessStatus.Approved when user.Status == UserAccessStatus.Inactive => "Reactivate user account",
+        UserAccessStatus.Approved when user.Status == UserAccessStatus.Approved
+            && !user.Role.Equals(requestedRole, StringComparison.OrdinalIgnoreCase) => "Change user role",
+        UserAccessStatus.Approved => "Approve user access",
+        UserAccessStatus.Rejected => "Reject user access",
+        _ => "Deactivate user account"
+    };
     private static string GetInitials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => x[0])).ToUpperInvariant();
     private static void Check(IdentityResult result) { if (!result.Succeeded) throw new InvalidOperationException(string.Join(" ", result.Errors.Select(x => x.Description))); }
     private sealed record UserRow(string Id, string DisplayName, string UserName, string Email, string Role, string Status, bool IsEntraUser, string EntraObjectId, DateTimeOffset? RequestedAt);

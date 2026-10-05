@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Demo;
@@ -7,6 +8,7 @@ using TestingSystem.Web.Database.Entities;
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
@@ -16,6 +18,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     [Inject] private IDbContextFactory<ApplicationDbContext> ContextFactory { get; set; } = default!;
     [Inject] private ILssDataApiClient ApiClient { get; set; } = default!;
     [Inject] private ICollectionCommandBus CollectionCommands { get; set; } = default!;
+    [Inject] private AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
 
     private List<PlantConnection> Plants { get; set; } = [];
 
@@ -33,6 +36,8 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     private bool IsJobDetailOpen { get; set; }
     private DemoCollectionJob? SelectedJob { get; set; }
     private string SummaryFilter { get; set; } = "All";
+    private List<DemoCollectionJob>? SummarySourceJobs { get; set; }
+    private string SummaryContextTitle { get; set; } = string.Empty;
     private DemoCollectionJob? RunResult { get; set; }
     private string LoadErrorMessage { get; set; } = string.Empty;
     private bool IsLoadingJobs { get; set; }
@@ -51,14 +56,20 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     private int Sequence { get; set; } = 6;
     private readonly CancellationTokenSource RefreshCancellation = new();
     private Task? RefreshTask { get; set; }
+    private string CurrentActorName { get; set; } = "Authenticated user";
 
-    private List<DemoCollectionJob> SummaryJobs => SummaryFilter == "All"
-        ? Jobs
-        : Jobs.Where(job => job.Status == SummaryFilter).ToList();
+    private List<DemoCollectionJob> SummaryJobs
+    {
+        get
+        {
+            var source = SummarySourceJobs ?? Jobs;
+            return SummaryFilter == "All" ? source : source.Where(job => job.Status == SummaryFilter).ToList();
+        }
+    }
 
-    private string SummaryDialogTitle => SummaryFilter == "All"
-        ? "All collection jobs"
-        : $"{SummaryFilter} collection jobs";
+    private string SummaryDialogTitle => !string.IsNullOrWhiteSpace(SummaryContextTitle)
+        ? SummaryContextTitle
+        : SummaryFilter == "All" ? "All collection jobs" : $"{SummaryFilter} collection jobs";
 
     private PlantConnection? SelectedPlant => Plants.FirstOrDefault(plant => plant.DatabaseId == SelectedPlantId);
     private string SelectedManualEndpoint => SelectedPlant?.ApiEndpoints.GetValueOrDefault(SelectedManualDataType) ?? string.Empty;
@@ -74,10 +85,51 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 || job.Description.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
+    private List<CollectionBatch> FilteredBatches => FilteredJobs
+        .GroupBy(job => new
+        {
+            job.ApiType,
+            job.DataType,
+            job.Mode,
+            SubmissionMinute = new DateTime(job.SubmissionDate.Year, job.SubmissionDate.Month,
+                job.SubmissionDate.Day, job.SubmissionDate.Hour, job.SubmissionDate.Minute, 0)
+        })
+        .Select(group => new CollectionBatch(
+            $"{group.Key.ApiType}-{group.Key.DataType}-{group.Key.SubmissionMinute:yyyyMMddHHmm}",
+            group.Key.ApiType,
+            string.IsNullOrWhiteSpace(group.Key.DataType) ? "General data" : group.Key.DataType,
+            group.Key.Mode,
+            group.Key.SubmissionMinute,
+            group.Max(job => job.RunAt),
+            group.OrderBy(job => job.PlantName).ToList()))
+        .OrderByDescending(batch => batch.RunAt)
+        .ToList();
+
     protected override async Task OnInitializedAsync()
     {
+        CurrentActorName = await ResolveCurrentActorNameAsync();
         await LoadPageAsync();
         RefreshTask = RefreshJobsAsync(RefreshCancellation.Token);
+    }
+
+    private async Task<string> ResolveCurrentActorNameAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var principal = state.User;
+        var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            await using var database = await ContextFactory.CreateDbContextAsync();
+            var displayName = await database.Users.AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => user.DisplayName)
+                .FirstOrDefaultAsync();
+            if (!string.IsNullOrWhiteSpace(displayName)) return displayName.Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(principal.Identity?.Name)
+            ? "Authenticated user"
+            : principal.Identity.Name.Trim();
     }
 
     private async Task LoadPageAsync()
@@ -276,26 +328,28 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         ManualCollectionError = string.Empty;
         try
         {
-            foreach (var item in ManualBatchItems)
+            var runSubmissionTime = SubmissionMinute(DateTime.Now);
+            try
             {
-                if (string.IsNullOrWhiteSpace(item.Endpoint))
+                var commands = ManualBatchItems.Select(item => new QueueCollectionCommand(
+                    item.PlantDatabaseId, item.ApiType, item.DataType,
+                    ManualBatchCollectionPolicy.Mode(item.ApiType), runSubmissionTime,
+                    CurrentActorName, ReplaceExisting: true)).ToList();
+                var queuedJobs = await CollectionCommands.EnqueueManyAsync(commands, RefreshCancellation.Token);
+                for (var index = 0; index < ManualBatchItems.Count; index++)
                 {
-                    item.Status = "Failed";
-                    item.Message = $"No {item.ApiType} {item.DataType} endpoint configured";
-                    continue;
-                }
-
-                try
-                {
-                    var queued = await CollectionCommands.EnqueueAsync(new QueueCollectionCommand(
-                        item.PlantDatabaseId, item.ApiType, item.DataType,
-                        ManualBatchCollectionPolicy.Mode(item.ApiType), SubmissionMinute(DateTime.Now),
-                        "Current user", ReplaceExisting: true));
+                    var item = ManualBatchItems[index];
+                    var queued = queuedJobs[index];
                     item.JobId = queued.JobId;
                     item.Status = "Start";
-                    item.Message = "Queued and waiting for a collection worker";
+                    item.Message = string.IsNullOrWhiteSpace(item.Endpoint)
+                        ? "Queued; endpoint validation will be recorded by the collection worker"
+                        : "Queued and waiting for a collection worker";
                 }
-                catch (Exception exception)
+            }
+            catch (Exception exception)
+            {
+                foreach (var item in ManualBatchItems)
                 {
                     item.Status = "Failed";
                     item.Message = Limit(exception.GetBaseException().Message, 500);
@@ -360,7 +414,8 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
             SubmissionDateTime = SubmissionMinute(startedAt),
             StartedAt = DateTimeOffset.Now,
             Status = "Running",
-            ResponseMessage = $"Manual {item.ApiType} {item.DataType} collection started."
+            ResponseMessage = $"Manual {item.ApiType} {item.DataType} collection started.",
+            RequestedBy = CurrentActorName
         };
         database.CollectionJobs.Add(entity);
         await database.SaveChangesAsync();
@@ -406,7 +461,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 entity.ResponseMessage = $"HTTP {apiResult.HttpStatusCode}; {translated.Readings.Count:N0} reading(s) saved; {replacedReadings:N0} replaced. Validation is applied during report generation.";
                 database.AuditEvents.Add(new AuditEvent
                 {
-                    OccurredAt = DateTimeOffset.UtcNow, Actor = "Current user",
+                    OccurredAt = DateTimeOffset.UtcNow, Actor = CurrentActorName,
                     Action = "Run all API manual collection", EntityType = "CollectionJob",
                     EntityReference = collectionId, Result = "Success", Detail = entity.ResponseMessage,
                     CorrelationId = $"{item.PlantId}:{item.ApiType}:{item.DataType}"
@@ -432,7 +487,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 database.RawApiResponses.Add(CreateRawResponse(entity.Id, apiResult));
             database.AuditEvents.Add(new AuditEvent
             {
-                OccurredAt = DateTimeOffset.UtcNow, Actor = "Current user",
+                OccurredAt = DateTimeOffset.UtcNow, Actor = CurrentActorName,
                 Action = "Run all API manual collection", EntityType = "CollectionJob",
                 EntityReference = collectionId, Result = "Failed", Detail = failedEntity.ResponseMessage,
                 CorrelationId = $"{item.PlantId}:{item.ApiType}:{item.DataType}"
@@ -443,15 +498,19 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         }
     }
 
-    private void OpenSummaryDialog(string filter)
+    private void OpenSummaryDialog(string filter, List<DemoCollectionJob>? sourceJobs = null, string title = "")
     {
         SummaryFilter = filter;
+        SummarySourceJobs = sourceJobs;
+        SummaryContextTitle = title;
+        CollectionSummaryPage = 1;
         IsSummaryDialogOpen = true;
     }
 
-    private void OpenAllSummary() => OpenSummaryDialog("All");
-    private void OpenSuccessfulSummary() => OpenSummaryDialog("Successful");
-    private void OpenFailedSummary() => OpenSummaryDialog("Failed");
+    private void OpenBatchSummary(CollectionBatch batch, string status) => OpenSummaryDialog(
+        status,
+        batch.Jobs,
+        $"{status} plants · {batch.ApiType} {batch.DataType}");
 
     private void CloseSummaryDialog() => IsSummaryDialogOpen = false;
 
@@ -529,7 +588,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         {
             var queued = await CollectionCommands.EnqueueAsync(new QueueCollectionCommand(
                 plant.DatabaseId, "DDQ", dataType, "Manual DDQ", SubmissionMinute(DateTime.Now),
-                "Current user", ReplaceExisting: true));
+                CurrentActorName, ReplaceExisting: true));
             var finalStatus = await WaitForCollectionAsync(queued.JobId);
             if (finalStatus.Status == CollectionJobStatus.Failed)
                 ManualCollectionError = finalStatus.ErrorMessage ?? finalStatus.ResponseMessage;
@@ -579,8 +638,33 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     private static string GetPlantCode(string plantName) => string.Concat(
         plantName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(word => word[0]));
 
+    private static string DisplayCollectionId(string collectionId)
+    {
+        if (string.IsNullOrWhiteSpace(collectionId)) return "-";
+        if (!collectionId.StartsWith("CMD-", StringComparison.OrdinalIgnoreCase)) return collectionId;
+
+        var parts = collectionId.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 3 ? string.Join("-", parts.Take(3)) : collectionId;
+    }
+
     private sealed record PlantConnection(int DatabaseId, string PlantId, string Name, string State,
         decimal CapacityMw, IReadOnlyDictionary<string, string> ApiEndpoints);
+
+    private sealed record CollectionBatch(
+        string Key,
+        string ApiType,
+        string DataType,
+        string Mode,
+        DateTime SubmissionDate,
+        DateTime RunAt,
+        List<DemoCollectionJob> Jobs)
+    {
+        public int SuccessfulCount => Jobs.Count(job => job.Status == "Successful");
+        public int FailedCount => Jobs.Count(job => job.Status == "Failed");
+        public int ProcessingCount => Jobs.Count - SuccessfulCount - FailedCount;
+        public string PlantSummary => string.Join(", ", Jobs.Select(job => job.PlantName).Distinct().Take(3))
+            + (Jobs.Select(job => job.PlantName).Distinct().Count() > 3 ? " + more" : string.Empty);
+    }
 
     private sealed class ManualBatchItem
     {

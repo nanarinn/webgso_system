@@ -1,7 +1,9 @@
 using System.Net.Mail;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.EntityFrameworkCore;
+using TestingSystem.Web.Backend.UseCases.UCLSS027Audit;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Demo;
 using TestingSystem.Web.Database.Entities;
@@ -13,6 +15,8 @@ public partial class ScheduledReports : ComponentBase
 {
     [Inject] private IDbContextFactory<ApplicationDbContext> ContextFactory { get; set; } = default!;
     [Inject] private IReportEmailSender ReportEmailSender { get; set; } = default!;
+    [Inject] private AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
+    [Inject] private IAuditTrailService AuditTrail { get; set; } = default!;
 
     private static readonly string[] ApiTypes = ["DDQ", "MMF"];
     private static readonly string[] DdqDataTypes = ["Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month Ahead"];
@@ -200,13 +204,30 @@ public partial class ScheduledReports : ComponentBase
         if (EditingScheduleId is null) return;
         var schedule = Schedules.FirstOrDefault(x => x.Id == EditingScheduleId);
         if (schedule is null) return;
-        await using var database = await ContextFactory.CreateDbContextAsync();
-        var entity = await database.ReportSchedules.SingleOrDefaultAsync(x => x.ScheduleCode == schedule.Id);
-        if (entity is not null) { database.ReportSchedules.Remove(entity); await database.SaveChangesAsync(); }
-        Schedules.Remove(schedule);
-        IsDeleteConfirmationOpen = false;
-        IsScheduleDialogOpen = false;
-        SuccessMessage = $"{schedule.Name} was deleted from MS SQL.";
+        try
+        {
+            await using var database = await ContextFactory.CreateDbContextAsync();
+            var entity = await database.ReportSchedules.SingleOrDefaultAsync(x => x.ScheduleCode == schedule.Id);
+            if (entity is not null) { database.ReportSchedules.Remove(entity); await database.SaveChangesAsync(); }
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal, "Delete report automation", "Success",
+                "ReportSchedule", schedule.Id,
+                $"Deleted {schedule.Name}; {EffectiveSource(schedule)}; {EffectiveScheduleType(schedule)}; {RecipientCount(schedule)} recipient(s).",
+                $"report-schedule:{schedule.Id}");
+            Schedules.Remove(schedule);
+            IsDeleteConfirmationOpen = false;
+            IsScheduleDialogOpen = false;
+            SuccessMessage = $"{schedule.Name} was deleted from MS SQL.";
+        }
+        catch (Exception exception)
+        {
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal, "Delete report automation", "Failed",
+                "ReportSchedule", schedule.Id, exception.GetBaseException().Message,
+                $"report-schedule:{schedule.Id}");
+            FormError = $"The report automation could not be deleted: {exception.GetBaseException().Message}";
+            IsDeleteConfirmationOpen = false;
+        }
     }
 
     private void AddRecipient(RecipientContact contact) => AddRecipientEmail(contact.Email);
@@ -271,11 +292,23 @@ public partial class ScheduledReports : ComponentBase
         {
             await database.SaveChangesAsync();
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception)
         {
+            var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            await AuditTrail.RecordAsync(principal,
+                EditingScheduleId is null ? "Create report automation" : "Update report automation",
+                "Failed", "ReportSchedule", saved.Id, exception.GetBaseException().Message,
+                $"report-schedule:{saved.Id}");
             FormError = "Schedule could not be saved. Check the form and try again.";
             return;
         }
+        var auditPrincipal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var auditAction = EditingScheduleId is not null && SelectedIsActive != OriginalIsActive
+            ? "Change report automation status"
+            : EditingScheduleId is null ? "Create report automation" : "Update report automation";
+        await AuditTrail.RecordAsync(auditPrincipal, auditAction, "Success", "ReportSchedule", saved.Id,
+            $"{saved.Name}; {SelectedApiType} {SelectedDataType}; {SelectedScheduleType}; time {ExecutionTime}; interval {SelectedInterval} minutes; {recipients.Count} recipient(s); status {(SelectedIsActive ? "Active" : "Inactive")}.",
+            $"report-schedule:{saved.Id}");
         if (EditingScheduleId is null) Schedules.Insert(0, saved);
         else
         {

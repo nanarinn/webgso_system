@@ -27,6 +27,7 @@ public partial class Dashboard : ComponentBase
     private string SelectedMetricDescription { get; set; } = string.Empty;
     private string SelectedMetricCode { get; set; } = string.Empty;
     private bool IsMetricOpen { get; set; }
+    private bool IsHealthStatusOpen { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -39,8 +40,13 @@ public partial class Dashboard : ComponentBase
 
         var jobs = await database.CollectionJobs.AsNoTracking().OrderByDescending(x => x.StartedAt)
             .Join(database.LssPlants, job => job.PlantId, plant => plant.Id, (job, plant) => new { job, plant }).Take(100).ToListAsync();
-        RecentRecords = jobs.Take(4).Select(x => new RecentRepositoryRecord(x.job.CollectionId, x.plant.Name,
-            x.job.DataType, x.job.Status == "Completed" ? "Successful" : x.job.Status, x.job.StartedAt)).ToList();
+        RecentRecords = jobs.Take(4).Select(x => new RecentRepositoryRecord(
+            x.job.CollectionId,
+            DisplayCollectionReference(x.job.CollectionId),
+            x.plant.Name,
+            x.job.DataType,
+            x.job.Status == "Completed" ? "Successful" : x.job.Status,
+            x.job.StartedAt)).ToList();
         PlantItems = plants.Select(plant => new DashboardItem(
             plant.Name,
             $"{plant.State} · {plant.CapacityMw:N0} MW · API configuration registered",
@@ -86,6 +92,24 @@ public partial class Dashboard : ComponentBase
     }
 
     private void CloseMetric() => IsMetricOpen = false;
+    private void OpenHealthStatus() => IsHealthStatusOpen = true;
+    private void CloseHealthStatus() => IsHealthStatusOpen = false;
+
+    private static string DisplayCollectionReference(string reference)
+    {
+        if (reference.StartsWith("CMD-", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = reference.Split('-', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3) return $"{parts[0]}-{parts[1]}-{parts[2]}";
+        }
+        if (reference.StartsWith("COL-SCH-", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = reference.Split('-', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3) return $"COL-SCH-{parts[2]}";
+        }
+
+        return reference.Length <= 20 ? reference : $"{reference[..19]}…";
+    }
 
     private static DashboardItem CreateRequestItem(string collectionId, string plantName, DateTimeOffset updatedAt, string status) =>
         new(
@@ -95,7 +119,8 @@ public partial class Dashboard : ComponentBase
             status,
             updatedAt);
 
-    private sealed record RecentRepositoryRecord(string Reference, string PlantName, string DataType, string Status, DateTimeOffset UpdatedAt);
+    private sealed record RecentRepositoryRecord(string Reference, string DisplayReference, string PlantName,
+        string DataType, string Status, DateTimeOffset UpdatedAt);
 
     private sealed record DashboardItem(
         string Name,

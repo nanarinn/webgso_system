@@ -343,9 +343,14 @@ if (ManualDdqCollectionPolicy.Evaluate(0, ["Running"]) != ManualCollectionExisti
 Console.WriteLine("PASS: Manual DDQ type restrictions and replacement confirmation states");
 var generatedCommandId = CollectionCommandIdentity.Create("DDQ", new DateTimeOffset(2026, 9, 30, 12, 0, 0, TimeSpan.Zero));
 var requestedCommandId = CollectionCommandIdentity.Create("DDQ", DateTimeOffset.UtcNow, new string('X', 80));
-if (generatedCommandId.Length is <= 0 or > 60 || requestedCommandId.Length != 60)
-    throw new Exception("CQRS collection command IDs must be generated safely within the SQL column limit");
-Console.WriteLine("PASS: CQRS collection command IDs are generated without invalid string slicing");
+if (generatedCommandId != "CMD-DDQ-20260930120000000" || requestedCommandId.Length != 60)
+    throw new Exception("Manual collection IDs must use CMD-API-yyyyMMddHHmmssfff and remain within the SQL column limit");
+Console.WriteLine("PASS: Manual collection command IDs use the compact timestamp format");
+if (CollectionProcessingPolicy.NormalizeConcurrency(0) != 1
+    || CollectionProcessingPolicy.NormalizeConcurrency(6) != 6
+    || CollectionProcessingPolicy.NormalizeConcurrency(20) != 8)
+    throw new Exception("Collection processing concurrency must remain bounded between one and eight workers.");
+Console.WriteLine("PASS: Collection processing uses bounded parallel workers");
 if (ManualBatchCollectionPolicy.StoredDataType("MMF", "All MMF parameters") != "MMF"
     || ManualBatchCollectionPolicy.StoredDataType("DDQ", " Rolling 24 Hour ") != "Rolling 24 Hour"
     || ManualBatchCollectionPolicy.Mode("MMF") != "Manual MMF"
@@ -524,7 +529,9 @@ var reportSubmission = new DateTime(2026, 9, 24);
 var currentDdq = new List<SolarApiReading>
 {
     new() { Id = 10, PlantId = 1, DataType = "Day Ahead", SubmissionDateTime = reportSubmission,
-        IntervalStart = reportSubmission, IntervalMinutes = 30, Parameter = "MW", Value = -5m, Unit = "MW" }
+        IntervalStart = reportSubmission, IntervalMinutes = 30, Parameter = "MW", Value = -5m, Unit = "MW" },
+    new() { Id = 11, PlantId = 1, DataType = "Day Ahead", SubmissionDateTime = reportSubmission,
+        IntervalStart = reportSubmission.AddMinutes(60), IntervalMinutes = 30, Parameter = "MW", Value = 30m, Unit = "MW" }
 };
 var previousDdq = new List<SolarApiReading>
 {
@@ -596,8 +603,8 @@ if (scheduledTranslation.Readings.Count != 1
     throw new Exception("Collection schedule time must be authoritative and duplicate validation must use it.");
 Console.WriteLine("PASS: Submission date and time comes from the collection schedule and drives duplicate validation");
 
-if (TimeDisplay.TwelveHour(new TimeOnly(0, 0)) != "12:00 AM"
-    || TimeDisplay.TwelveHour(new TimeOnly(13, 5)) != "01:05 PM"
-    || TimeDisplay.TwelveHour("23:45") != "11:45 PM")
-    throw new Exception("Calendar and schedule time must be displayed using the 12-hour AM/PM format.");
-Console.WriteLine("PASS: Calendar and schedule fields use the 12-hour AM/PM display");
+if (TimeDisplay.TwentyFourHour(new TimeOnly(0, 0)) != "00:00"
+    || TimeDisplay.TwentyFourHour(new TimeOnly(13, 5)) != "13:05"
+    || TimeDisplay.TwentyFourHour("23:45") != "23:45")
+    throw new Exception("Calendar and schedule time must be displayed using the 24-hour format.");
+Console.WriteLine("PASS: Calendar and schedule fields use the 24-hour display");

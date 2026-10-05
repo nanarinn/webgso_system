@@ -72,7 +72,7 @@ public static class ReportSubstitutionPolicy
                     var reason = $"Report substitution: previous-day submission used because {sourceProblem.Reason}.";
                     output.Add(Synthetic(fallback!, submissionDate, timestamp, reason));
                     details.Add(Detail(plant.Id, fallback!.Parameter, timestamp, source?.Value, fallback.Value,
-                        sourceProblem, "Previous-day reading", ReadingReference(fallback)));
+                        sourceProblem, "Previous-day reading", ReadingReference(fallback), reason));
                     previousCount++;
                 }
                 else if (source is not null && plant.CapacityMw > 0 && source.Value > plant.CapacityMw)
@@ -313,9 +313,10 @@ public static class ReportSubstitutionPolicy
     }
 
     private static ReportSubstitutionDetail Detail(int plantId, string parameter, DateTime timestamp,
-        decimal? originalValue, decimal reportValue, ValidationFailure failure, string source, string reference) =>
+        decimal? originalValue, decimal reportValue, ValidationFailure failure, string source, string reference,
+        string? anomalyDetail = null) =>
         new(plantId, parameter, timestamp, originalValue, reportValue, failure.RuleCode, failure.RuleName,
-            failure.Reason, source, reference);
+            anomalyDetail ?? failure.Reason, source, reference);
 
     private static string ReadingReference(SolarApiReading reading) =>
         $"Reading ID {reading.Id}; submission {reading.SubmissionDateTime:dd/MM/yyyy HH:mm:ss}; data timestamp {reading.IntervalStart:dd/MM/yyyy HH:mm:ss}.";
