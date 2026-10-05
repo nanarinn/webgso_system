@@ -11,6 +11,7 @@ namespace TestingSystem.Web.Components.Frontend.UseCases;
 
 public partial class MmfAnalytics : ComponentBase
 {
+    [Inject] private IDbContextFactory<ApplicationDbContext> ContextFactory { get; set; } = default!;
     [Inject] private IJSRuntime JavaScript { get; set; } = default!;
 
     private static readonly (string Label, int Value)[] Intervals =

@@ -5,6 +5,20 @@ using TestingSystem.Web.Models;
 
 namespace TestingSystem.Web.Services;
 
+public static class CsvFieldSafety
+{
+    public static string Sanitize(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        var firstMeaningful = value.FirstOrDefault(character => !char.IsWhiteSpace(character));
+        if (firstMeaningful is '=' or '+' or '@' or '\t' or '\r' or '\n'
+            || (firstMeaningful == '-' && !decimal.TryParse(value, NumberStyles.Number,
+                CultureInfo.InvariantCulture, out _)))
+            return "'" + value;
+        return value;
+    }
+}
+
 public static class OnDemandCsvExporter
 {
     public static string BuildDdq(string dataType, DateTime submissionDate,
@@ -119,6 +133,7 @@ public static class OnDemandCsvExporter
             IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? "",
             _ => value.ToString() ?? ""
         };
+        if (value is string) text = CsvFieldSafety.Sanitize(text);
         return $"\"{text.Replace("\"", "\"\"")}\"";
     }
 }

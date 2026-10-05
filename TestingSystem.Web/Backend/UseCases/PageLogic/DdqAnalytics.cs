@@ -5,11 +5,13 @@ using TestingSystem.Web.Database.Entities;
 using TestingSystem.Web.Services;
 using System.Globalization;
 using Microsoft.JSInterop;
+using TestingSystem.Web.Data;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
 public partial class DdqAnalytics : ComponentBase
 {
+    [Inject] private IDbContextFactory<ApplicationDbContext> ContextFactory { get; set; } = default!;
     [Inject] private IJSRuntime JavaScript { get; set; } = default!;
 
     private static readonly string[] DataTypes =

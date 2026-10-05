@@ -14,9 +14,16 @@
     const authenticatedLogoutForm = () => document.querySelector(".topbar-logout-form");
 
     const logoutForInactivity = () => {
-        if (logoutStarted || !authenticatedLogoutForm()) return;
+        const form = authenticatedLogoutForm();
+        if (logoutStarted || !form) return;
         logoutStarted = true;
-        window.location.replace("/account/session/timeout");
+        fetch("/account/session/timeout", {
+            method: "POST",
+            credentials: "same-origin",
+            cache: "no-store",
+            body: new FormData(form),
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        }).finally(() => window.location.replace("/login?reason=session-timeout"));
     };
 
     const scheduleTimeout = () => {

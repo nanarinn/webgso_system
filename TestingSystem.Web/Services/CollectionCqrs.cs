@@ -189,17 +189,17 @@ public sealed class CollectionCommandProcessor(
         {
             watch.Stop();
             await using var database = await contextFactory.CreateDbContextAsync(CancellationToken.None);
-            var job = await database.CollectionJobs.SingleAsync(item => item.Id == jobId);
+            var job = await database.CollectionJobs.SingleAsync(item => item.Id == jobId, CancellationToken.None);
             job.CompletedAt = DateTimeOffset.UtcNow;
             job.Status = CollectionJobStatus.Failed;
             job.DurationSeconds = watch.Elapsed.TotalSeconds;
             job.ErrorMessage = Limit(exception.GetBaseException().Message, 1000);
             job.ResponseMessage = Limit($"Collection failed: {job.ErrorMessage}", 1000);
             if (apiResult is not null && !string.IsNullOrWhiteSpace(apiResult.Payload)
-                && !await database.RawApiResponses.AnyAsync(item => item.CollectionJobId == jobId))
+                && !await database.RawApiResponses.AnyAsync(item => item.CollectionJobId == jobId, CancellationToken.None))
                 database.RawApiResponses.Add(CreateRawResponse(job.Id, apiResult));
             database.AuditEvents.Add(CreateAudit(job, "Failed"));
-            await database.SaveChangesAsync();
+            await database.SaveChangesAsync(CancellationToken.None);
             logger.LogWarning(exception, "Collection command {CollectionId} failed.", job.CollectionId);
         }
     }

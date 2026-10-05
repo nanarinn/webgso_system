@@ -33,6 +33,8 @@ For local MMF collection testing, register an MMF API link such as:
 
 The optional query parameters are `date=yyyy-MM-dd` and `interval=15`, `30`, or `60`. The endpoint returns the 13 MMF parameters represented by the supplied MMF sample, with five sensor readings per parameter and timestamp.
 
+Plant API endpoints are fetched by the backend. In Development, loopback/private test endpoints are allowed. Outside Development, endpoints must use HTTPS and resolve to public addresses unless an administrator explicitly lists an internal hostname under `LssApi:AllowedPrivateHosts`; HTTP exceptions must be listed separately under `LssApi:AllowInsecureHosts`. Redirects from configured plant API URLs are not followed.
+
 ### Share on the same local network
 
 Run PowerShell or the VS Code terminal as Administrator, then start the system with:

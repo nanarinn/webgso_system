@@ -1,7 +1,6 @@
 @page "/ddq-analytics"
 @attribute [Authorize]
 @rendermode InteractiveServer
-@inject IDbContextFactory<ApplicationDbContext> ContextFactory
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject TestingSystem.Web.Backend.UseCases.UCLSS027Audit.IAuditTrailService AuditTrail
 @using TestingSystem.Web.Services

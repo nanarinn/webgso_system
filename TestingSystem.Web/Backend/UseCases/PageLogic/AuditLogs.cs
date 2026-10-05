@@ -7,6 +7,7 @@ using Microsoft.JSInterop;
 using TestingSystem.Web.Backend.UseCases.UCLSS027Audit;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Database.Entities;
+using TestingSystem.Web.Services;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
@@ -144,8 +145,7 @@ public partial class AuditLogs : ComponentBase
 
     private static string CsvValue(string? value)
     {
-        var safe = value ?? string.Empty;
-        if (safe.Length > 0 && safe[0] is '=' or '+' or '-' or '@') safe = "'" + safe;
+        var safe = CsvFieldSafety.Sanitize(value ?? string.Empty);
         return $"\"{safe.Replace("\"", "\"\"")}\"";
     }
 

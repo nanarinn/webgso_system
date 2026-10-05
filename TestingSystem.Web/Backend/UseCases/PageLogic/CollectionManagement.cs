@@ -253,6 +253,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         if (RefreshTask is not null)
             try { await RefreshTask; } catch (OperationCanceledException) { }
         RefreshCancellation.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private void OpenRunDialog()

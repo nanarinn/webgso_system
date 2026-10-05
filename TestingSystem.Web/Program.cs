@@ -17,7 +17,8 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(DatabaseSettings.SectionName));
-builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("PlantDataApi")
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient<IReportEmailSender, GraphReportEmailSender>();
 builder.Services.AddScoped<ILssDataApiClient, PrototypeLssDataApiClient>();
 builder.Services.AddScoped<ICollectionCommandBus, SqlCollectionCommandBus>();
@@ -26,6 +27,7 @@ builder.Services.AddHostedService<CollectionCommandWorker>();
 builder.Services.AddHostedService<ScheduledCollectionWorker>();
 builder.Services.AddHostedService<ScheduledReportWorker>();
 builder.Services.AddScoped<IAuditTrailService, AuditTrailService>();
+builder.Services.AddScoped<IRepositoryBackendApi, SqlRepositoryBackendApi>();
 builder.Services.AddScoped<IUserAccessNotificationService, UserAccessNotificationService>();
 builder.Services.AddAntiforgery();
 
@@ -52,6 +54,9 @@ builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.Name = "SingleBuyer.LssRepository";
     options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest
+        : CookieSecurePolicy.Always;
     options.Cookie.SameSite = SameSiteMode.Lax;
     options.ExpireTimeSpan = SessionSecurity.IdleTimeout;
     options.LoginPath = "/login";
@@ -64,6 +69,15 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    await next();
+});
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
@@ -71,7 +85,17 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        if (!app.Environment.IsDevelopment()) return;
+
+        context.Context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
+        context.Context.Response.Headers.Pragma = "no-cache";
+        context.Context.Response.Headers.Expires = "0";
+    }
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
@@ -254,23 +278,23 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapLoginEndpoints();
 app.MapEntraLogin();
-app.MapSystemStatusEndpoint();
+app.MapRepositoryBackendApi();
 
 app.MapHealthChecks("/health");
-app.MapGet("/api/ping", () => Results.Ok(new
+app.MapGet("/api/ping", () => Results.Ok(new { status = "Healthy" }))
+    .RequireAuthorization();
+
+if (app.Environment.IsDevelopment())
 {
-    name = "Single Buyer Large Scale Solar Repository",
-    stack = ".NET 8 Blazor",
-    date = DateTimeOffset.UtcNow
-}));
-app.MapGet("/api/test-data/mmf/{plantCode}", (string plantCode, DateOnly? date, int? interval) =>
-{
-    var selectedInterval = interval ?? 15;
-    if (selectedInterval is not (15 or 30 or 60))
-        return Results.BadRequest(new { message = "MMF test interval must be 15, 30 or 60 minutes." });
-    var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
-    return Results.Ok(MmfTestApiPayload.Build(plantCode, selectedDate, selectedInterval));
-});
+    app.MapGet("/api/test-data/mmf/{plantCode}", (string plantCode, DateOnly? date, int? interval) =>
+    {
+        var selectedInterval = interval ?? 15;
+        if (selectedInterval is not (15 or 30 or 60))
+            return Results.BadRequest(new { message = "MMF test interval must be 15, 30 or 60 minutes." });
+        var selectedDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        return Results.Ok(MmfTestApiPayload.Build(plantCode, selectedDate, selectedInterval));
+    });
+}
 
 app.Run();
 

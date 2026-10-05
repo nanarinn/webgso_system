@@ -8,6 +8,26 @@ using System.IO.Compression;
 using System.Security.Claims;
 using System.Text.Json;
 
+var repositoryRoot = FindRepositoryRoot();
+var frontendRoot = Path.Combine(repositoryRoot, "TestingSystem.Web", "Components", "Frontend");
+var forbiddenFrontendReferences = new[]
+{
+    "ApplicationDbContext",
+    "IDbContextFactory<",
+    "Microsoft.EntityFrameworkCore",
+    "TestingSystem.Web.Data"
+};
+var frontendDatabaseReferences = Directory
+    .EnumerateFiles(frontendRoot, "*.razor", SearchOption.AllDirectories)
+    .Select(path => new { Path = path, Content = File.ReadAllText(path) })
+    .Where(file => forbiddenFrontendReferences.Any(reference =>
+        file.Content.Contains(reference, StringComparison.Ordinal)))
+    .Select(file => Path.GetRelativePath(repositoryRoot, file.Path))
+    .ToArray();
+if (frontendDatabaseReferences.Length > 0)
+    throw new Exception($"Frontend Razor files must call backend logic instead of SQL directly: {string.Join(", ", frontendDatabaseReferences)}");
+Console.WriteLine("PASS: Frontend Razor components do not access SQL or EF Core directly");
+
 var expectedMmfParameters = new[]
 {
     "AirPressure", "AmbientTemp", "AtmPressure", "HorIrradiance", "Humidity", "IncIrradiance",
@@ -608,3 +628,20 @@ if (TimeDisplay.TwentyFourHour(new TimeOnly(0, 0)) != "00:00"
     || TimeDisplay.TwentyFourHour("23:45") != "23:45")
     throw new Exception("Calendar and schedule time must be displayed using the 24-hour format.");
 Console.WriteLine("PASS: Calendar and schedule fields use the 24-hour display");
+
+static string FindRepositoryRoot()
+{
+    foreach (var startingPath in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(startingPath);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "TestingSystem.Web", "TestingSystem.Web.csproj")))
+                return current.FullName;
+
+            current = current.Parent;
+        }
+    }
+
+    throw new DirectoryNotFoundException("Could not locate the SBLSS repository root for the frontend architecture check.");
+}

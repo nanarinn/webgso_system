@@ -37,7 +37,6 @@ public static class EntraAuthentication
             options.UsePkce = true;
             options.Prompt = "select_account";
             options.MapInboundClaims = false;
-            options.SaveTokens = true;
             options.Scope.Clear();
             options.Scope.Add("openid");
             options.Scope.Add("profile");

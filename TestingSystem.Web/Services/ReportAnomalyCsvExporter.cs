@@ -62,5 +62,9 @@ public static class ReportAnomalyCsvExporter
     private static string FormatNumber(decimal value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
     private static void AddRow(StringBuilder output, params string[] values) =>
-        output.AppendLine(string.Join(',', values.Select(value => $"\"{value.Replace("\"", "\"\"")}\"")));
+        output.AppendLine(string.Join(',', values.Select(value =>
+        {
+            var safe = CsvFieldSafety.Sanitize(value);
+            return $"\"{safe.Replace("\"", "\"\"")}\"";
+        })));
 }

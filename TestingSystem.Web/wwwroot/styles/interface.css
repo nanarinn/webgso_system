@@ -1219,3 +1219,24 @@ body:has(:is(.profile-overlay, .metric-modal-overlay, .graph-modal-overlay,
     .schedules-page .schedule-admin-row:not(.admin-table-header) { grid-template-columns: 1fr; }
     .schedules-page .schedule-admin-row:not(.admin-table-header) > * { grid-column: 1 !important; }
 }
+.page-inline-notice,
+.page-inline-error {
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-family: "Aptos", "Trebuchet MS", sans-serif;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.page-inline-notice {
+    border: 1px solid #b9d9ef;
+    color: #075985;
+    background: #f0f8fd;
+}
+
+.page-inline-error {
+    border: 1px solid #fecaca;
+    color: #b42318;
+    background: #fff4f2;
+}

@@ -254,7 +254,7 @@ public static class ReportSubstitutionPolicy
             [reading.Value], rules);
         if (fixedResult.ValidValues.Count == 0)
         {
-            var issue = fixedResult.Issues.FirstOrDefault();
+            var issue = fixedResult.Issues.Count > 0 ? fixedResult.Issues[0] : null;
             return new(issue?.RuleCode ?? "MMF-VALIDATION", Rule(issue?.RuleCode ?? "", rules)?.Name ?? "MMF validation",
                 issue?.Reason ?? "the current MMF value failed validation");
         }
