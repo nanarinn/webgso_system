@@ -8,14 +8,19 @@
   },
   "terminal.integrated.defaultProfile.windows": "PowerShell",
   "docker.composeBuild": false,
-  "mssql.connections": [
+    "mssql.connections": [
     {
       "profileName": "SBLSS Local SQL",
-      "server": ".\\SQLEXPRESS",
+      "server": "localhost",
+      "port": 1433,
       "database": "SingleBuyerLssRepository",
-      "authenticationType": "Integrated",
-      "encrypt": "Optional",
+      "user": "sa",
+      "password": "",
+      "authenticationType": "SqlLogin",
+      "encrypt": "Mandatory",
       "trustServerCertificate": true,
+      "savePassword": false,
+      "emptyPasswordInput": false,
       "groupId": "ROOT",
       "id": "da5f039d-043a-4c76-b282-0fbd925f452f"
     }

@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
+using System.Net;
 using TestingSystem.Web.Data;
 
 namespace TestingSystem.Web.Connectors.UseCases;
@@ -94,9 +96,25 @@ public sealed class SqlRepositoryBackendApi(IDbContextFactory<ApplicationDbConte
     public async Task<RepositoryStatusResponse> GetStatusAsync(CancellationToken cancellationToken = default)
     {
         await using var database = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var databaseLabel = GetDatabaseLabel(database);
+        bool connected;
+        try
+        {
+            connected = await database.Database.CanConnectAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            connected = false;
+        }
+
+        // Keep the status endpoint useful when the configured SQL server is offline.
+        // Counts are only queried after the same connection has passed the connectivity check.
+        if (!connected)
+            return new(databaseLabel, false, 0, 0, 0, 0, 0, 0, 0, 0);
+
         return new(
-            "Microsoft SQL Server (local)",
-            await database.Database.CanConnectAsync(cancellationToken),
+            databaseLabel,
+            true,
             await database.Users.CountAsync(cancellationToken),
             await database.LssPlants.CountAsync(cancellationToken),
             await database.CollectionJobs.CountAsync(cancellationToken),
@@ -105,6 +123,28 @@ public sealed class SqlRepositoryBackendApi(IDbContextFactory<ApplicationDbConte
             await database.ReportSchedules.CountAsync(cancellationToken),
             await database.ReportExecutions.CountAsync(cancellationToken),
             await database.DataAnomalies.CountAsync(item => item.Status == "Open", cancellationToken));
+    }
+
+    private static string GetDatabaseLabel(DbContext database)
+    {
+        if (database.Database.ProviderName?.Contains("SqlServer", StringComparison.OrdinalIgnoreCase) != true)
+            return database.Database.ProviderName?.Split('.').LastOrDefault() ?? "Configured database";
+
+        var connection = new SqlConnectionStringBuilder(database.Database.GetDbConnection().ConnectionString);
+        var server = connection.DataSource.Trim();
+        var host = server
+            .Replace("tcp:", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("np:", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("lpc:", "", StringComparison.OrdinalIgnoreCase)
+            .Split(',', '\\')[0]
+            .Trim('[', ']', ' ');
+
+        var isLocal = host is "." or "(local)" or "localhost"
+            || host.StartsWith("(localdb)", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(host, Environment.MachineName, StringComparison.OrdinalIgnoreCase)
+            || IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
+
+        return isLocal ? "Microsoft SQL Server · Local" : "Microsoft SQL Server · Network";
     }
 
     private static DashboardMetricItem CreateRequestItem(

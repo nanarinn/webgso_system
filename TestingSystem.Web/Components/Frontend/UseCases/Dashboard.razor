@@ -22,31 +22,31 @@ else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
 }
 
 <section class="metric-grid" aria-label="Operational summary">
-    <button class="metric-card metric-card-blue" type="button"
+    <button class="metric-card metric-card-blue" type="button" disabled="@(!DashboardDataAvailable)"
             @onclick="() => OpenMetric(PlantMetricTitle, PlantMetricDescription, PlantItems)">
         <div>
-            <strong>@TotalPlants</strong>
+            <strong>@MetricValue(TotalPlants)</strong>
             <span>Total plants</span>
         </div>
     </button>
-    <button class="metric-card metric-card-green" type="button"
+    <button class="metric-card metric-card-green" type="button" disabled="@(!DashboardDataAvailable)"
             @onclick="() => OpenMetric(SuccessMetricTitle, SuccessMetricDescription, SuccessfulItems)">
         <div>
-            <strong>@DdqSuccessfulRequests</strong>
+            <strong>@MetricValue(DdqSuccessfulRequests)</strong>
             <span>DDQ Successful Requests</span>
         </div>
     </button>
-    <button class="metric-card metric-card-yellow" type="button"
+    <button class="metric-card metric-card-yellow" type="button" disabled="@(!DashboardDataAvailable)"
             @onclick="() => OpenMetric(FailedMetricTitle, FailedMetricDescription, FailedItems)">
         <div>
-            <strong>@DdqFailedRequests</strong>
+            <strong>@MetricValue(DdqFailedRequests)</strong>
             <span>DDQ Failed Requests</span>
         </div>
     </button>
-    <button class="metric-card metric-card-navy" type="button"
+    <button class="metric-card metric-card-navy" type="button" disabled="@(!DashboardDataAvailable)"
             @onclick="() => OpenMetric(MmfMetricTitle, MmfMetricDescription, MmfItems)">
         <div>
-            <strong>@ActiveMmf</strong>
+            <strong>@MetricValue(ActiveMmf)</strong>
             <span>Active MMF</span>
         </div>
     </button>
@@ -80,11 +80,11 @@ else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
 
     <aside class="panel focus-panel">
         <p class="section-label section-label-light">System status</p>
-        <h2>@(RepositoryStatus?.Connected == true ? "Repository connected" : "Repository unavailable")</h2>
+        <h2>@(RepositoryStatus?.Connected == true ? "Repository connected" : RepositoryStatus is null ? "Status unavailable" : "Repository unavailable")</h2>
         <p>Blazor reads this dashboard through the secured backend application API.</p>
-        <div class="connection-line">
+        <div class="connection-line @(RepositoryStatus is null ? "connection-unknown" : RepositoryStatus.Connected ? "connection-online" : "connection-offline")">
             <span></span>
-            @(RepositoryStatus?.Connected == true ? "Local SQL Server online" : "Local SQL Server unavailable")
+            @(RepositoryStatus is null ? "Database status not confirmed" : RepositoryStatus.Connected ? "Configured SQL Server online" : "Configured SQL Server unavailable")
         </div>
         <button class="health-proof-button" type="button" @onclick="OpenHealthStatus">View health status <span>→</span></button>
     </aside>
@@ -97,24 +97,24 @@ else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
             <div class="metric-dialog-header">
                 <div>
                     <p class="section-label">System status</p>
-                    <h2 id="health-status-title">@(RepositoryStatus?.Connected == true ? "Repository is healthy" : "Repository needs attention")</h2>
-                    <p>Status retrieved through the authorised backend API.</p>
+                    <h2 id="health-status-title">@(RepositoryStatus?.Connected == true ? "Repository is healthy" : RepositoryStatus is null ? "System status unavailable" : "Repository needs attention")</h2>
+                    <p>@(string.IsNullOrWhiteSpace(DashboardStatusError) ? "Status retrieved through the authorised backend API." : "The backend health status could not be retrieved.")</p>
                 </div>
                 <button class="profile-close" type="button" @onclick="CloseHealthStatus" aria-label="Close system status">×</button>
             </div>
-            <div class="health-status-content">
-                <span class="health-status-icon" aria-hidden="true">✓</span>
+            <div class="health-status-content @(RepositoryStatus?.Connected == true ? "health-status-connected" : "health-status-disconnected")">
+                <span class="health-status-icon @(RepositoryStatus?.Connected == true ? "health-status-available" : "health-status-unavailable")" aria-hidden="true">@(RepositoryStatus?.Connected == true ? "✓" : "!")</span>
                 <div>
-                    <strong>@(RepositoryStatus?.Connected == true ? "Frontend, backend API and local SQL are connected" : "The local SQL connection is unavailable")</strong>
-                    <p>The backend reported @(RepositoryStatus?.Plants ?? 0) plant(s), @(RepositoryStatus?.CollectionJobs ?? 0) collection job(s) and @(RepositoryStatus?.Readings ?? 0) reading(s).</p>
+                    <strong>@(RepositoryStatus?.Connected == true ? "Web app, backend API and configured database are connected" : RepositoryStatus is null ? "The backend health status could not be confirmed" : "The backend cannot connect to the configured database")</strong>
+                    <p>@(RepositoryStatus is null ? "Check the backend API and server logs." : $"The backend reported {RepositoryStatus.Plants} plant(s), {RepositoryStatus.CollectionJobs} collection job(s) and {RepositoryStatus.Readings} reading(s).")</p>
                 </div>
                 <span class="status-pill @(RepositoryStatus?.Connected == true ? "status-successful" : "status-failed")">@(RepositoryStatus?.Connected == true ? "Healthy" : "Unavailable")</span>
             </div>
             <div class="health-status-details">
                 <div><span>Application</span><strong>Blazor Server</strong></div>
                 <div><span>Backend</span><strong>Authorised Web API</strong></div>
-                <div><span>Database</span><strong>@(RepositoryStatus?.Database ?? "Local Microsoft SQL Server")</strong></div>
-                <div><span>Connection</span><strong>@(RepositoryStatus?.Connected == true ? "Online" : "Unavailable")</strong></div>
+                <div><span>Database</span><strong>@(RepositoryStatus?.Database ?? "Configured database")</strong></div>
+                <div><span>Connection</span><strong>@(RepositoryStatus is null ? "Not confirmed" : RepositoryStatus.Connected ? "Online" : "Unavailable")</strong></div>
             </div>
             <div class="metric-dialog-footer health-status-footer">
                 <span>Status confirmed when this dashboard was loaded.</span>

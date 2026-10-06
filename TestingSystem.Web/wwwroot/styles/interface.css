@@ -713,6 +713,12 @@ body:has(.admin-overlay) { overflow: hidden; }
 .health-status-dialog { width: min(100%, 640px); overflow: hidden; }
 .health-status-content { display: grid; margin: 24px 26px 14px; padding: 18px; grid-template-columns: 46px minmax(0,1fr) auto; align-items: center; gap: 15px; border: 1px solid #bfe3d3; border-radius: 12px; background: #f0faf6; }
 .health-status-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; color: #fff; background: #12a276; box-shadow: 0 0 0 6px #ddf5eb; font-size: 1.1rem; font-weight: 900; }
+.connection-line.connection-offline span { background: #f05a52; box-shadow: 0 0 0 4px rgb(240 90 82 / 16%); }
+.connection-line.connection-unknown span { background: #e7a927; box-shadow: 0 0 0 4px rgb(231 169 39 / 18%); }
+.health-status-content.health-status-disconnected { border-color: #f1c3c0; background: #fff5f4; }
+.health-status-disconnected .health-status-icon { background: #d94c45; box-shadow: 0 0 0 6px #fde6e4; }
+.health-status-disconnected strong { color: #84302b; }
+.metric-card:disabled { cursor: not-allowed; opacity: .72; }
 .health-status-content strong { color: #0a4f43; font-size: .84rem; }
 .health-status-content p { margin: 4px 0 0; color: #57736d; font-size: .7rem; line-height: 1.5; }
 .health-status-details { display: grid; margin: 0 26px 24px; grid-template-columns: repeat(3,minmax(0,1fr)); border: 1px solid #dce7ed; border-radius: 10px; overflow: hidden; }

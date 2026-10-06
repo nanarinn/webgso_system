@@ -33,17 +33,29 @@ public partial class Dashboard : ComponentBase
     private bool IsHealthStatusOpen { get; set; }
     private bool IsDashboardLoading { get; set; } = true;
     private string DashboardLoadError { get; set; } = string.Empty;
+    private string DashboardStatusError { get; set; } = string.Empty;
     private RepositoryStatusResponse? RepositoryStatus { get; set; }
+    private bool DashboardDataAvailable => !IsDashboardLoading && string.IsNullOrWhiteSpace(DashboardLoadError);
+
+    private string MetricValue(int value) => DashboardDataAvailable ? value.ToString() : "—";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
         try
         {
-            var dashboard = await JavaScript.InvokeAsync<DashboardResponse>(
-                "sblssBackendApi.get", "/api/dashboard");
             RepositoryStatus = await JavaScript.InvokeAsync<RepositoryStatusResponse>(
                 "sblssBackendApi.get", "/api/status");
+        }
+        catch (JSException exception)
+        {
+            DashboardStatusError = exception.Message;
+        }
+
+        try
+        {
+            var dashboard = await JavaScript.InvokeAsync<DashboardResponse>(
+                "sblssBackendApi.get", "/api/dashboard");
             RecentRecords = dashboard.RecentRecords;
             PlantItems = dashboard.Plants;
             SuccessfulItems = dashboard.SuccessfulDdq;
