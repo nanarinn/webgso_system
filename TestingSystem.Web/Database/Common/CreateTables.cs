@@ -363,6 +363,9 @@ public static class DatabaseInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionJobs_Queue' AND object_id = OBJECT_ID(N'[CollectionJobs]'))
                 CREATE INDEX [IX_CollectionJobs_Queue] ON [CollectionJobs] ([Status], [StartedAt])
                     INCLUDE ([PlantId], [DataType], [Mode], [RetryCount], [ReplaceExisting]);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionJobs_StartedAt' AND object_id = OBJECT_ID(N'[CollectionJobs]'))
+                CREATE INDEX [IX_CollectionJobs_StartedAt] ON [CollectionJobs] ([StartedAt] DESC, [Id] DESC)
+                    INCLUDE ([CollectionId], [PlantId], [DataType], [Status]);
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionJobs_PlantId' AND object_id = OBJECT_ID(N'[CollectionJobs]'))
                 CREATE INDEX [IX_CollectionJobs_PlantId] ON [CollectionJobs] ([PlantId]);
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_RawApiResponses_CollectionJobId' AND object_id = OBJECT_ID(N'[RawApiResponses]'))

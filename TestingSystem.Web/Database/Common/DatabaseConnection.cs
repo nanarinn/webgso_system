@@ -96,6 +96,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.HasIndex(x => x.PlantId);
             item.HasIndex(x => new { x.DataType, x.SubmissionDateTime, x.PlantId });
             item.HasIndex(x => x.CollectionId).IsUnique();
+            item.HasIndex(x => new { x.StartedAt, x.Id }).HasDatabaseName("IX_CollectionJobs_StartedAt");
             item.HasIndex(x => new { x.Status, x.StartedAt });
             item.HasIndex(x => new { x.CollectionScheduleId, x.SubmissionDateTime, x.Status });
             item.HasOne<LssPlant>().WithMany().HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Restrict);

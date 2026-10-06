@@ -42,20 +42,34 @@ public partial class Dashboard : ComponentBase
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
+        var statusTask = LoadRepositoryStatusAsync();
+        await LoadDashboardDataAsync();
+        await statusTask;
+    }
+
+    private async Task LoadRepositoryStatusAsync()
+    {
         try
         {
             RepositoryStatus = await JavaScript.InvokeAsync<RepositoryStatusResponse>(
-                "sblssBackendApi.get", "/api/status");
+                "sblssBackendApi.get", "/api/status", 30000);
         }
         catch (JSException exception)
         {
             DashboardStatusError = exception.Message;
         }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
+    private async Task LoadDashboardDataAsync()
+    {
         try
         {
             var dashboard = await JavaScript.InvokeAsync<DashboardResponse>(
-                "sblssBackendApi.get", "/api/dashboard");
+                "sblssBackendApi.get", "/api/dashboard", 30000);
             RecentRecords = dashboard.RecentRecords;
             PlantItems = dashboard.Plants;
             SuccessfulItems = dashboard.SuccessfulDdq;

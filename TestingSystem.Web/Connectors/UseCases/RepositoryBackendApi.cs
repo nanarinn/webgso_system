@@ -55,12 +55,33 @@ public sealed class SqlRepositoryBackendApi(IDbContextFactory<ApplicationDbConte
             .Where(plant => plant.IsActive)
             .OrderByDescending(plant => plant.CreatedAt)
             .ThenByDescending(plant => plant.Id)
+            .Select(plant => new
+            {
+                plant.Id,
+                plant.PlantId,
+                plant.Name,
+                plant.State,
+                plant.CapacityMw,
+                plant.MmfApiEndpoint,
+                plant.CreatedAt,
+                plant.IsActive
+            })
             .ToListAsync(cancellationToken);
         var jobs = await database.CollectionJobs.AsNoTracking()
             .OrderByDescending(job => job.StartedAt)
-            .Join(database.LssPlants.AsNoTracking(), job => job.PlantId, plant => plant.Id,
-                (job, plant) => new { Job = job, Plant = plant })
+            .ThenByDescending(job => job.Id)
+            .Select(job => new
+            {
+                job.CollectionId,
+                job.PlantId,
+                job.DataType,
+                job.Status,
+                job.StartedAt
+            })
             .Take(100)
+            .Join(database.LssPlants.AsNoTracking().Select(plant => new { plant.Id, plant.Name }),
+                job => job.PlantId, plant => plant.Id,
+                (job, plant) => new { Job = job, Plant = plant })
             .ToListAsync(cancellationToken);
 
         var recent = jobs.Take(4).Select(item => new DashboardRecentRecord(
