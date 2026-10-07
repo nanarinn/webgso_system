@@ -1,31 +1,46 @@
 # Single Buyer Large Scale Solar Repository
 
-A .NET 8 Blazor system backed by Microsoft SQL Server Express.
+A .NET 8 Blazor system backed by Microsoft SQL Server. This local setup keeps the application on the Windows host and its database in VMware.
 
 ## Run locally
 
-Requirements:
+Requirements for the current host and VMware setup:
 
-- .NET 8 SDK
-- SQL Server Express instance named `SQLEXPRESS`
+- .NET 8 SDK (installed globally or in the project `.dotnet` folder)
+- The VMware SQL Server at `192.168.227.128:1433` and the saved .NET user secret for its connection
 
-Start the system from PowerShell:
+Double-click `run-sblss-system.cmd` to start the website on the host with VM SQL and LAN access. Double-click `update-github-and-connect-vm.cmd` to pull `origin/main` and check the VM connection without a Git commit or push. These CMD files also work from the Desktop when the project remains in `Documents\ChatGPT\SBLSS SYSTEM`.
+
+For PowerShell, the equivalent start command is:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run-local-sqlserver.ps1
+powershell -ExecutionPolicy Bypass -File .\run-local-sqlserver.ps1 -VmSqlServer -Share -ShareAddress 192.168.0.173 -ShareEntra -ShareHostName sblss-lan.local
 ```
 
 The command synchronises the MSSQL schema, starts the application with `dotnet watch`, and automatically rebuilds and restarts the application when a code file changes.
 
-To pull the latest `origin/main` code first, synchronise the database, and start the watcher with one command:
+To run with a local SQL Server instead, use `run-local-sqlserver.ps1` without `-VmSqlServer`. Its `-Pull` option only works when the Git working tree is clean. The dedicated update CMD preserves local changes in a Git stash before pulling.
 
-```powershell
-.\run-local-sqlserver.ps1 -Pull
-```
+Database data is retained during schema synchronisation; dummy data is only replaced when `reset-dummy-api-data.ps1` is run explicitly.
 
-The `-Pull` option stops if uncommitted local changes are present, preventing a Git pull from overwriting current work. Database data is retained during schema synchronisation; dummy data is only replaced when `reset-dummy-api-data.ps1` is run explicitly.
+Open `https://sblss-lan.local:8088/login` or `http://localhost:5186/login`.
 
-Open `http://localhost:5186/login`.
+### Host the web application in IIS with the VMware database
+
+On this Windows host, double-click `setup-iis-web-server.cmd` and approve the
+Administrator prompt. The setup enables IIS and WebSockets, installs the
+Microsoft ASP.NET Core Hosting Bundle, publishes the web application, and binds
+the existing LAN certificate to `https://sblss-lan.local:8088`. It keeps Entra
+ID enabled and uses the existing SQL connection to
+`192.168.227.128:1433/SingleBuyerLssRepository`.
+
+The setup copies the current .NET user-secrets file to
+`C:\ProgramData\SBLSS\iis-secrets.json`, outside the repository, with access
+restricted to Windows administrators, SYSTEM, and the SBLSS IIS application
+pool. The IIS app pool runs the application in Production mode. IIS starts the
+site automatically when Windows starts; teammates continue using the same LAN
+URL. The existing Kestrel development launcher uses the same port, so do not
+run it while the IIS site is active.
 
 For local MMF collection testing, register an MMF API link such as:
 
@@ -34,6 +49,25 @@ For local MMF collection testing, register an MMF API link such as:
 The optional query parameters are `date=yyyy-MM-dd` and `interval=15`, `30`, or `60`. The endpoint returns the 13 MMF parameters represented by the supplied MMF sample, with five sensor readings per parameter and timestamp.
 
 Plant API endpoints are fetched by the backend. In Development, loopback/private test endpoints are allowed. Outside Development, endpoints must use HTTPS and resolve to public addresses unless an administrator explicitly lists an internal hostname under `LssApi:AllowedPrivateHosts`; HTTP exceptions must be listed separately under `LssApi:AllowInsecureHosts`. Redirects from configured plant API URLs are not followed.
+
+### Keep the application on the host and the database in VMware
+
+Restore `SingleBuyerLssRepository` inside the VM, enable SQL Server TCP/IP on
+`192.168.227.128:1433`, and allow inbound TCP 1433 from the VMware host network.
+Create a SQL Server login mapped to this database for the application. Run
+`./setup-vm-sql-connection.ps1` on the host to enter the login and password;
+it stores the connection string in .NET user secrets with server
+`192.168.227.128,1433` and database `SingleBuyerLssRepository`. Keep the
+password out of the repository and shell history.
+
+Start the host application against the VM database with:
+
+```powershell
+.\run-local-sqlserver.ps1 -VmSqlServer
+```
+
+This option checks VM TCP connectivity and the saved connection string before
+starting. It does not start or fall back to a SQL Server instance on the host.
 
 ### Share on the same local network
 

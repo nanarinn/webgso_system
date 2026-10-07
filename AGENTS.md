@@ -10,7 +10,7 @@
 
 - Build with `dotnet build SBLSS.System.sln` after code changes.
 - Keep secrets in `.env` or user secrets; never commit real passwords.
-- Run the complete local stack with `docker compose up --build -d`.
+- Run the host application against the VMware SQL Server with `run-sblss-system.cmd`.
 - Preserve the Single Buyer color system and responsive visual style.
 - Use role-based authorization for Administrator-only operations.
 - Add or update tests when implementing business logic.

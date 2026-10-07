@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Build Single Buyer LSS Repository",
+      "label": "Build SBLSS",
       "type": "process",
-      "command": "dotnet",
+      "command": "${workspaceFolder}/.dotnet/dotnet.exe",
       "args": ["build", "${workspaceFolder}/SBLSS.System.sln"],
       "group": {
         "kind": "build",
@@ -13,44 +13,16 @@
       "problemMatcher": "$msCompile"
     },
     {
-      "label": "Start Docker Stack",
+      "label": "Run SBLSS with VM database and LAN",
       "type": "process",
-      "command": "docker",
-      "args": ["compose", "up", "--build", "-d"],
+      "command": "${workspaceFolder}/run-sblss-system.cmd",
       "problemMatcher": []
     },
     {
-      "label": "Stop Docker Stack",
+      "label": "Pull GitHub and check VM connection",
       "type": "process",
-      "command": "docker",
-      "args": ["compose", "down"],
+      "command": "${workspaceFolder}/update-github-and-connect-vm.cmd",
       "problemMatcher": []
-    },
-    {
-      "label": "Inspect SBLSS Database",
-      "type": "process",
-      "command": "docker",
-      "args": [
-        "compose",
-        "exec",
-        "-T",
-        "mssql",
-        "bash",
-        "-lc",
-        "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$MSSQL_SA_PASSWORD\" -d SingleBuyerLssRepository -i /workspace/database/inspect-database.sql"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "Run LSS Repository Locally",
-      "type": "process",
-      "command": "dotnet",
-      "args": ["watch", "--project", "${workspaceFolder}/TestingSystem.Web"],
-      "problemMatcher": "$msCompile",
-      "isBackground": true
     }
   ]
 }

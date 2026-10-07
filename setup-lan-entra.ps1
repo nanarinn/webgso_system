@@ -6,6 +6,13 @@ param(
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectFile = Join-Path $projectRoot "TestingSystem.Web\TestingSystem.Web.csproj"
+$dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
+if (-not $dotnet) {
+    $dotnet = Join-Path $projectRoot '.dotnet\dotnet.exe'
+}
+if (-not (Test-Path -LiteralPath $dotnet)) {
+    throw '.NET 8 SDK was not found. Install the .NET 8 SDK, then run this script again.'
+}
 $certificateDirectory = Join-Path $projectRoot ".local-certs"
 $pfxPath = Join-Path $certificateDirectory "sblss-lan.pfx"
 $publicCertificatePath = Join-Path $certificateDirectory "sblss-lan.cer"
@@ -64,9 +71,12 @@ $hostsContent = @($hostsContent | Where-Object { $_ -notmatch "\s$([regex]::Esca
 $hostsContent += "$IPAddress`t$HostName`t# SBLSS LAN"
 Set-Content -LiteralPath $hostsPath -Value $hostsContent -Encoding ascii
 
-dotnet user-secrets set "Kestrel:Certificates:Default:Path" $pfxPath --project $projectFile | Out-Null
-dotnet user-secrets set "Kestrel:Certificates:Default:Password" $pfxPasswordText --project $projectFile | Out-Null
-dotnet user-secrets set "EntraId:Enabled" "true" --project $projectFile | Out-Null
+& $dotnet user-secrets set "Kestrel:Certificates:Default:Path" $pfxPath --project $projectFile | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Could not save the LAN certificate path.' }
+& $dotnet user-secrets set "Kestrel:Certificates:Default:Password" $pfxPasswordText --project $projectFile | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Could not save the LAN certificate password.' }
+& $dotnet user-secrets set "EntraId:Enabled" "true" --project $projectFile | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Could not enable Microsoft Entra sign-in.' }
 
 $existingRule = Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue
 if ($null -eq $existingRule) {
@@ -85,4 +95,4 @@ Write-Host "Give teammates these two files:" -ForegroundColor Cyan
 Write-Host "  $publicCertificatePath"
 Write-Host "  $(Join-Path $projectRoot 'trust-sblss-lan-certificate.ps1')"
 Write-Host "After the Redirect URI is saved, start with:" -ForegroundColor Cyan
-Write-Host ".\run-local-sqlserver.ps1 -Share -ShareAddress $IPAddress -ShareEntra -ShareHostName $HostName"
+Write-Host "powershell -ExecutionPolicy Bypass -File .\run-local-sqlserver.ps1 -VmSqlServer -Share -ShareAddress $IPAddress -ShareEntra -ShareHostName $HostName"

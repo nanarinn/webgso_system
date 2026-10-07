@@ -232,6 +232,12 @@ public static class DatabaseInitializer
             IF COL_LENGTH('ValidationRules', 'CreatedBy') IS NULL ALTER TABLE [ValidationRules] ADD [CreatedBy] nvarchar(160) NULL;
             IF COL_LENGTH('ValidationRules', 'CreatedAt') IS NULL ALTER TABLE [ValidationRules] ADD [CreatedAt] datetimeoffset NOT NULL CONSTRAINT [DF_ValidationRules_CreatedAt] DEFAULT SYSUTCDATETIME();
             IF COL_LENGTH('ValidationRules', 'UpdatedAt') IS NULL ALTER TABLE [ValidationRules] ADD [UpdatedAt] datetimeoffset NULL;
+            """);
+
+        // SQL Server resolves every column referenced by an index and its duplicate
+        // check when compiling the batch. Legacy databases only gain these columns
+        // above, so create the filtered index in a new batch.
+        await database.Database.ExecuteSqlRawAsync("""
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ValidationRules_ConfiguredSignature' AND [object_id] = OBJECT_ID(N'[ValidationRules]'))
                AND NOT EXISTS (
                     SELECT [DataType], UPPER(LTRIM(RTRIM([FieldName]))), [MinimumValue], [MaximumValue], [ChangeThreshold], [CheckMissing]
@@ -270,6 +276,11 @@ public static class DatabaseInitializer
             IF COL_LENGTH('CollectionSchedules', 'ScheduleDay') IS NULL ALTER TABLE [CollectionSchedules] ADD [ScheduleDay] nvarchar(20) NOT NULL CONSTRAINT [DF_CollectionSchedules_ScheduleDay] DEFAULT '';
             IF COL_LENGTH('CollectionSchedules', 'ScheduleMonths') IS NULL ALTER TABLE [CollectionSchedules] ADD [ScheduleMonths] nvarchar(50) NOT NULL CONSTRAINT [DF_CollectionSchedules_ScheduleMonths] DEFAULT '';
             IF COL_LENGTH('CollectionSchedules', 'DataType') IS NOT NULL ALTER TABLE [CollectionSchedules] ALTER COLUMN [DataType] nvarchar(40) NOT NULL;
+            """);
+
+        // SQL Server compiles each batch before running it. The legacy table may not
+        // have ScheduleCode until the ALTER TABLE above has completed.
+        await database.Database.ExecuteSqlRawAsync("""
             ;WITH duplicateSchedules AS (
                 SELECT [Id], [ScheduleCode], ROW_NUMBER() OVER (PARTITION BY [ScheduleCode] ORDER BY [Id]) AS [DuplicateNumber]
                 FROM [CollectionSchedules]
@@ -288,9 +299,6 @@ public static class DatabaseInitializer
                 INNER JOIN [CollectionSchedules] scheduleRow
                     ON job.[CollectionId] LIKE CONCAT(N''COL-SCH-'', scheduleRow.[Id], N''-%'')
                 WHERE job.[CollectionScheduleId] IS NULL;');
-            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CollectionJobs_CollectionSchedule' AND [object_id] = OBJECT_ID(N'[CollectionJobs]'))
-                EXEC(N'CREATE INDEX [IX_CollectionJobs_CollectionSchedule]
-                    ON [CollectionJobs] ([CollectionScheduleId], [SubmissionDateTime], [Status]);');
 
             IF OBJECT_ID(N'[ReportExecutions]', N'U') IS NULL
             CREATE TABLE [ReportExecutions] (
@@ -308,6 +316,14 @@ public static class DatabaseInitializer
                 EXEC(N'UPDATE [CollectionJobs] SET [SubmissionDateTime] = DATEADD(minute, DATEDIFF(minute, 0, CONVERT(datetime2, SWITCHOFFSET([StartedAt], ''+08:00''))), 0) WHERE [SubmissionDateTime] IS NULL');
                 ALTER TABLE [CollectionJobs] ALTER COLUMN [SubmissionDateTime] datetime2 NOT NULL;
             END;
+            """);
+
+        // SubmissionDateTime is introduced above for legacy databases. Compile all
+        // indexes and data alignment statements that reference it in a later batch.
+        await database.Database.ExecuteSqlRawAsync("""
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CollectionJobs_CollectionSchedule' AND [object_id] = OBJECT_ID(N'[CollectionJobs]'))
+                CREATE INDEX [IX_CollectionJobs_CollectionSchedule]
+                    ON [CollectionJobs] ([CollectionScheduleId], [SubmissionDateTime], [Status]);
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionJobs_SubmissionDateTime' AND object_id = OBJECT_ID(N'[CollectionJobs]'))
                 CREATE INDEX [IX_CollectionJobs_SubmissionDateTime] ON [CollectionJobs] ([DataType], [SubmissionDateTime], [PlantId]);
             IF NOT EXISTS (SELECT 1 FROM [SchemaUpgrades] WHERE [Name] = N'AlignReadingSubmissionDateTimeWithSchedule')
@@ -360,6 +376,11 @@ public static class DatabaseInitializer
             ALTER TABLE [CollectionJobs] ALTER COLUMN [Mode] nvarchar(40) NOT NULL;
             ALTER TABLE [CollectionJobs] ALTER COLUMN [ErrorMessage] nvarchar(1000) NULL;
             ALTER TABLE [RawApiResponses] ALTER COLUMN [ContentType] nvarchar(100) NOT NULL;
+            """);
+
+        // Queue columns are added above and must exist before SQL Server compiles the
+        // covering index that includes them.
+        await database.Database.ExecuteSqlRawAsync("""
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CollectionJobs_Queue' AND object_id = OBJECT_ID(N'[CollectionJobs]'))
                 CREATE INDEX [IX_CollectionJobs_Queue] ON [CollectionJobs] ([Status], [StartedAt])
                     INCLUDE ([PlantId], [DataType], [Mode], [RetryCount], [ReplaceExisting]);

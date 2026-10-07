@@ -23,7 +23,16 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     private List<PlantConnection> Plants { get; set; } = [];
 
     private List<DemoCollectionJob> Jobs { get; set; } = [];
-    private string SearchTerm { get; set; } = string.Empty;
+    private string SearchTermValue { get; set; } = string.Empty;
+    private string SearchTerm
+    {
+        get => SearchTermValue;
+        set
+        {
+            SearchTermValue = value;
+            CollectionPage = 1;
+        }
+    }
     private int SelectedPlantId { get; set; }
     private static readonly IReadOnlyList<string> ManualDdqDataTypes = ManualDdqCollectionPolicy.DataTypes;
     private string SelectedManualDataType { get; set; } = ManualDdqDataTypes[0];
@@ -52,6 +61,15 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         new("DDQ|4 Month Ahead", "DDQ", "4 Month Ahead", "DDQ · 4 Month Ahead"),
         new("MMF|MMF", "MMF", "MMF", "MMF · All parameters")
     ];
+    private static readonly IReadOnlyList<CollectionSectionDefinition> CollectionSectionDefinitions =
+    [
+        new("DDQ|Rolling 24 Hour", "DDQ", "Rolling 24 Hour", "Rolling 24 Hour"),
+        new("DDQ|Daily", "DDQ", "Daily", "Daily"),
+        new("DDQ|Weekly", "DDQ", "Weekly", "Weekly"),
+        new("DDQ|4 Month", "DDQ", "4 Month", "4 Month"),
+        new("MMF|MMF", "MMF", "MMF", "MMF")
+    ];
+    private string SelectedCollectionSectionKey { get; set; } = CollectionSectionDefinitions[0].Key;
     private string SelectedManualBatchKey { get; set; } = ManualBatchOptions[0].Key;
     private int Sequence { get; set; } = 6;
     private readonly CancellationTokenSource RefreshCancellation = new();
@@ -104,6 +122,49 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
             group.OrderBy(job => job.PlantName).ToList()))
         .OrderByDescending(batch => batch.RunAt)
         .ToList();
+
+    private List<CollectionBatch> SelectedSectionBatches
+    {
+        get
+        {
+            var selected = CollectionSectionDefinitions.First(section => section.Key == SelectedCollectionSectionKey);
+            return FilteredBatches.Where(batch => BatchBelongsToSection(batch, selected)).ToList();
+        }
+    }
+
+    private IReadOnlyList<CollectionSectionTab> CollectionSectionTabs => CollectionSectionDefinitions
+        .Select(section => new CollectionSectionTab(
+            section.Key,
+            section.ApiType,
+            section.Label,
+            FilteredBatches.Count(batch => BatchBelongsToSection(batch, section))))
+        .ToList();
+
+    private string SelectedCollectionSectionLabel => CollectionSectionDefinitions
+        .First(section => section.Key == SelectedCollectionSectionKey).Label;
+
+    private void SelectCollectionSection(string key)
+    {
+        if (!CollectionSectionDefinitions.Any(section => section.Key == key)) return;
+        SelectedCollectionSectionKey = key;
+        CollectionPage = 1;
+    }
+
+    private static bool BatchBelongsToSection(CollectionBatch batch, CollectionSectionDefinition section) =>
+        batch.ApiType.Equals(section.ApiType, StringComparison.OrdinalIgnoreCase)
+        && CollectionGroupTitle(batch.ApiType, batch.DataType)
+            .Equals(section.GroupTitle, StringComparison.OrdinalIgnoreCase);
+
+    private static string CollectionGroupTitle(string apiType, string dataType)
+    {
+        if (apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase)) return "MMF";
+        if (dataType.Contains("Rolling", StringComparison.OrdinalIgnoreCase)) return "Rolling 24 Hour";
+        if (dataType.Contains("Day", StringComparison.OrdinalIgnoreCase)
+            || dataType.Contains("Daily", StringComparison.OrdinalIgnoreCase)) return "Daily";
+        if (dataType.Contains("Week", StringComparison.OrdinalIgnoreCase)) return "Weekly";
+        if (dataType.Contains("4 Month", StringComparison.OrdinalIgnoreCase)) return "4 Month";
+        return dataType;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -660,12 +721,26 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         DateTime RunAt,
         List<DemoCollectionJob> Jobs)
     {
+        public int PlantCount => Jobs.Select(job => job.PlantName).Distinct().Count();
         public int SuccessfulCount => Jobs.Count(job => job.Status == "Successful");
         public int FailedCount => Jobs.Count(job => job.Status == "Failed");
         public int ProcessingCount => Jobs.Count - SuccessfulCount - FailedCount;
+        public string PlantTitle => string.Join(", ", Jobs.Select(job => job.PlantName).Distinct());
         public string PlantSummary => string.Join(", ", Jobs.Select(job => job.PlantName).Distinct().Take(3))
             + (Jobs.Select(job => job.PlantName).Distinct().Count() > 3 ? " + more" : string.Empty);
     }
+
+    private sealed record CollectionSectionDefinition(
+        string Key,
+        string ApiType,
+        string GroupTitle,
+        string Label);
+
+    private sealed record CollectionSectionTab(
+        string Key,
+        string ApiType,
+        string Label,
+        int Count);
 
     private sealed class ManualBatchItem
     {

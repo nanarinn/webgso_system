@@ -31,7 +31,7 @@
             <input type="search" placeholder="Search plant, collection ID, mode or status..."
                    @bind="SearchTerm" @bind:event="oninput" />
         </label>
-        <span class="result-count">@FilteredBatches.Count collection run(s)</span>
+        <span class="result-count">@SelectedSectionBatches.Count collection run(s)</span>
     </section>
 
     <section class="table-panel collection-panel">
@@ -43,21 +43,35 @@
             <span>Grouped by collection time and selected plants</span>
         </div>
 
-        <div class="collection-table" role="table" aria-label="Plant API collection job history">
-            <div class="collection-row collection-header" role="row">
-                <span>Collection run</span><span>API / data type</span><span>Selected plants</span>
-                <span>Result</span><span>Pull time</span>
-            </div>
-            @if (FilteredBatches.Count == 0)
+        <nav class="collection-section-tabs" aria-label="Collection data sections">
+            @foreach (var tab in CollectionSectionTabs)
             {
-                <div class="collection-empty">
-                    <strong>No collection job found</strong>
-                    <span>Try a different plant, collection ID, mode or status.</span>
-                </div>
+                <button type="button"
+                        class="collection-section-tab @(SelectedCollectionSectionKey == tab.Key ? "active" : string.Empty) collection-section-tab-@tab.ApiType.ToLowerInvariant()"
+                        aria-pressed="@(SelectedCollectionSectionKey == tab.Key)"
+                        @onclick="() => SelectCollectionSection(tab.Key)">
+                    <span class="collection-section-tab-dot" aria-hidden="true"></span>
+                    <span>@tab.Label</span>
+                    <strong>@tab.Count</strong>
+                </button>
             }
-            else
-            {
-                @foreach (var batch in TablePaging.Slice(FilteredBatches, CollectionPage))
+        </nav>
+
+        @if (SelectedSectionBatches.Count == 0)
+        {
+            <div class="collection-empty">
+                <strong>No @SelectedCollectionSectionLabel collection job found</strong>
+                <span>Try a different search or select another section.</span>
+            </div>
+        }
+        else
+        {
+            <div class="collection-table" role="table" aria-label="@SelectedCollectionSectionLabel collection history">
+                <div class="collection-row collection-header" role="row">
+                    <span>Collection run</span><span>API / data type</span><span>Total plants</span>
+                    <span>Plant list</span><span>Result</span><span>Pull time</span>
+                </div>
+                @foreach (var batch in TablePaging.Slice(SelectedSectionBatches, CollectionPage))
                 {
                     <div class="collection-row collection-batch-row" role="row">
                         <div class="collection-plant collection-run-identity">
@@ -68,9 +82,9 @@
                             <span class="api-type-badge api-type-@batch.ApiType.ToLowerInvariant()">@batch.ApiType</span>
                             <strong>@batch.DataType</strong>
                         </div>
-                        <div class="collection-batch-plants">
-                            <strong>@batch.Jobs.Count plant(s)</strong>
-                            <small title="@string.Join(", ", batch.Jobs.Select(job => job.PlantName).Distinct())">@batch.PlantSummary</small>
+                        <span class="collection-total-plants" title="@batch.PlantTitle">@(batch.PlantCount == 1 ? "1 plant" : $"{batch.PlantCount} plants")</span>
+                        <div class="collection-plant-action-cell">
+                            <button class="schedule-view-plants collection-view-plants" type="button" @onclick='() => OpenBatchSummary(batch, "All")'><span aria-hidden="true">&#9783;</span> View plants</button>
                         </div>
                         <div class="collection-batch-results">
                             <button type="button" class="batch-result-count batch-result-success" disabled="@(batch.SuccessfulCount == 0)"
@@ -86,9 +100,9 @@
                         <time datetime="@batch.RunAt.ToString("O")">@TimeDisplay.DateTimeWithSeconds(batch.RunAt)</time>
                     </div>
                 }
-            }
-        </div>
-        <TablePagination TotalItems="@FilteredBatches.Count" @bind-Page="CollectionPage" />
+            </div>
+        }
+        <TablePagination TotalItems="@SelectedSectionBatches.Count" @bind-Page="CollectionPage" />
     </section>
 
     @if (IsJobDetailOpen && SelectedJob is not null)
@@ -137,8 +151,8 @@
     @if (IsSummaryDialogOpen)
     {
         <div class="summary-list-overlay" role="presentation">
-            <section class="summary-list-dialog collection-summary-dialog" role="dialog" aria-modal="true" aria-labelledby="collection-summary-title">
-                <div class="summary-list-header">
+            <section class="summary-list-dialog collection-summary-dialog collection-plant-list-dialog" role="dialog" aria-modal="true" aria-labelledby="collection-summary-title">
+                <div class="summary-list-header collection-summary-header">
                     <div>
                         <p class="section-label">Plant API collection jobs</p>
                         <h2 id="collection-summary-title">@SummaryDialogTitle</h2>
@@ -146,7 +160,7 @@
                     <button class="profile-close" type="button" @onclick="CloseSummaryDialog" aria-label="Close plant list">&#215;</button>
                 </div>
                 <div class="summary-list-body">
-                    <p class="summary-list-count">@SummaryJobs.Count collection job(s)</p>
+                    <p class="summary-list-count">@SummaryJobs.Select(job => job.PlantName).Distinct().Count() plant(s) · @SummaryJobs.Count collection job(s)</p>
                     @foreach (var job in TablePaging.Slice(SummaryJobs, CollectionSummaryPage))
                     {
                         <article class="summary-list-item">

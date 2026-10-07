@@ -5,7 +5,7 @@
       "name": "Debug Single Buyer LSS Repository",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "Build Single Buyer LSS Repository",
+      "preLaunchTask": "Build SBLSS",
       "program": "${workspaceFolder}/TestingSystem.Web/bin/Debug/net8.0/TestingSystem.Web.dll",
       "cwd": "${workspaceFolder}/TestingSystem.Web",
       "stopAtEntry": false,

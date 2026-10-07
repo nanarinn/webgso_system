@@ -17,7 +17,6 @@ public partial class CollectionSchedules : ComponentBase
     [Inject] private IAuditTrailService AuditTrail { get; set; } = default!;
     private static readonly string[] ApiTypes = ["DDQ", "MMF"];
     private static readonly string[] DdqDataTypes = ["Rolling 24 Hour", "Daily", "Weekly", "4 Month"];
-    private static readonly string[] RollingIntervals = ["15 minutes", "30 minutes", "1 hour"];
     private static readonly string[] WeekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
     private static readonly (int Value, string Label)[] Months = [(1,"Jan"),(2,"Feb"),(3,"Mar"),(4,"Apr"),(5,"May"),(6,"Jun"),(7,"Jul"),(8,"Aug"),(9,"Sep"),(10,"Oct"),(11,"Nov"),(12,"Dec")];
     private List<LssPlant> Plants { get; set; } = [];
@@ -30,6 +29,7 @@ public partial class CollectionSchedules : ComponentBase
     private bool StatusChangeConfirmed { get; set; }
     private bool OriginalIsActive { get; set; } = true;
     private bool IsPlantDropdownOpen { get; set; }
+    private ScheduleGroup? SelectedPlantGroup { get; set; }
     private int? EditingId { get; set; }
     private HashSet<int> EditingScheduleIds { get; set; } = [];
     private string FormError { get; set; } = string.Empty;
@@ -47,9 +47,31 @@ public partial class CollectionSchedules : ComponentBase
     private int NewRetryCount { get; set; } = 3;
     private bool NewIsActive { get; set; } = true;
 
-    private List<CollectionSchedule> FilteredSchedules => Schedules.Where(x => x.ApiType == SelectedApiType &&
-        (string.IsNullOrWhiteSpace(SearchTerm) || x.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
-         GetPlant(x.PlantId).Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) || x.DataType.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))).ToList();
+    private List<ScheduleGroup> ScheduleGroups => Schedules
+        .GroupBy(ScheduleGroupKey)
+        .Select(group =>
+        {
+            var items = group.OrderBy(schedule => schedule.Id).ToList();
+            var plants = items.Select(schedule => GetPlant(schedule.PlantId))
+                .DistinctBy(plant => plant.Id)
+                .OrderBy(plant => plant.Name)
+                .ThenBy(plant => plant.PlantId)
+                .ToList();
+            return new ScheduleGroup(group.Key, items[^1], items, plants);
+        })
+        .OrderByDescending(group => group.Schedule.Id)
+        .ToList();
+
+    private List<ScheduleGroup> FilteredScheduleGroups => ScheduleGroups.Where(group =>
+        group.Schedule.ApiType == SelectedApiType &&
+        (string.IsNullOrWhiteSpace(SearchTerm)
+         || group.DisplayName.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+         || group.DisplayCode.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+         || group.Schedule.DataType.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+         || group.Plants.Any(plant => plant.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+             || plant.PlantId.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+             || plant.State.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))))
+        .ToList();
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -96,6 +118,16 @@ public partial class CollectionSchedules : ComponentBase
     private void RemoveSelectedPlant(int plantId) => NewPlantIds.Remove(plantId);
     private void ClearPlantSelections() { NewPlantIds.Clear(); PlantSearchTerm = string.Empty; FormError = string.Empty; }
     private void TogglePlantDropdown() => IsPlantDropdownOpen = !IsPlantDropdownOpen;
+    private void OpenPlantList(ScheduleGroup group) => SelectedPlantGroup = group;
+    private void ClosePlantList() => SelectedPlantGroup = null;
+    private static string PlantCode(LssPlant plant)
+    {
+        var letters = plant.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Take(2)
+            .Select(word => char.ToUpperInvariant(word[0]));
+        var code = string.Concat(letters);
+        return string.IsNullOrWhiteSpace(code) ? "LSS" : code;
+    }
     private void OpenDialog()
     {
         EditingId = null; NewApiType = SelectedApiType; NewDataType = NewApiType == "DDQ" ? DdqDataTypes[0] : "MMF"; PlantSearchTerm = string.Empty;
@@ -111,13 +143,16 @@ public partial class CollectionSchedules : ComponentBase
     }
     private List<CollectionSchedule> GetScheduleEditGroup(CollectionSchedule item)
     {
+        var key = ScheduleGroupKey(item);
+        return Schedules.Where(schedule => ScheduleGroupKey(schedule) == key).ToList();
+    }
+
+    private static string ScheduleGroupKey(CollectionSchedule item)
+    {
         var parts = item.ScheduleCode.Split('-', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length >= 4 && parts[^2].Length >= 14 && parts[^2].All(char.IsDigit))
-        {
-            var prefix = string.Join("-", parts[..^1]) + "-";
-            return Schedules.Where(schedule => schedule.ScheduleCode.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-        return [item];
+        return parts.Length >= 4 && parts[^2].Length >= 14 && parts[^2].All(char.IsDigit)
+            ? string.Join("-", parts[..^1])
+            : $"schedule-{item.Id}";
     }
     private void KeepAvailablePlantSelections()
     {
@@ -132,7 +167,7 @@ public partial class CollectionSchedules : ComponentBase
         NewInterval = "15 minutes";
         KeepAvailablePlantSelections();
     }
-    private string ScheduleTime(CollectionSchedule item) => item.DataType switch { "Rolling 24 Hour" or "MMF" => $"Every {item.Interval}", "Weekly" => $"{item.ScheduleDay} at {item.RunTime}", "4 Month" => $"Day {item.ScheduleDay} · {MonthLabels(ParseMonths(item.ScheduleMonths))} · {item.RunTime}", _ => $"Daily at {item.RunTime}" };
+    private string ScheduleTime(CollectionSchedule item) => item.DataType switch { "MMF" => $"Every {item.Interval}", "Weekly" => $"{item.ScheduleDay} at {item.RunTime}", "4 Month" => $"Day {item.ScheduleDay} · {MonthLabels(ParseMonths(item.ScheduleMonths))} · {item.RunTime}", _ => $"Daily at {item.RunTime}" };
     private void ToggleScheduleMonth(int month) { if (!NewScheduleMonths.Add(month)) NewScheduleMonths.Remove(month); }
     private static HashSet<int> ParseMonths(string value) => value.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => int.TryParse(x, out var month) ? month : 0).Where(x => x is >= 1 and <= 12).ToHashSet();
     private static string MonthLabels(IEnumerable<int> months) { var values = months.OrderBy(x => x).Select(x => Months.First(m => m.Value == x).Label).ToList(); return values.Count == 0 ? "No months" : string.Join(", ", values); }
@@ -173,7 +208,7 @@ public partial class CollectionSchedules : ComponentBase
                 var conflictingPlantIds = await db.CollectionSchedules.AsNoTracking()
                     .Where(x => !EditingScheduleIds.Contains(x.Id) && targetPlantIds.Contains(x.PlantId)
                         && x.ApiType == NewApiType && x.DataType == NewDataType)
-                    .Where(x => NewDataType == "Rolling 24 Hour" || NewDataType == "MMF"
+                    .Where(x => NewDataType == "MMF"
                         ? x.Interval == NewInterval
                         : NewDataType == "Weekly"
                             ? x.ScheduleDay == NewScheduleDay && x.RunTime == NewRunTime
@@ -224,7 +259,7 @@ public partial class CollectionSchedules : ComponentBase
                     .ToListAsync();
                 var duplicatePlantIds = existingSchedules.Where(x => NewDataType switch
                     {
-                        "Rolling 24 Hour" or "MMF" => x.Interval == NewInterval,
+                        "MMF" => x.Interval == NewInterval,
                         "Weekly" => x.ScheduleDay == NewScheduleDay && x.RunTime == NewRunTime,
                         "4 Month" => x.ScheduleDay == NewScheduleDay && x.ScheduleMonths == scheduleMonths && x.RunTime == NewRunTime,
                         _ => x.RunTime == NewRunTime
@@ -297,6 +332,22 @@ public partial class CollectionSchedules : ComponentBase
             FormError = $"The schedule could not be deleted: {exception.GetBaseException().Message}";
             IsDeleteConfirmationOpen = false;
         }
+    }
+
+    private sealed record ScheduleGroup(
+        string Key,
+        CollectionSchedule Schedule,
+        List<CollectionSchedule> Items,
+        List<LssPlant> Plants)
+    {
+        public string DisplayName => Items.Count == 1
+            ? Schedule.Name
+            : $"{Schedule.ApiType} {Schedule.DataType} schedule";
+        public string DisplayCode => Items.Count == 1 ? Schedule.ScheduleCode : Key;
+        public bool IsActive => Items.All(item => item.IsActive);
+        public string PlantSummary => string.Join(", ", Plants.Select(plant => plant.Name).Take(3))
+            + (Plants.Count > 3 ? $" + {Plants.Count - 3} more" : string.Empty);
+        public string PlantTitle => string.Join(", ", Plants.Select(plant => $"{plant.Name} ({plant.PlantId})"));
     }
 
 }

@@ -1,5 +1,6 @@
 param(
     [switch]$Pull,
+    [switch]$VmSqlServer,
     [switch]$Share,
     [string]$ShareAddress,
     [switch]$ShareEntra,
@@ -26,21 +27,74 @@ if ($Pull) {
     }
 }
 
-$sqlService = Get-Service -Name 'MSSQL$SQLEXPRESS' -ErrorAction Stop
-if ($sqlService.Status -ne 'Running') {
-    Start-Service -Name 'MSSQL$SQLEXPRESS'
-}
-
 $env:ASPNETCORE_ENVIRONMENT = "Development"
+$dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
+if (-not $dotnet) {
+    $dotnet = Join-Path $projectRoot '.dotnet\dotnet.exe'
+}
+if (-not (Test-Path -LiteralPath $dotnet)) {
+    throw ".NET 8 SDK was not found. Install the .NET 8 SDK, then run this script again."
+}
+if ($VmSqlServer) {
+    $vmAddress = '192.168.227.128'
+    $vmPort = 1433
+    $tcpClient = [System.Net.Sockets.TcpClient]::new()
+    try {
+        $connect = $tcpClient.BeginConnect($vmAddress, $vmPort, $null, $null)
+        if (-not $connect.AsyncWaitHandle.WaitOne(3000)) {
+            throw "SQL Server VM at $vmAddress`:$vmPort is unreachable. Enable TCP/IP and the VM firewall rule first."
+        }
+        $tcpClient.EndConnect($connect)
+    }
+    catch {
+        throw "Cannot connect to SQL Server VM at $vmAddress`:$vmPort. Check SQL Server TCP/IP, the VM firewall, and host-to-VM network access. Details: $($_.Exception.Message)"
+    }
+    finally {
+        $tcpClient.Dispose()
+    }
+    $vmSecretLine = @(& $dotnet user-secrets list --project .\TestingSystem.Web\TestingSystem.Web.csproj 2>$null |
+        Where-Object { $_ -match '^ConnectionStrings:DefaultConnection\s*=' }) | Select-Object -First 1
+    if (-not $vmSecretLine) {
+        throw 'Set ConnectionStrings:DefaultConnection in .NET user secrets to the VM SQL Server connection string before using -VmSqlServer.'
+    }
+    $vmConnectionString = ($vmSecretLine -split '\s=\s', 2)[1]
+    $vmConnectionSettings = [System.Data.SqlClient.SqlConnectionStringBuilder]::new($vmConnectionString)
+    if ($vmConnectionSettings.DataSource -ne '192.168.227.128,1433' -or
+        $vmConnectionSettings.InitialCatalog -ne 'SingleBuyerLssRepository') {
+        throw 'The saved VM connection string must target 192.168.227.128,1433 and SingleBuyerLssRepository.'
+    }
+    $env:ConnectionStrings__DefaultConnection = $vmConnectionString
+    $env:Database__Server = $vmAddress
+    $env:Database__Port = [string]$vmPort
+    Write-Host "Using SQL Server in VMware at $vmAddress`:$vmPort." -ForegroundColor Cyan
+}
+else {
+    $sqlService = Get-Service -Name 'MSSQL$SQLEXPRESS' -ErrorAction SilentlyContinue
+    if ($null -eq $sqlService) {
+        $sqlService = Get-Service -Name 'MSSQLSERVER' -ErrorAction SilentlyContinue
+        if ($null -ne $sqlService) {
+            $env:ConnectionStrings__DefaultConnection = 'Server=.;Database=SingleBuyerLssRepository;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False;'
+            $env:Database__Server = '.'
+            $env:Database__Port = '0'
+            Write-Host "Using the default Microsoft SQL Server instance (MSSQLSERVER)." -ForegroundColor Cyan
+        }
+    }
+    if ($null -eq $sqlService) {
+        throw "No local Microsoft SQL Server instance was found. Install or start SQL Server, then try again."
+    }
+    if ($sqlService.Status -ne 'Running') {
+        Start-Service -Name $sqlService.Name
+    }
+}
 $port = 5186
 $httpsPort = 8088
 $httpsReady = $false
-dotnet dev-certs https --check --trust --quiet
+& $dotnet dev-certs https --check --trust --quiet
 if ($LASTEXITCODE -eq 0) {
     $httpsReady = $true
 }
 
-$configuredSecrets = @(dotnet user-secrets list --project .\TestingSystem.Web\TestingSystem.Web.csproj 2>$null)
+$configuredSecrets = @(& $dotnet user-secrets list --project .\TestingSystem.Web\TestingSystem.Web.csproj 2>$null)
 $appSettings = Get-Content -LiteralPath (Join-Path $projectRoot "TestingSystem.Web\appsettings.json") -Raw | ConvertFrom-Json
 $entraEnabled = $appSettings.EntraId.Enabled -eq $true -or @($configuredSecrets | Where-Object { $_ -match '^EntraId:Enabled\s*=\s*true$' }).Count -gt 0
 $entraSecretConfigured = @($configuredSecrets | Where-Object { $_ -match '^EntraId:ClientSecret\s*=\s*.+$' }).Count -gt 0
@@ -82,7 +136,7 @@ if ($runningInstances.Count -gt 0) {
 }
 
 Write-Host "Synchronising the Microsoft SQL Server schema with the current system..." -ForegroundColor Cyan
-dotnet run --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-launch-profile -- --update-database
+& $dotnet run --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-launch-profile -- --update-database
 if ($LASTEXITCODE -ne 0) {
     throw "Database schema synchronisation failed. The system was not started."
 }
@@ -91,7 +145,7 @@ $clearCollectionRequestPath = Join-Path $projectRoot ".clear-collection-data-on-
 $resetWorkflowRequestPath = Join-Path $projectRoot ".reset-workflow-data-on-next-start"
 if (Test-Path -LiteralPath $resetWorkflowRequestPath) {
     Write-Host "Resetting SBLSS operational workflow data..." -ForegroundColor Yellow
-    dotnet run --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-launch-profile --no-build -- --reset-workflow-data
+    & $dotnet run --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-launch-profile --no-build -- --reset-workflow-data
     if ($LASTEXITCODE -ne 0) {
         throw "SBLSS workflow reset failed. The reset request was kept for the next start."
     }
@@ -101,7 +155,7 @@ if (Test-Path -LiteralPath $resetWorkflowRequestPath) {
 }
 elseif (Test-Path -LiteralPath $clearCollectionRequestPath) {
     Write-Host "Clearing Collection Management test data..." -ForegroundColor Yellow
-    dotnet run --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-launch-profile --no-build -- --clear-collection-data
+    & $dotnet run --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-launch-profile --no-build -- --clear-collection-data
     if ($LASTEXITCODE -ne 0) {
         throw "Collection Management data reset failed. The reset request was kept for the next start."
     }
@@ -219,7 +273,7 @@ else {
     "http://$httpBindHost`:$port"
 }
 $watchLogPath = Join-Path $projectRoot ".sblss-watch.log"
-dotnet watch --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-hot-reload run --no-launch-profile --urls `
+& $dotnet watch --project .\TestingSystem.Web\TestingSystem.Web.csproj --no-hot-reload run --no-launch-profile --urls `
     $applicationUrls 2>&1 | Tee-Object -FilePath $watchLogPath
 $watchExitCode = $LASTEXITCODE
 if ($watchExitCode -ne 0) {

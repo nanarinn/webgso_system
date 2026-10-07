@@ -14,11 +14,16 @@
 
 @if (IsDashboardLoading)
 {
-    <div class="page-inline-notice" role="status">Loading repository data from the secured backend API…</div>
+    <div class="page-inline-notice" role="status">Loading repository data from the secured application service…</div>
 }
 else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
 {
-    <div class="page-inline-error" role="alert">@DashboardLoadError</div>
+    <div class="page-inline-error dashboard-load-error" role="alert">
+        <span>@DashboardLoadError</span>
+        <button class="secondary-action" type="button" disabled="@IsReloading" @onclick="ReloadDashboardAsync">
+            @(IsReloading ? "Trying again…" : "Try again")
+        </button>
+    </div>
 }
 
 <section class="metric-grid" aria-label="Operational summary">
@@ -81,7 +86,7 @@ else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
     <aside class="panel focus-panel">
         <p class="section-label section-label-light">System status</p>
         <h2>@(RepositoryStatus?.Connected == true ? "Repository connected" : RepositoryStatus is null ? "Status unavailable" : "Repository unavailable")</h2>
-        <p>Blazor reads this dashboard through the secured backend application API.</p>
+        <p>Blazor reads this dashboard through the secured server application service.</p>
         <div class="connection-line @(RepositoryStatus is null ? "connection-unknown" : RepositoryStatus.Connected ? "connection-online" : "connection-offline")">
             <span></span>
             @(RepositoryStatus is null ? "Database status not confirmed" : RepositoryStatus.Connected ? "Configured SQL Server online" : "Configured SQL Server unavailable")
@@ -98,7 +103,7 @@ else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
                 <div>
                     <p class="section-label">System status</p>
                     <h2 id="health-status-title">@(RepositoryStatus?.Connected == true ? "Repository is healthy" : RepositoryStatus is null ? "System status unavailable" : "Repository needs attention")</h2>
-                    <p>@(string.IsNullOrWhiteSpace(DashboardStatusError) ? "Status retrieved through the authorised backend API." : "The backend health status could not be retrieved.")</p>
+                    <p>@(string.IsNullOrWhiteSpace(DashboardStatusError) ? "Status retrieved through the authorised application service." : DashboardStatusError)</p>
                 </div>
                 <button class="profile-close" type="button" @onclick="CloseHealthStatus" aria-label="Close system status">×</button>
             </div>
@@ -112,7 +117,7 @@ else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
             </div>
             <div class="health-status-details">
                 <div><span>Application</span><strong>Blazor Server</strong></div>
-                <div><span>Backend</span><strong>Authorised Web API</strong></div>
+                <div><span>Backend</span><strong>Authorised application service</strong></div>
                 <div><span>Database</span><strong>@(RepositoryStatus?.Database ?? "Configured database")</strong></div>
                 <div><span>Connection</span><strong>@(RepositoryStatus is null ? "Not confirmed" : RepositoryStatus.Connected ? "Online" : "Unavailable")</strong></div>
             </div>

@@ -10,6 +10,16 @@ using TestingSystem.Web.Backend.UseCases.UCLSS027Audit;
 using TestingSystem.Web.Connectors.UseCases;
 
 var builder = WebApplication.CreateBuilder(args);
+var externalSecretsFile = builder.Configuration["SBLSS_SECRETS_FILE"];
+if (!string.IsNullOrWhiteSpace(externalSecretsFile))
+{
+    if (!Path.IsPathFullyQualified(externalSecretsFile))
+        throw new InvalidOperationException("SBLSS_SECRETS_FILE must be an absolute path.");
+
+    builder.Configuration.AddJsonFile(externalSecretsFile, optional: false, reloadOnChange: false);
+    builder.Configuration.AddEnvironmentVariables();
+}
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
@@ -112,6 +122,7 @@ if (args.Contains("--clear-collection-data", StringComparer.OrdinalIgnoreCase))
 {
     await using var scope = app.Services.CreateAsyncScope();
     var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    database.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
     var jobs = await database.CollectionJobs.CountAsync();
     var responses = await database.RawApiResponses.CountAsync();
     var readings = await database.SolarApiReadings.CountAsync();
@@ -141,6 +152,7 @@ if (args.Contains("--reset-workflow-data", StringComparer.OrdinalIgnoreCase))
 {
     await using var scope = app.Services.CreateAsyncScope();
     var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    database.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
     var strategy = database.Database.CreateExecutionStrategy();
     await strategy.ExecuteAsync(async () =>
     {

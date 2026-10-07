@@ -4,7 +4,7 @@ public static class CollectionSchedulePolicy
 {
     public static DateTime SubmissionDateTime(string dataType, string runTime, DateTime localNow)
     {
-        if (dataType is not ("Rolling 24 Hour" or "MMF") && TimeOnly.TryParse(runTime, out var scheduledTime))
+        if (dataType != "MMF" && TimeOnly.TryParse(runTime, out var scheduledTime))
             return localNow.Date.Add(scheduledTime.ToTimeSpan());
         return new DateTime(localNow.Year, localNow.Month, localNow.Day,
             localNow.Hour, localNow.Minute, 0, DateTimeKind.Unspecified);
@@ -30,7 +30,7 @@ public static class CollectionSchedulePolicy
         DateTime localNow,
         DateTime? lastRunLocal)
     {
-        if (dataType is "Rolling 24 Hour" or "MMF")
+        if (dataType == "MMF")
         {
             var intervalMinutes = ParseIntervalMinutes(interval);
             return lastRunLocal is null || localNow - lastRunLocal.Value >= TimeSpan.FromMinutes(intervalMinutes);

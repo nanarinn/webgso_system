@@ -1,76 +1,88 @@
-# SBLSS application architecture
+# SBLSS system architecture
 
-The local system uses one ASP.NET Core host for the Blazor frontend and secured
-Web API. Microsoft SQL Server remains on the same machine during development.
-There is no firewall or remote database-server dependency in this profile.
+The application server and database server are separate. The Blazor web
+application and its authorised Web API run together on the web server. Only the
+web server connects to SQL Server; browsers never connect to SQL directly.
 
 ```mermaid
 flowchart LR
-    User[PC / laptop / mobile browser] -->|HTTPS| Web[ASP.NET Core web host]
-    subgraph Web
+    User[PC / laptop / mobile browser] -->|HTTPS 443| IIS[IIS web server]
+    subgraph IIS[IIS web server - ASP.NET Core]
         UI[Blazor frontend]
-        API[Authorised backend API]
-        Workers[Collection and report workers]
-        UI --> Services[Application services]
-        API --> Services
-        Workers --> Services
+        API[Authorised Web API]
+        Logic[Business logic and workers]
+        UI -->|same-origin HTTPS API requests| API
+        API --> Logic
+        UI --> Logic
     end
-    Services -->|EF Core| SQL[(Local Microsoft SQL Server)]
-    Workers -->|HTTPS| External[DDQ / MMF APIs]
+    Logic -->|SQL Server TCP 1433| SQL[(SQL Server database server)]
+    Logic -->|HTTPS| External[Plant APIs and Microsoft Graph]
 ```
 
 ## Request flow
 
-1. A user signs in with the configured Microsoft identity provider over HTTPS.
-2. Blazor handles the user interaction and passes it to backend page logic or an
-   authorised HTTP API endpoint in the same ASP.NET Core host.
-3. The backend validates authorization and runs the business operation.
-4. Only backend services, workers and infrastructure connectors use EF Core to
-   access the local SQL Server database.
-5. The backend returns a typed response for Blazor to render.
+1. A user signs in through the HTTPS web address.
+2. The Blazor frontend sends same-origin HTTPS requests to the authorised API.
+3. The API validates the user's session and role, then runs application logic.
+4. Entity Framework Core connects from the web server to SQL Server over TCP
+   1433 and returns only the requested data through the API.
+5. The browser renders the API response. It has no database credentials or SQL
+   route.
 
-The secured HTTP endpoints currently include:
+The API is hosted by the same ASP.NET Core application as Blazor. It is a
+separate application layer, not a second public server or process. This matches
+the pictured IIS web server containing both the frontend and backend API.
 
-- `GET /api/dashboard` for the repository overview.
-- `GET /api/status` for database and operational counts.
-- `GET /health` for a minimal service-health result.
-- `GET /api/ping` for an application connectivity check.
+## Network and server requirements
 
-Interactive Blazor Server components and HTTP endpoints reuse the same typed
-backend services inside the web host. A server-rendered Blazor action enters the
-backend in-process instead of making a wasteful HTTP request back to the same
-server. Browser-side reads use the authorised `/api` endpoints where appropriate.
-All frontend `.razor` files remain free from Entity Framework and SQL access.
+- Bind the IIS site to HTTPS on port 443 with a certificate for the production
+  DNS name. The current local team profile uses port 8088 and its existing
+  `sblss-lan.local` certificate.
+- Permit inbound HTTPS from authorised user networks to the web server.
+- Permit inbound SQL TCP 1433 on the database server only from the web server's
+  address. Do not expose SQL Server to user networks or the public internet.
+- Give the IIS application identity a least-privilege SQL login for the SBLSS
+  database. Keep credentials and Entra secrets outside the repository.
+- Allow the web server outbound HTTPS only to approved plant API and identity
+  endpoints required by the deployment.
+- Back up the database independently and test restoring it to the disaster
+  recovery server.
+
+## Current host and VMware profile
+
+The working local profile runs the web application on the Windows host and SQL
+Server in the VMware VM at `192.168.227.128:1433`. Its database is
+`SingleBuyerLssRepository`. `run-sblss-system.cmd` starts the host application
+with the existing VM connection and LAN HTTPS address. This profile uses the
+same web-to-database boundary for development, while IIS and a production DNS
+name are deployment steps for the dedicated web server.
+
+## API and database boundaries
+
+The secured HTTP endpoints include:
+
+- `GET /api/dashboard` for repository overview data.
+- `GET /api/status` for database connectivity and operational counts.
+- `GET /health` for service health.
+- `GET /api/ping` for an authorised application connectivity check.
+
+All SQL access stays in backend connectors, business services, workers and
+infrastructure code. Razor frontend files do not use Entity Framework or SQL.
 
 ## Simplified file map
 
-Filenames use descriptive names without FSD numbers.
+| Function | Razor frontend | C# logic or connector | Database |
+| --- | --- | --- | --- |
+| Login | `Login.razor` | `Login.cs`, `LoginConnector.cs` | Identity tables |
+| Dashboard | `Dashboard.razor` | `Dashboard.cs`, `RepositoryBackendApi.cs` | Repository tables |
+| DDQ and MMF analytics | `DdqAnalytics.razor`, `MmfAnalytics.razor` | `AnalyticsConnector.cs` | Operational data |
+| Collection management | `CollectionManagement.razor` | `PlantApiConnector.cs`, `CollectionCqrs.cs` | Jobs and API responses |
+| Plant configuration | `LssPlants.razor` | `PlantApiConnector.cs` | Plants and API configuration |
+| Collection schedules | `CollectionSchedules.razor` | Collection services | Schedules and jobs |
+| Report automation | Report pages | Report services and workers | Reports and deliveries |
+| User access | `StaffAccounts.razor` | ASP.NET Core Identity | Identity tables |
+| Audit and data quality | `AuditLogs.razor`, `DataQuality.razor` | Audit and validation services | Audit and anomaly tables |
 
-All application records are stored in relational Microsoft SQL Server tables. `DummyApiDataSeeder.cs` creates one connected development dataset for plants, API configurations, collections, readings, schedules, anomalies, reports, recipients and deliveries.
-
-| Function | Razor frontend | C# logic | Connector | Database table |
-| --- | --- | --- | --- | --- |
-| Login | `Login.razor` | `Login.cs` | `LoginConnector.cs` | `UserTable.cs` |
-| Dashboard | `Dashboard.razor` | `Dashboard.cs` | `RepositoryBackendApi.cs` | `DashboardDocumentTable.cs` |
-| DDQ analytics | `DdqAnalytics.razor` | `DdqAnalytics.cs` | `AnalyticsConnector.cs` | Stored operational data |
-| MMF analytics | `MmfAnalytics.razor` | `MmfAnalytics.cs` | `AnalyticsConnector.cs` | Stored operational data |
-| On-demand reports | `OnDemandReport.razor` | `OnDemandReport.cs` | EF Core | `ReportExecutions` |
-| Report history | `ReportHistory.razor` | `ReportHistory.cs` | EF Core | `ReportExecutions` |
-| Collection management | `CollectionManagement.razor` | `CollectionManagement.cs` | `PlantApiConnector.cs` | `CollectionJobs`, `RawApiResponses` |
-| Staff accounts | `StaffAccounts.razor` | `StaffAccounts.cs` | ASP.NET Core Identity | `UserTable.cs` |
-| LSS plants | `LssPlants.razor` | `LssPlants.cs` | `PlantApiConnector.cs` | `LssPlantTable.cs` |
-| Collection schedules | `CollectionSchedules.razor` | `CollectionSchedules.cs` | EF Core | `CollectionSchedules` |
-| Scheduled reports | `ScheduledReports.razor` | `ScheduledReports.cs` | EF Core | `ReportSchedules`, `ReportScheduleRecipients`, `ReportDeliveryAttempts`, `ReportDeliveryRecipients` |
-| Data quality | `DataQuality.razor` | `DataQuality.cs` | `ExternalConnectors.cs` | `OperationalTables.cs` |
-| Audit logs | `AuditLogs.razor` | `AuditLogs.cs` | `AuditConnector.cs` | `AuditEventTable.cs` |
-
-## Required framework files
-
-`Program.cs`, `App.razor`, `Routes.razor`, `_Imports.razor`, layouts, the project file and application settings remain separate because ASP.NET Core and Blazor require them.
-
-## Database files
-
-- `DatabaseConnection.cs` maps C# entities to SQL Server.
-- `CreateTables.cs` creates and upgrades development tables.
-- `DatabaseSettings.cs` represents database configuration.
-- Operational relationships use foreign keys; generic JSON storage is no longer used.
+`DatabaseConnection.cs` maps C# entities to SQL Server. `CreateTables.cs`
+creates and upgrades the development schema. Operational records use relational
+SQL tables.

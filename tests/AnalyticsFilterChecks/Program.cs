@@ -160,9 +160,11 @@ if (CollectionSchedulePolicy.ApiDataType("DDQ", "Daily") != "Day Ahead"
     || CollectionSchedulePolicy.ApiDataType("MMF", "MMF") != "MMF")
     throw new Exception("Collection schedule API data-type mapping failed");
 var scheduleNow = new DateTime(2026, 9, 23, 10, 30, 0);
-if (!CollectionSchedulePolicy.IsDue("Rolling 24 Hour", "15 minutes", "00:15", "", "", scheduleNow, scheduleNow.AddMinutes(-15))
-    || CollectionSchedulePolicy.IsDue("Rolling 24 Hour", "15 minutes", "00:15", "", "", scheduleNow, scheduleNow.AddMinutes(-14)))
-    throw new Exception("Interval collection schedule timing failed");
+if (!CollectionSchedulePolicy.IsDue("Rolling 24 Hour", "15 minutes", "10:00", "", "", scheduleNow, null)
+    || CollectionSchedulePolicy.IsDue("Rolling 24 Hour", "15 minutes", "11:00", "", "", scheduleNow, null)
+    || CollectionSchedulePolicy.IsDue("Rolling 24 Hour", "15 minutes", "10:00", "", "", scheduleNow,
+        new DateTime(2026, 9, 23, 10, 0, 0)))
+    throw new Exception("Rolling 24 Hour daily schedule timing failed");
 if (!CollectionSchedulePolicy.IsDue("Daily", "15 minutes", "10:00", "", "", scheduleNow, null)
     || CollectionSchedulePolicy.IsDue("Daily", "15 minutes", "11:00", "", "", scheduleNow, null))
     throw new Exception("Daily collection schedule timing failed");
@@ -175,8 +177,8 @@ if (!CollectionSchedulePolicy.IsDue("4 Month", "15 minutes", "10:00", "23", "1,5
     throw new Exception("Four-month collection schedule timing failed");
 if (CollectionSchedulePolicy.SubmissionDateTime("Daily", "10:00", scheduleNow)
         != new DateTime(2026, 9, 23, 10, 0, 0)
-    || CollectionSchedulePolicy.SubmissionDateTime("Rolling 24 Hour", "00:15",
-        scheduleNow.AddSeconds(37)) != scheduleNow)
+    || CollectionSchedulePolicy.SubmissionDateTime("Rolling 24 Hour", "10:00",
+        scheduleNow.AddSeconds(37)) != new DateTime(2026, 9, 23, 10, 0, 0))
     throw new Exception("Collection schedule must produce the authoritative submission date and minute.");
 Console.WriteLine("PASS: Collection schedule timing and API endpoint mapping");
 var referenceSubmission = new DateTime(2026, 9, 19, 9, 0, 0);

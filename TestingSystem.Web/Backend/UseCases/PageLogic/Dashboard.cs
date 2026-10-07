@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.JSInterop;
 using TestingSystem.Web.Connectors.UseCases;
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
@@ -18,7 +17,8 @@ public partial class Dashboard : ComponentBase
     private int DdqSuccessfulRequests { get; set; }
     private int DdqFailedRequests { get; set; }
     private int ActiveMmf { get; set; }
-    [Inject] private IJSRuntime JavaScript { get; set; } = default!;
+    [Inject] private IRepositoryBackendApi RepositoryBackend { get; set; } = default!;
+    [Inject] private ILogger<Dashboard> Logger { get; set; } = default!;
 
     private IReadOnlyList<DashboardRecentRecord> RecentRecords { get; set; } = [];
     private IReadOnlyList<DashboardMetricItem> PlantItems { get; set; } = [];
@@ -35,6 +35,7 @@ public partial class Dashboard : ComponentBase
     private string DashboardLoadError { get; set; } = string.Empty;
     private string DashboardStatusError { get; set; } = string.Empty;
     private RepositoryStatusResponse? RepositoryStatus { get; set; }
+    private bool IsReloading { get; set; }
     private bool DashboardDataAvailable => !IsDashboardLoading && string.IsNullOrWhiteSpace(DashboardLoadError);
 
     private string MetricValue(int value) => DashboardDataAvailable ? value.ToString() : "—";
@@ -42,25 +43,41 @@ public partial class Dashboard : ComponentBase
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        var statusTask = LoadRepositoryStatusAsync();
-        await LoadDashboardDataAsync();
-        await statusTask;
+        await ReloadDashboardAsync();
+    }
+
+    private async Task ReloadDashboardAsync()
+    {
+        if (IsReloading) return;
+
+        IsReloading = true;
+        IsDashboardLoading = true;
+        DashboardLoadError = string.Empty;
+        DashboardStatusError = string.Empty;
+
+        try
+        {
+            await Task.WhenAll(LoadRepositoryStatusAsync(), LoadDashboardDataAsync());
+        }
+        finally
+        {
+            IsDashboardLoading = false;
+            IsReloading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task LoadRepositoryStatusAsync()
     {
         try
         {
-            RepositoryStatus = await JavaScript.InvokeAsync<RepositoryStatusResponse>(
-                "sblssBackendApi.get", "/api/status", 30000);
+            RepositoryStatus = await RepositoryBackend.GetStatusAsync();
         }
-        catch (JSException exception)
+        catch (Exception exception)
         {
-            DashboardStatusError = exception.Message;
-        }
-        finally
-        {
-            await InvokeAsync(StateHasChanged);
+            Logger.LogError(exception, "Unable to load the dashboard repository status.");
+            RepositoryStatus = null;
+            DashboardStatusError = "The database status could not be confirmed. Try again.";
         }
     }
 
@@ -68,8 +85,7 @@ public partial class Dashboard : ComponentBase
     {
         try
         {
-            var dashboard = await JavaScript.InvokeAsync<DashboardResponse>(
-                "sblssBackendApi.get", "/api/dashboard", 30000);
+            var dashboard = await RepositoryBackend.GetDashboardAsync();
             RecentRecords = dashboard.RecentRecords;
             PlantItems = dashboard.Plants;
             SuccessfulItems = dashboard.SuccessfulDdq;
@@ -81,14 +97,10 @@ public partial class Dashboard : ComponentBase
             DdqFailedRequests = FailedItems.Count;
             ActiveMmf = MmfItems.Count;
         }
-        catch (JSException exception)
+        catch (Exception exception)
         {
-            DashboardLoadError = exception.Message;
-        }
-        finally
-        {
-            IsDashboardLoading = false;
-            await InvokeAsync(StateHasChanged);
+            Logger.LogError(exception, "Unable to load the dashboard repository data.");
+            DashboardLoadError = "Repository data could not be loaded. Check the server connection and try again.";
         }
     }
 

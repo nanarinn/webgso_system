@@ -5,6 +5,13 @@ $projectFile = Join-Path $projectRoot "TestingSystem.Web\TestingSystem.Web.cspro
 $settingsFile = Join-Path $projectRoot "TestingSystem.Web\appsettings.json"
 
 Set-Location -LiteralPath $projectRoot
+$dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
+if (-not $dotnet) {
+    $dotnet = Join-Path $projectRoot '.dotnet\dotnet.exe'
+}
+if (-not (Test-Path -LiteralPath $dotnet)) {
+    throw ".NET 8 SDK was not found. Install the .NET 8 SDK, then run this script again."
+}
 
 $settings = Get-Content -LiteralPath $settingsFile -Raw | ConvertFrom-Json
 $expectedTenantId = "27971c0d-2474-4fa6-bc9c-d30415822fc9"
@@ -18,7 +25,7 @@ if ($settings.EntraId.ClientId -ne $expectedClientId) {
 }
 
 Write-Host "Trusting the ASP.NET Core HTTPS development certificate..." -ForegroundColor Cyan
-dotnet dev-certs https --trust
+& $dotnet dev-certs https --trust
 if ($LASTEXITCODE -ne 0) {
     throw "The HTTPS certificate was not trusted. Approve the Windows certificate prompt and run this script again."
 }
@@ -65,7 +72,7 @@ try {
 
     Write-Host "Client Secret Value is valid for the configured sblss_system application." -ForegroundColor Green
 
-    dotnet user-secrets set "EntraId:ClientSecret" $clientSecret --project $projectFile
+    & $dotnet user-secrets set "EntraId:ClientSecret" $clientSecret --project $projectFile
     if ($LASTEXITCODE -ne 0) {
         throw "Unable to save the Entra client secret."
     }
@@ -78,12 +85,12 @@ finally {
     $secureSecret = $null
 }
 
-dotnet user-secrets set "EntraId:Enabled" "true" --project $projectFile
+& $dotnet user-secrets set "EntraId:Enabled" "true" --project $projectFile
 if ($LASTEXITCODE -ne 0) {
     throw "Unable to enable Microsoft Entra sign-in."
 }
 
-dotnet dev-certs https --check --trust --quiet
+& $dotnet dev-certs https --check --trust --quiet
 if ($LASTEXITCODE -ne 0) {
     throw "The HTTPS certificate is still not trusted."
 }
