@@ -30,5 +30,5 @@ if ($LASTEXITCODE -ne 0) { throw "Unable to enable report email." }
 & $dotnet user-secrets set "ReportEmail:SenderMailbox" $SenderMailbox --project $project
 if ($LASTEXITCODE -ne 0) { throw "Unable to save the sender mailbox." }
 
-Write-Host "Scheduled report email is enabled for $SenderMailbox." -ForegroundColor Green
+Write-Host "Report and user access notification email is enabled for $SenderMailbox." -ForegroundColor Green
 Write-Host "Confirm that the Entra app has Microsoft Graph Application permission Mail.Send with admin consent, then restart the system." -ForegroundColor Cyan

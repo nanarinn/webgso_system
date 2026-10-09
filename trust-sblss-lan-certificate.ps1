@@ -1,5 +1,5 @@
 param(
-    [string]$IPAddress = "192.168.0.140",
+    [string]$IPAddress = "10.122.147.3",
     [string]$HostName = "sblss-lan.local",
     [string]$CertificatePath = ".\sblss-lan.cer"
 )
@@ -20,9 +20,9 @@ Import-Certificate -FilePath $resolvedCertificate.Path -CertStoreLocation "Cert:
 $hostsPath = Join-Path $env:WINDIR "System32\drivers\etc\hosts"
 $hostsContent = Get-Content -LiteralPath $hostsPath -ErrorAction Stop
 $hostsContent = @($hostsContent | Where-Object { $_ -notmatch "\s$([regex]::Escape($HostName))(?:\s|$)" })
-$hostsContent += "$IPAddress`t$HostName`t# SBLSS LAN"
+$hostsContent += "$IPAddress`t$HostName`t# SBLSS ZeroTier"
 Set-Content -LiteralPath $hostsPath -Value $hostsContent -Encoding ascii
 
-Write-Host "SBLSS LAN certificate and hostname are trusted." -ForegroundColor Green
+Write-Host "SBLSS ZeroTier certificate and hostname are trusted." -ForegroundColor Green
 Write-Host "Open https://$HostName`:8088/login" -ForegroundColor Cyan
 

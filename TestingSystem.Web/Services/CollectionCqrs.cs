@@ -143,7 +143,7 @@ public sealed class CollectionCommandProcessor(
                 {
                     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
                     var replacedReadings = 0;
-                    if (job.ReplaceExisting)
+                    if (CollectionProcessingPolicy.ShouldReplaceExisting(apiType, job.ReplaceExisting))
                     {
                         var dayStart = job.SubmissionDate.ToDateTime(TimeOnly.MinValue);
                         var dayEnd = dayStart.AddDays(1);

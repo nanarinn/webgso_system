@@ -7,6 +7,7 @@ using TestingSystem.Web.Services;
 using TestingSystem.Web.Database.Entities;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
@@ -109,11 +110,11 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
             job.ApiType,
             job.DataType,
             job.Mode,
-            SubmissionMinute = new DateTime(job.SubmissionDate.Year, job.SubmissionDate.Month,
-                job.SubmissionDate.Day, job.SubmissionDate.Hour, job.SubmissionDate.Minute, 0)
+            ScheduleGroup = CollectionScheduleGroup(job),
+            SubmissionMinute = CollectionBatchSlot(job)
         })
         .Select(group => new CollectionBatch(
-            $"{group.Key.ApiType}-{group.Key.DataType}-{group.Key.SubmissionMinute:yyyyMMddHHmm}",
+            $"{group.Key.ApiType}-{group.Key.DataType}-{group.Key.ScheduleGroup}-{group.Key.SubmissionMinute:yyyyMMddHHmm}",
             group.Key.ApiType,
             string.IsNullOrWhiteSpace(group.Key.DataType) ? "General data" : group.Key.DataType,
             group.Key.Mode,
@@ -122,6 +123,26 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
             group.OrderBy(job => job.PlantName).ToList()))
         .OrderByDescending(batch => batch.RunAt)
         .ToList();
+
+    private static DateTime CollectionBatchSlot(DemoCollectionJob job)
+    {
+        var minute = new DateTime(job.SubmissionDate.Year, job.SubmissionDate.Month,
+            job.SubmissionDate.Day, job.SubmissionDate.Hour, job.SubmissionDate.Minute, 0);
+        if (string.IsNullOrWhiteSpace(job.ScheduleCode)) return minute;
+
+        // Older interval schedules could be queued across several worker cycles. Keep every
+        // plant from the same execution together instead of showing partial success rows.
+        return minute.AddMinutes(-(minute.Minute % 15));
+    }
+
+    private static string CollectionScheduleGroup(DemoCollectionJob job)
+    {
+        if (string.IsNullOrWhiteSpace(job.ScheduleCode)) return "manual";
+        var parts = job.ScheduleCode.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 4 && int.TryParse(parts[^1], out _)
+            ? string.Join('-', parts[..^1])
+            : job.ScheduleCode;
+    }
 
     private List<CollectionBatch> SelectedSectionBatches
     {
@@ -170,7 +191,16 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     {
         CurrentActorName = await ResolveCurrentActorNameAsync();
         await LoadPageAsync();
+        SelectFirstAvailableSection();
         RefreshTask = RefreshJobsAsync(RefreshCancellation.Token);
+    }
+
+    private void SelectFirstAvailableSection()
+    {
+        if (SelectedSectionBatches.Count > 0) return;
+        var available = CollectionSectionDefinitions.FirstOrDefault(section =>
+            FilteredBatches.Any(batch => BatchBelongsToSection(batch, section)));
+        if (available is not null) SelectedCollectionSectionKey = available.Key;
     }
 
     private async Task<string> ResolveCurrentActorNameAsync()
@@ -237,12 +267,24 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
 
     private async Task LoadJobsAsync()
     {
+        const int jobsPerSection = 750;
+        var idTasks = new[]
+        {
+            LoadLatestSectionJobIdsAsync(job => job.DataType == "Rolling 24 Hour", jobsPerSection),
+            LoadLatestSectionJobIdsAsync(job => job.DataType == "Day Ahead" || job.DataType == "Daily", jobsPerSection),
+            LoadLatestSectionJobIdsAsync(job => job.DataType == "Week Ahead" || job.DataType == "Weekly", jobsPerSection),
+            LoadLatestSectionJobIdsAsync(job => job.DataType == "4 Month Ahead" || job.DataType == "4 Month", jobsPerSection),
+            LoadLatestSectionJobIdsAsync(job => job.DataType == "MMF", jobsPerSection)
+        };
+        var sectionJobIds = (await Task.WhenAll(idTasks)).SelectMany(ids => ids).ToHashSet();
+
         await using var database = await ContextFactory.CreateDbContextAsync();
         Jobs = await (from job in database.CollectionJobs.AsNoTracking()
             join plant in database.LssPlants.AsNoTracking() on job.PlantId equals plant.Id
             join schedule in database.CollectionSchedules.AsNoTracking()
                 on job.CollectionScheduleId equals (int?)schedule.Id into scheduleGroup
             from schedule in scheduleGroup.DefaultIfEmpty()
+            where sectionJobIds.Contains(job.Id)
             orderby job.StartedAt descending
             select new DemoCollectionJob(
                 job.CollectionId,
@@ -263,10 +305,23 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 null,
                 "",
                 job.Id,
-                job.ErrorMessage ?? string.Empty))
-            .Take(500)
+                job.ErrorMessage ?? string.Empty,
+                schedule == null ? "" : schedule.ScheduleCode))
             .ToListAsync();
         Sequence = Math.Max(Sequence, Jobs.Count);
+    }
+
+    private async Task<List<long>> LoadLatestSectionJobIdsAsync(
+        Expression<Func<CollectionJobEntity, bool>> predicate, int take)
+    {
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        return await database.CollectionJobs.AsNoTracking()
+            .Where(predicate)
+            .OrderByDescending(job => job.StartedAt)
+            .ThenByDescending(job => job.Id)
+            .Select(job => job.Id)
+            .Take(take)
+            .ToListAsync();
     }
 
     private void OpenJobDetail(DemoCollectionJob job)
@@ -283,7 +338,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
 
     private async Task RefreshJobsAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(20));
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken))
@@ -501,18 +556,22 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
             await strategy.ExecuteAsync(async () =>
             {
                 await using var transaction = await database.Database.BeginTransactionAsync();
-                var dayStart = submissionDate.ToDateTime(TimeOnly.MinValue);
-                var dayEnd = dayStart.AddDays(1);
-                var replacedJobIds = await database.CollectionJobs.AsNoTracking()
-                    .Where(job => job.Id != entity.Id && job.PlantId == item.PlantDatabaseId
-                        && job.DataType == item.DataType && job.SubmissionDate == submissionDate)
-                    .Select(job => job.Id).ToListAsync();
-                var replacedReadings = await database.SolarApiReadings
-                    .Where(reading => reading.PlantId == item.PlantDatabaseId && reading.DataType == item.DataType
-                        && reading.SubmissionDateTime >= dayStart && reading.SubmissionDateTime < dayEnd)
-                    .ExecuteDeleteAsync();
-                if (replacedJobIds.Count > 0)
-                    await database.DataAnomalies.Where(anomaly => replacedJobIds.Contains(anomaly.CollectionJobId)).ExecuteDeleteAsync();
+                var replacedReadings = 0;
+                if (CollectionProcessingPolicy.ShouldReplaceExisting(item.ApiType, true))
+                {
+                    var dayStart = submissionDate.ToDateTime(TimeOnly.MinValue);
+                    var dayEnd = dayStart.AddDays(1);
+                    var replacedJobIds = await database.CollectionJobs.AsNoTracking()
+                        .Where(job => job.Id != entity.Id && job.PlantId == item.PlantDatabaseId
+                            && job.DataType == item.DataType && job.SubmissionDate == submissionDate)
+                        .Select(job => job.Id).ToListAsync();
+                    replacedReadings = await database.SolarApiReadings
+                        .Where(reading => reading.PlantId == item.PlantDatabaseId && reading.DataType == item.DataType
+                            && reading.SubmissionDateTime >= dayStart && reading.SubmissionDateTime < dayEnd)
+                        .ExecuteDeleteAsync();
+                    if (replacedJobIds.Count > 0)
+                        await database.DataAnomalies.Where(anomaly => replacedJobIds.Contains(anomaly.CollectionJobId)).ExecuteDeleteAsync();
+                }
 
                 database.RawApiResponses.Add(CreateRawResponse(entity.Id, apiResult));
                 database.SolarApiReadings.AddRange(translated.Readings);

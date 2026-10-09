@@ -7,6 +7,7 @@ using TestingSystem.Web.Backend.UseCases.UCLSS027Audit;
 using TestingSystem.Web.Connectors.UseCases;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Models;
+using System.Security.Claims;
 
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
@@ -25,6 +26,8 @@ public partial class StaffAccounts : ComponentBase
     private bool IsSaving { get; set; }
     private bool IsSuperAdministrator { get; set; }
     private string CurrentActor { get; set; } = "Unknown";
+    private string CurrentUserId { get; set; } = string.Empty;
+    private int UnreadRequestCount { get; set; }
     private string CurrentRole { get; set; } = SystemRoles.Administrator;
     private UserRow? DecisionUser { get; set; }
     private string DecisionStatus { get; set; } = string.Empty;
@@ -39,9 +42,32 @@ public partial class StaffAccounts : ComponentBase
     {
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         CurrentActor = state.User.Identity?.Name ?? "Unknown";
+        CurrentUserId = state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
         IsSuperAdministrator = state.User.IsInRole(SystemRoles.SuperAdministrator);
         CurrentRole = IsSuperAdministrator ? SystemRoles.SuperAdministrator : SystemRoles.Administrator;
         await LoadUsersAsync();
+        await LoadUnreadRequestCountAsync();
+    }
+
+    private async Task LoadUnreadRequestCountAsync()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentUserId)) return;
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        UnreadRequestCount = await database.UserAccessNotifications.AsNoTracking().CountAsync(item =>
+            item.UserId == CurrentUserId && item.NotificationType == "AccessRequested" && item.ReadAt == null);
+    }
+
+    private async Task ReviewUnreadRequestsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentUserId)) return;
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        await database.UserAccessNotifications
+            .Where(item => item.UserId == CurrentUserId
+                && item.NotificationType == "AccessRequested" && item.ReadAt == null)
+            .ExecuteUpdateAsync(update => update.SetProperty(item => item.ReadAt, DateTimeOffset.UtcNow));
+        UnreadRequestCount = 0;
+        SearchTerm = UserAccessStatus.Pending;
+        UserPage = 1;
     }
 
     private async Task LoadUsersAsync()

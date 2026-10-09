@@ -39,6 +39,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         builder.Entity<UserAccessNotification>(item =>
         {
             item.Property(x => x.UserId).HasMaxLength(450);
+            item.Property(x => x.RelatedUserId).HasMaxLength(450);
             item.Property(x => x.Email).HasMaxLength(320);
             item.Property(x => x.NotificationType).HasMaxLength(40);
             item.Property(x => x.Subject).HasMaxLength(300);
@@ -46,6 +47,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.Property(x => x.DeliveryStatus).HasMaxLength(30);
             item.Property(x => x.ErrorMessage).HasMaxLength(1000);
             item.HasIndex(x => x.CreatedAt);
+            item.HasIndex(x => new { x.UserId, x.ReadAt, x.CreatedAt });
         });
 
 

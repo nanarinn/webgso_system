@@ -159,6 +159,11 @@ if (CollectionSchedulePolicy.ApiDataType("DDQ", "Daily") != "Day Ahead"
     || CollectionSchedulePolicy.ApiDataType("DDQ", "4 Month") != "4 Month Ahead"
     || CollectionSchedulePolicy.ApiDataType("MMF", "MMF") != "MMF")
     throw new Exception("Collection schedule API data-type mapping failed");
+if (CollectionProcessingPolicy.ShouldReplaceExisting("MMF", true)
+    || !CollectionProcessingPolicy.ShouldReplaceExisting("DDQ", true)
+    || CollectionProcessingPolicy.ShouldReplaceExisting("DDQ", false))
+    throw new Exception("MMF collection history must be appended while DDQ replacement remains explicit");
+Console.WriteLine("PASS: MMF collections retain historical 15-minute readings");
 var scheduleNow = new DateTime(2026, 9, 23, 10, 30, 0);
 if (!CollectionSchedulePolicy.IsDue("Rolling 24 Hour", "15 minutes", "10:00", "", "", scheduleNow, null)
     || CollectionSchedulePolicy.IsDue("Rolling 24 Hour", "15 minutes", "11:00", "", "", scheduleNow, null)

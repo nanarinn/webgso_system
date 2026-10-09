@@ -1,5 +1,5 @@
 param(
-    [string]$IPAddress = "192.168.0.140",
+    [string]$IPAddress = "10.122.147.3",
     [string]$HostName = "sblss-lan.local"
 )
 

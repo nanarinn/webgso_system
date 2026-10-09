@@ -198,6 +198,16 @@ if ($Share) {
     if (-not $isAdministrator) {
         throw "Network sharing needs an Administrator terminal to create the LocalSubnet firewall rule."
     }
+    if ($ShareEntra) {
+        $hostsPath = Join-Path $env:WINDIR "System32\drivers\etc\hosts"
+        $hostsContent = Get-Content -LiteralPath $hostsPath -ErrorAction Stop
+        $hostsContent = @($hostsContent | Where-Object {
+            $_ -notmatch "\s$([regex]::Escape($ShareHostName))(?:\s|$)"
+        })
+        $hostsContent += "$networkAddress`t$ShareHostName`t# SBLSS shared HTTPS"
+        Set-Content -LiteralPath $hostsPath -Value $hostsContent -Encoding ascii
+        Write-Host "Mapped $ShareHostName to $networkAddress on this computer." -ForegroundColor Green
+    }
     $networkProfile = Get-NetConnectionProfile -InterfaceIndex $networkInterface.InterfaceIndex -ErrorAction SilentlyContinue
     $firewallProfile = if ($null -eq $networkProfile) {
         "Any"

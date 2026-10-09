@@ -14,15 +14,18 @@ public static class DemoData
             ? $"MMF {selection} data generated at {interval} interval for all {plantCount} active LSS plant(s) between {dataRangeStart:dd MMM yyyy HH:mm} and {dataRangeEnd:dd MMM yyyy HH:mm} ({recordCount:N0} records)."
             : $"{type} {selection} data generated at {interval} interval for all {plantCount} active LSS plant(s) from the {submissionDate:dd MMM yyyy HH:mm} scheduled submission ({recordCount:N0} records).";
         if (status == "Failed") description += " Generation completed with validation errors and requires review.";
-        return new(reference, $"{type} On-Demand Analysis {sequence:000}", type, submissionDate, generatedAt, description,
+        return new(reference, $"{type} Analysis {sequence:000}", type, submissionDate, generatedAt, description,
             status, selection, plantCount, recordCount, anomalyCount, intervalMinutes, dataRangeStart, dataRangeEnd);
     }
+
+    public static string SimplifyAnalysisName(string name) =>
+        name.Replace(" On-Demand Analysis ", " Analysis ", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed record DemoCollectionJob(string CollectionId, string PlantName, string State, string Mode, DateTime SubmissionDate, DateTime RunAt,
     string Status, string Description, string ResponseMessage, double DurationSeconds, string ApiType = "DDQ", string DataType = "",
     string ScheduleName = "", int ReadingCount = 0, int AnomalyCount = 0, int? HttpStatusCode = null, string ContentType = "",
-    long DatabaseId = 0, string ErrorMessage = "");
+    long DatabaseId = 0, string ErrorMessage = "", string ScheduleCode = "");
 public sealed record DemoAnalysisResult(string Reference, string Name, string Type, DateTime SubmissionDate, DateTime GeneratedAt,
     string Description, string Status, string DataSelection = "", int PlantCount = 0, int RecordCount = 0, int AnomalyCount = 0,
     int IntervalMinutes = 15, DateTime? DataRangeStart = null, DateTime? DataRangeEnd = null);

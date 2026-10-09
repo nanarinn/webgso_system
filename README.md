@@ -14,7 +14,7 @@ Double-click `run-sblss-system.cmd` to start the website on the host with VM SQL
 For PowerShell, the equivalent start command is:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run-local-sqlserver.ps1 -VmSqlServer -Share -ShareAddress 192.168.0.173 -ShareEntra -ShareHostName sblss-lan.local
+powershell -ExecutionPolicy Bypass -File .\run-local-sqlserver.ps1 -VmSqlServer -Share -ShareAddress 10.122.147.3 -ShareEntra -ShareHostName sblss-lan.local
 ```
 
 The command synchronises the MSSQL schema, starts the application with `dotnet watch`, and automatically rebuilds and restarts the application when a code file changes.
@@ -24,6 +24,12 @@ To run with a local SQL Server instead, use `run-local-sqlserver.ps1` without `-
 Database data is retained during schema synchronisation; dummy data is only replaced when `reset-dummy-api-data.ps1` is run explicitly.
 
 Open `https://sblss-lan.local:8088/login` or `http://localhost:5186/login`.
+
+For remote team access, join and authorize both computers on the same ZeroTier
+network. The web server currently uses managed address `10.122.147.3/24`.
+Distribute `SBLSS-ZeroTier-Team-Access.zip`; teammates extract it and double-click
+`Install-SBLSS-Team-Access.cmd`. The installer trusts the public certificate,
+maps `sblss-lan.local` to the ZeroTier address and opens the secure login page.
 
 ### Host the web application in IIS with the VMware database
 
@@ -133,13 +139,14 @@ a Super Admin can approve Staff or Administrator access. Approved users sign in 
 system. Local username and password sign-in continues to work at `http://localhost:5186/login` when
 Entra ID is not configured.
 
-Approval and rejection email records are stored in `UserAccessNotifications`. To send them through
-an SMTP gateway, set `ApprovalEmail:Enabled`, `Host`, `Port`, `Sender`, `UseSsl`, and any required
-`UserName`/`Password` through environment variables or .NET user secrets. Never commit credentials.
+Access request, approval and rejection notifications are stored in `UserAccessNotifications` and
+shown from the notification bell. New requests notify every active Super Admin; decisions notify
+the requesting user. Email uses the Microsoft Graph configuration below when available and falls
+back to the `ApprovalEmail` SMTP settings. Never commit credentials.
 
-### Scheduled report email through Microsoft Graph
+### Report and access notification email through Microsoft Graph
 
-Report Automation sends its CSV attachment in the background through Microsoft Graph. In the Entra
+Report Automation and User Management send email through Microsoft Graph. In the Entra
 app registration, add the Microsoft Graph **Application** permission `Mail.Send` and grant tenant
 administrator consent. The configured sender must be a valid Microsoft 365 mailbox. The report
 service can reuse the `EntraId` tenant, client ID and client secret; only the following settings are

@@ -61,7 +61,7 @@ public partial class DdqAnalytics : ComponentBase
             .OrderBy(p => p.Name)
             .ToListAsync();
         var importedWindow = await database.PublishedReadings()
-            .Where(x => DataTypes.Contains(x.DataType))
+            .Where(x => SelectedDataTypes.Contains(x.DataType))
             .GroupBy(_ => 1)
             .Select(group => new
             {
@@ -74,7 +74,7 @@ public partial class DdqAnalytics : ComponentBase
         }
     }
 
-    private Task OnPlantsChanged(HashSet<int> plantIds)
+    private async Task OnPlantsChanged(HashSet<int> plantIds)
     {
         SelectedPlantIds = plantIds;
         if (plantIds.Count > 0)
@@ -82,10 +82,10 @@ public partial class DdqAnalytics : ComponentBase
             SelectedStates.Clear();
             SelectedRegions.Clear();
         }
-        return Task.CompletedTask;
+        await RefreshLatestSubmissionAsync();
     }
 
-    private Task OnStatesChanged(HashSet<string> states)
+    private async Task OnStatesChanged(HashSet<string> states)
     {
         SelectedStates = states;
         if (states.Count > 0)
@@ -94,10 +94,10 @@ public partial class DdqAnalytics : ComponentBase
             SelectedPlantIds = [];
             FilterVersion++;
         }
-        return Task.CompletedTask;
+        await RefreshLatestSubmissionAsync();
     }
 
-    private Task OnRegionsChanged(HashSet<string> regions)
+    private async Task OnRegionsChanged(HashSet<string> regions)
     {
         SelectedRegions = regions;
         if (regions.Count > 0)
@@ -106,13 +106,45 @@ public partial class DdqAnalytics : ComponentBase
             SelectedPlantIds = [];
             FilterVersion++;
         }
-        return Task.CompletedTask;
+        await RefreshLatestSubmissionAsync();
     }
 
-    private void ToggleDataType(string dataType, object? value)
+    private async Task ToggleDataType(string dataType, object? value)
     {
         if (value is true) SelectedDataTypes.Add(dataType);
         else SelectedDataTypes.Remove(dataType);
+        await RefreshLatestSubmissionAsync();
+    }
+
+    private async Task RefreshLatestSubmissionAsync()
+    {
+        if (SelectedDataTypes.Count == 0)
+        {
+            SubmissionDateTime = null;
+            ValidationMessage = "Select at least one data type.";
+            return;
+        }
+
+        var matchingPlantIds = AnalyticsPlantFilter.Match(
+            RegisteredPlants, SelectedPlantIds, SelectedStates, SelectedRegions)
+            .Select(plant => plant.Id)
+            .ToArray();
+        if (matchingPlantIds.Length == 0)
+        {
+            SubmissionDateTime = null;
+            ValidationMessage = "No active plants match the selected location filter.";
+            return;
+        }
+
+        await using var database = await ContextFactory.CreateDbContextAsync();
+        var latestSubmission = await database.PublishedReadings()
+            .Where(reading => matchingPlantIds.Contains(reading.PlantId)
+                && SelectedDataTypes.Contains(reading.DataType))
+            .MaxAsync(reading => (DateTime?)reading.SubmissionDateTime);
+        SubmissionDateTime = latestSubmission.HasValue ? TruncateToMinute(latestSubmission.Value) : null;
+        ValidationMessage = latestSubmission.HasValue
+            ? string.Empty
+            : "No stored DDQ submission is available for the selected plant and data type. Run the collection first.";
     }
 
     private void OnDataTypeIntervalChanged(string dataType, ChangeEventArgs args)

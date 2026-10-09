@@ -70,6 +70,17 @@ public static class EntraAuthentication
                         Check(await users.AddLoginAsync(user, new UserLoginInfo(Scheme, identity.Key, "Microsoft")));
                         await audit.RecordAsync(identity.Email, "RequestAccess", "Pending", "ApplicationUser", user.Id,
                             "Microsoft Entra identity verified; administrator approval is required.", context.HttpContext.TraceIdentifier);
+                        try
+                        {
+                            var notifications = services.GetRequiredService<IUserAccessNotificationService>();
+                            await notifications.QueueRequestAsync(user, context.HttpContext.RequestAborted);
+                        }
+                        catch (Exception notificationException)
+                        {
+                            services.GetRequiredService<ILoggerFactory>().CreateLogger("MicrosoftEntraSignIn")
+                                .LogWarning(notificationException,
+                                    "The access request was saved, but its Super Admin notification could not be prepared.");
+                        }
                     }
 
                     if (await users.IsLockedOutAsync(user) || !await signInManager.CanSignInAsync(user))

@@ -55,12 +55,20 @@ public static class DatabaseInitializer
             BEGIN
                 CREATE TABLE [UserAccessNotifications] (
                     [Id] bigint IDENTITY PRIMARY KEY, [UserId] nvarchar(450) NOT NULL,
+                    [RelatedUserId] nvarchar(450) NULL,
                     [Email] nvarchar(320) NOT NULL, [NotificationType] nvarchar(40) NOT NULL,
                     [Subject] nvarchar(300) NOT NULL, [Body] nvarchar(2000) NOT NULL,
                     [DeliveryStatus] nvarchar(30) NOT NULL, [ErrorMessage] nvarchar(1000) NULL,
-                    [CreatedAt] datetimeoffset NOT NULL, [SentAt] datetimeoffset NULL);
+                    [CreatedAt] datetimeoffset NOT NULL, [SentAt] datetimeoffset NULL, [ReadAt] datetimeoffset NULL);
                 CREATE INDEX [IX_UserAccessNotifications_CreatedAt] ON [UserAccessNotifications] ([CreatedAt]);
             END
+            IF COL_LENGTH('UserAccessNotifications', 'RelatedUserId') IS NULL
+                ALTER TABLE [UserAccessNotifications] ADD [RelatedUserId] nvarchar(450) NULL;
+            IF COL_LENGTH('UserAccessNotifications', 'ReadAt') IS NULL
+                ALTER TABLE [UserAccessNotifications] ADD [ReadAt] datetimeoffset NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_UserAccessNotifications_UserId_ReadAt_CreatedAt' AND object_id = OBJECT_ID(N'[UserAccessNotifications]'))
+                CREATE INDEX [IX_UserAccessNotifications_UserId_ReadAt_CreatedAt]
+                    ON [UserAccessNotifications] ([UserId], [ReadAt], [CreatedAt] DESC);
             """);
     }
 

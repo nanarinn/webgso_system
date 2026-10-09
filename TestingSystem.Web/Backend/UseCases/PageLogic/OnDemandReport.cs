@@ -53,13 +53,15 @@ public partial class OnDemandReport : ComponentBase
         await using var database = await ContextFactory.CreateDbContextAsync();
         Results = string.IsNullOrWhiteSpace(CurrentRequesterKey)
             ? []
-            : await database.ReportExecutions.AsNoTracking()
+            : (await database.ReportExecutions.AsNoTracking()
                 .Where(x => x.ReportType == "On-Demand" && x.RequestedBy == CurrentRequesterKey)
                 .OrderByDescending(x => x.RequestedAt).Select(x => new DemoAnalysisResult(x.ReportId, x.Name, x.DataType,
                     x.SubmissionDate, x.RequestedAt.LocalDateTime, x.Description,
                     x.GenerationStatus == "Completed" ? "Successful" : x.GenerationStatus,
                     x.DataSelection, x.PlantCount, x.RecordCount, x.AnomalyCount,
-                    x.IntervalMinutes, x.DataRangeStart, x.DataRangeEnd)).ToListAsync();
+                    x.IntervalMinutes, x.DataRangeStart, x.DataRangeEnd)).ToListAsync())
+                .Select(result => result with { Name = DemoData.SimplifyAnalysisName(result.Name) })
+                .ToList();
         GenerationSequence = Math.Max(GenerationSequence, Results.Count);
         ActivePlantCount = await database.LssPlants.AsNoTracking().CountAsync(x => x.IsActive);
     }

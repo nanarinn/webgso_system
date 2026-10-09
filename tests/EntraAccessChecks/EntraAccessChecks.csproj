@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="../../TestingSystem.Web/Connectors/UseCases/EntraAccess.cs" Link="EntraAccess.cs" />
     <Compile Include="../../TestingSystem.Web/Backend/UseCases/UserAccessPolicy.cs" Link="UserAccessPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Connectors/UseCases/UserAccessNotificationContent.cs" Link="UserAccessNotificationContent.cs" />
     <Compile Include="../../TestingSystem.Web/Database/UseCases/UserTable.cs" Link="UserTable.cs" />
     <Compile Include="../../TestingSystem.Web/Configuration/SessionSecurity.cs" Link="SessionSecurity.cs" />
   </ItemGroup>

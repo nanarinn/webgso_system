@@ -58,7 +58,8 @@ public sealed class ScheduledCollectionWorker(
             dueCommands.Add((schedule.ScheduleCode, collectionId, new QueueCollectionCommand(
                 schedule.PlantId, schedule.ApiType, dataType, $"Scheduled {schedule.ApiType}",
                 submissionDateTime, "System Scheduler", schedule.RetryCount,
-                ReplaceExisting: true, CollectionId: collectionId,
+                ReplaceExisting: CollectionProcessingPolicy.ShouldReplaceExisting(schedule.ApiType, true),
+                CollectionId: collectionId,
                 CollectionScheduleId: schedule.Id)));
         }
 

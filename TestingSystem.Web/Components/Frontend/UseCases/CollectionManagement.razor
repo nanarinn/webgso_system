@@ -31,7 +31,7 @@
             <input type="search" placeholder="Search plant, collection ID, mode or status..."
                    @bind="SearchTerm" @bind:event="oninput" />
         </label>
-        <span class="result-count">@SelectedSectionBatches.Count collection run(s)</span>
+        <span class="result-count">@SelectedSectionBatches.Count @SelectedCollectionSectionLabel run(s) · @FilteredBatches.Count total</span>
     </section>
 
     <section class="table-panel collection-panel">

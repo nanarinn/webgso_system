@@ -42,5 +42,13 @@ Check(UserAccessPolicy.CanReview(SystemRoles.Administrator, "None", SystemRoles.
 Check(!UserAccessPolicy.CanReview(SystemRoles.Administrator, SystemRoles.Staff, SystemRoles.Administrator));
 Check(!UserAccessPolicy.CanReview(SystemRoles.Administrator, SystemRoles.Administrator, SystemRoles.Staff));
 Check(!UserAccessPolicy.CanReview(SystemRoles.Staff, SystemRoles.Staff, SystemRoles.Staff));
+var requester = new ApplicationUser { DisplayName = "Request User", Email = "request@sae-malaysia.com" };
+var requestNotification = UserAccessNotificationContent.Request(requester);
+Check(requestNotification.Type == "AccessRequested");
+Check(requestNotification.Body.Contains("request@sae-malaysia.com", StringComparison.Ordinal));
+var approvedNotification = UserAccessNotificationContent.Decision(requester, UserAccessStatus.Approved, SystemRoles.Staff);
+Check(approvedNotification.Type == "AccessApproved");
+Check(approvedNotification.Body.Contains(SystemRoles.Staff, StringComparison.Ordinal));
+Check(UserAccessNotificationContent.Decision(requester, UserAccessStatus.Rejected, null).Type == "AccessRejected");
 Check(SessionSecurity.IdleTimeout == TimeSpan.FromMinutes(15));
 Console.WriteLine("Entra identity, safe redirect and access approval policy checks passed.");

@@ -8,4 +8,7 @@ public static class CollectionProcessingPolicy
 
     public static int NormalizeConcurrency(int configuredValue) =>
         Math.Clamp(configuredValue, 1, MaximumAllowedConcurrency);
+
+    public static bool ShouldReplaceExisting(string apiType, bool replacementRequested) =>
+        replacementRequested && !apiType.Equals("MMF", StringComparison.OrdinalIgnoreCase);
 }

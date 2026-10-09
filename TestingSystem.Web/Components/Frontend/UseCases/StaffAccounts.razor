@@ -10,6 +10,15 @@
         <span class="database-source-badge"><i></i> Entra identity + MS SQL access</span>
     </header>
 
+    @if (UnreadRequestCount > 0)
+    {
+        <button class="access-request-alert" type="button" @onclick="ReviewUnreadRequestsAsync">
+            <span class="access-request-alert-icon" aria-hidden="true">!</span>
+            <span><strong>@UnreadRequestCount new access request@(UnreadRequestCount == 1 ? "" : "s")</strong><small>Click to review pending users and mark this alert as read.</small></span>
+            <span class="access-request-alert-action">Review requests <b aria-hidden="true">→</b></span>
+        </button>
+    }
+
     <section class="admin-summary user-access-summary">
         <div><small>Pending approval</small><strong>@Users.Count(x => x.Status == UserAccessStatus.Pending)</strong></div>
         <div><small>Approved</small><strong>@Users.Count(x => x.Status == UserAccessStatus.Approved)</strong></div>
