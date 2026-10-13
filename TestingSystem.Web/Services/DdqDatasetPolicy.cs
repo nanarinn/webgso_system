@@ -31,7 +31,7 @@ public static class DdqDatasetPolicy
         var normalized = (value ?? string.Empty).Trim();
         return normalized.ToLowerInvariant() switch
         {
-            "day ahead" or "five day ahead" or "5 day ahead" or "five-day ahead" => "Day Ahead",
+            "day ahead" or "daily" or "five day ahead" or "5 day ahead" or "five-day ahead" => "Day Ahead",
             "week ahead" or "weekly" => "Week Ahead",
             "4 month ahead" or "4 months ahead" or "four month ahead" or "four months ahead"
                 or "month ahead" or "4 month" => "4 Month Ahead",

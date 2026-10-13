@@ -3,6 +3,7 @@ using TestingSystem.Web.Services;
 using TestingSystem.Web.Components.Shared;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Database.Entities;
+using TestingSystem.Web.Demo;
 using TestingSystem.Web.Components.Frontend.UseCases;
 using System.IO.Compression;
 using System.Security.Claims;
@@ -27,6 +28,22 @@ var frontendDatabaseReferences = Directory
 if (frontendDatabaseReferences.Length > 0)
     throw new Exception($"Frontend Razor files must call backend logic instead of SQL directly: {string.Join(", ", frontendDatabaseReferences)}");
 Console.WriteLine("PASS: Frontend Razor components do not access SQL or EF Core directly");
+
+var scheduledSubmissionTime = new DateTime(2026, 10, 12, 10, 30, 37);
+var scheduledSubmissionOptions = DdqScheduledSubmissionPolicy.Build([
+    new("Rolling 24 Hour", scheduledSubmissionTime, "LSS-001 Rolling schedule", 1),
+    new("Rolling 24 Hour", scheduledSubmissionTime, "LSS-002 Rolling schedule", 2),
+    new("Daily", scheduledSubmissionTime.AddHours(-1), "Daily schedule", 1),
+    new("Rolling 24 Hour", scheduledSubmissionTime.AddDays(-1), "Rolling schedule", 1)
+]);
+if (scheduledSubmissionOptions.Count != 3
+    || scheduledSubmissionOptions[0].SubmissionDateTime.Second != 0
+    || scheduledSubmissionOptions[0].PlantCount != 2
+    || scheduledSubmissionOptions[0].ScheduleName != "Rolling 24 Hour scheduled collection"
+    || scheduledSubmissionOptions[1].DataType != "Day Ahead"
+    || scheduledSubmissionOptions.Count(option => option.DataType == "Rolling 24 Hour") != 2)
+    throw new Exception("DDQ scheduled submissions must combine plant jobs into one friendly run option");
+Console.WriteLine("PASS: DDQ scheduled submission options group plants but retain separate submission dates");
 
 var expectedMmfParameters = new[]
 {
@@ -126,6 +143,9 @@ if (translatedMmfTestPayload.Readings.Count != 24 * 13
     || translatedMmfTestPayload.Readings.Any(reading => reading.IntervalMinutes != 60)
     || !translatedMmfTestPayload.Readings.Any(reading => reading.Parameter == "AmbientTemp"))
     throw new Exception("MMF test API response must translate into one averaged reading per parameter and interval");
+var detectedMmfPayload = LssApiPayloadDetector.Detect(JsonSerializer.Serialize(mmfTestPayload), "application/json");
+if (!detectedMmfPayload.IsValid || detectedMmfPayload.ApiType != "MMF")
+    throw new Exception("Link-only API testing must detect a supported MMF payload automatically");
 Console.WriteLine("PASS: MMF sample API payload and scheduled collection translation");
 var ddqFreezeBytes = DdqExcelWorkbookExporter.Build([
     new DdqWorkbookSheet("Day Ahead", "SOLAR DATA SUBMISSION", [],
@@ -154,6 +174,11 @@ var irradianceBounds = AnalyticsGraphScale.Bounds([0m, 450m, 930m]);
 if (irradianceBounds.Minimum != 0 || irradianceBounds.Maximum < 930m)
     throw new Exception("MMF graph bounds must keep a zero baseline for irradiance");
 Console.WriteLine("PASS: MMF dynamic graph bounds for atmospheric and zero-based parameters");
+if (MmfGapFillPolicy.Resolve(null, 1007.59m, 1008.93m) != 1008.26m
+    || MmfGapFillPolicy.Resolve(1007.1m, 1m, 2m) != 1007.1m
+    || MmfGapFillPolicy.Resolve(null, 1007m, null).HasValue)
+    throw new Exception("MMF isolated interval gaps must be interpolated without replacing real values or long gaps");
+Console.WriteLine("PASS: MMF isolated interval gaps use adjacent-value interpolation");
 if (CollectionSchedulePolicy.ApiDataType("DDQ", "Daily") != "Day Ahead"
     || CollectionSchedulePolicy.ApiDataType("DDQ", "Weekly") != "Week Ahead"
     || CollectionSchedulePolicy.ApiDataType("DDQ", "4 Month") != "4 Month Ahead"
@@ -200,6 +225,21 @@ if (DdqDatasetPolicy.Get("4 Month Ahead").ReferenceTemplateIntervalMinutes != 60
     || fourMonthWindow.Start != new DateTime(2026, 9, 1) || fourMonthWindow.EndExclusive != new DateTime(2027, 1, 1))
     throw new Exception("Four Month Ahead must represent four complete calendar months");
 Console.WriteLine("PASS: DDQ Day Ahead, Week Ahead and Four Month Ahead reference horizons");
+var dashboardDdq = DashboardDdqSummaryPolicy.Build([
+    new("Daily", "Completed", new DateTime(2026, 10, 13, 10, 30, 0), new DateTimeOffset(2026, 10, 12, 10, 30, 5, TimeSpan.FromHours(8)), 40),
+    new("Daily", "Completed", new DateTime(2026, 10, 12, 11, 0, 0), new DateTimeOffset(2026, 10, 12, 11, 0, 5, TimeSpan.FromHours(8)), 4),
+    new("Day Ahead", "Failed", new DateTime(2026, 10, 12, 11, 0, 0), new DateTimeOffset(2026, 10, 12, 11, 0, 8, TimeSpan.FromHours(8)), 1),
+    new("Rolling 24 Hour", "Completed", new DateTime(2026, 10, 11, 9, 0, 0), new DateTimeOffset(2026, 10, 11, 9, 0, 0, TimeSpan.FromHours(8)), 3)
+]);
+var dashboardDayAhead = dashboardDdq.Single(item => item.DataType == "Day Ahead");
+if (dashboardDdq.Count != 4 || dashboardDayAhead.SuccessfulCount != 4
+    || dashboardDayAhead.FailedCount != 1
+    || dashboardDayAhead.LastCollectedAt?.Hour != 11
+    || dashboardDayAhead.LastCollectedAt?.Second != 8
+    || dashboardDayAhead.SubmissionDateTime != new DateTime(2026, 10, 12, 11, 0, 0)
+    || dashboardDdq.Single(item => item.DataType == "Week Ahead").LastCollectedAt is not null)
+    throw new Exception("Dashboard DDQ summary must show plant outcomes from only the latest collection run");
+Console.WriteLine("PASS: Dashboard DDQ summary shows the latest pull time and latest-run plant outcomes");
 var translatedDdq = ScheduledApiPayloadTranslator.Translate(
     """{"submissionDateTime":"2026-09-23T10:00:00+08:00","forecastData":[{"startTime":"2026-09-24T00:00:00+08:00","endTime":"2026-09-24T00:15:00+08:00","forecastValue":12.5,"valueUnit":"MW"}]}""",
     "DDQ", "Day Ahead", 1, 100, scheduleNow, 15);
@@ -442,6 +482,12 @@ var reportReferenceTwo = OnDemandReportReference.Create("DDQ", new DateTime(2026
 if (reportReferenceOne == reportReferenceTwo || reportReferenceOne.Length > 60 || reportReferenceTwo.Length > 60)
     throw new Exception("On-demand reports must use unique database-safe references");
 Console.WriteLine("PASS: On-demand report references remain unique after data resets");
+var mmfRangeName = DemoData.AnalysisDisplayName("MMF", "All MMF parameters · All Plants",
+    new DateTime(2026, 10, 12, 17, 30, 0), new DateTime(2026, 10, 10, 0, 0, 0),
+    new DateTime(2026, 10, 12, 23, 45, 0));
+if (mmfRangeName != "MMF · Data 10–12 Oct 2026" || mmfRangeName.Contains("17:30"))
+    throw new Exception("MMF on-demand names must show the selected data range instead of the generation time");
+Console.WriteLine("PASS: MMF on-demand names show the selected data range");
 var exportPlants = new List<LssPlant>
 {
     new() { Id = 10, PlantId = "LSS-001", Name = "Plant One", State = "Selangor" },
@@ -457,26 +503,49 @@ var ddqOnDemandCsv = OnDemandCsvExporter.BuildDdq("Day Ahead", exportSubmission,
 if (!ddqOnDemandCsv.Contains("\"Submission Date & Time\",\"Year\",\"Month\",\"Day\",\"Period\",\"LSS1\",\"LSS2\"")
     || !ddqOnDemandCsv.Contains("\"24/09/2026 10:40:00\",\"2026\",\"9\",\"24\",\"2\",\"7.4\",\"8.6\""))
     throw new Exception("On-demand DDQ CSV must use the DDQ Analytics pivot layout");
-var mmfOnDemandCsv = OnDemandCsvExporter.BuildMmf(exportSubmission, exportPlants,
+var ddqOnDemandWorkbook = OnDemandDdqExcelExporter.Build("Day Ahead", exportSubmission, exportPlants,
+[
+    new SolarApiReading { Id = 1, PlantId = 10, DataType = "Day Ahead", IntervalStart = exportTimestamp, Value = 7.4m },
+    new SolarApiReading { Id = 2, PlantId = 20, DataType = "Day Ahead", IntervalStart = exportTimestamp, Value = 8.6m }
+], 30);
+using var onDemandDdqStream = new MemoryStream(ddqOnDemandWorkbook);
+using var onDemandDdqArchive = new ZipArchive(onDemandDdqStream, ZipArchiveMode.Read);
+using var onDemandDdqReader = new StreamReader(onDemandDdqArchive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+var onDemandDdqXml = onDemandDdqReader.ReadToEnd();
+if (!onDemandDdqXml.Contains("Submission Date &amp; Time")
+    || !onDemandDdqXml.Contains("LSS1") || !onDemandDdqXml.Contains("LSS2")
+    || !onDemandDdqXml.Contains("7.4") || !onDemandDdqXml.Contains("8.6")
+    || !onDemandDdqXml.Contains("30 minutes"))
+    throw new Exception("On-demand DDQ Excel must use the same pivot layout as its preview.");
+var mmfOnDemandWorkbook = OnDemandMmfExcelExporter.Build(exportSubmission, exportPlants,
 [
     new SolarApiReading { Id = 3, PlantId = 10, DataType = "MMF", Parameter = "AmbientTemp", Unit = "C", IntervalStart = exportTimestamp, IntervalMinutes = 30, Value = 24.2m },
-    new SolarApiReading { Id = 4, PlantId = 20, DataType = "MMF", Parameter = "AmbientTemp", Unit = "C", IntervalStart = exportTimestamp, IntervalMinutes = 30, Value = 25.1m }
+    new SolarApiReading { Id = 4, PlantId = 20, DataType = "MMF", Parameter = "AmbientTemp", Unit = "C", IntervalStart = exportTimestamp, IntervalMinutes = 30, Value = 25.1m },
+    new SolarApiReading { Id = 5, PlantId = 10, DataType = "MMF", Parameter = "AirPressure", Unit = "hPa", IntervalStart = exportTimestamp, IntervalMinutes = 30, Value = 1006.2m }
 ], exportTimestamp, exportTimestamp.AddHours(1));
-if (!mmfOnDemandCsv.Contains("\"LSS\",\"HR1\"")
-    || !mmfOnDemandCsv.Contains("\"Data Interval\",\"30 minutes\"")
-    || !mmfOnDemandCsv.Contains("\"Data Timestamp Range\",\"24/09/2026 00:30:00 - 24/09/2026 01:30:00\"")
-    || mmfOnDemandCsv.Contains("Submission Date & Time")
-    || !mmfOnDemandCsv.Contains("\"LSS1\",\"24.2\""))
-    throw new Exception("On-demand MMF CSV must use the MMF Analytics HR layout and data timestamp range without submission date and time.");
-Console.WriteLine("PASS: On-demand DDQ and MMF CSV exports match the analytics layouts");
+using var onDemandMmfStream = new MemoryStream(mmfOnDemandWorkbook);
+using var onDemandMmfArchive = new ZipArchive(onDemandMmfStream, ZipArchiveMode.Read);
+using var onDemandWorkbookReader = new StreamReader(onDemandMmfArchive.GetEntry("xl/workbook.xml")!.Open());
+var onDemandWorkbookXml = onDemandWorkbookReader.ReadToEnd();
+using var onDemandAmbientReader = new StreamReader(onDemandMmfArchive.GetEntry("xl/worksheets/sheet2.xml")!.Open());
+var onDemandAmbientXml = onDemandAmbientReader.ReadToEnd();
+if (!onDemandWorkbookXml.Contains("name=\"AirPressure\"")
+    || !onDemandWorkbookXml.Contains("name=\"AmbientTemp\"")
+    || onDemandMmfArchive.GetEntry("xl/worksheets/sheet3.xml") is not null
+    || !onDemandAmbientXml.Contains("Data Timestamp Range")
+    || !onDemandAmbientXml.Contains("30 minutes")
+    || !onDemandAmbientXml.Contains("24.2"))
+    throw new Exception("On-demand MMF Excel must create one HR-layout worksheet for every parameter.");
+Console.WriteLine("PASS: On-demand DDQ and MMF Excel exports match their spreadsheet previews");
 
-var intervalFilteredCsv = OnDemandCsvExporter.BuildDdq("Day Ahead", exportSubmission, [exportPlants[0]],
+var intervalFilteredSheet = OnDemandDdqExcelExporter.BuildSheets("Day Ahead", exportSubmission, [exportPlants[0]],
 [
     new SolarApiReading { Id = 5, PlantId = 10, DataType = "Day Ahead", IntervalStart = exportTimestamp, Value = 7.4m },
     new SolarApiReading { Id = 6, PlantId = 10, DataType = "Day Ahead", IntervalStart = exportTimestamp.AddMinutes(30), Value = 8.1m }
-], 60);
-if (!intervalFilteredCsv.Contains("\"Data Interval\",\"1 hour\"")
-    || intervalFilteredCsv.Contains("\"7.4\"") || !intervalFilteredCsv.Contains("\"8.1\""))
+], 60).Single();
+if (!intervalFilteredSheet.Metadata.Any(item => item.Label == "Data Interval" && item.Value == "1 hour")
+    || intervalFilteredSheet.Rows.Count != 1
+    || !Equals(intervalFilteredSheet.Rows[0][5], 8.1m))
     throw new Exception("On-demand DDQ export must apply the user-selected data interval.");
 Console.WriteLine("PASS: On-demand DDQ export applies the selected data interval");
 
@@ -604,6 +673,17 @@ if (!reportAnomalyCsv.Contains("\"Validation anomaly\"")
     || !reportAnomalyCsv.Contains("previous-day submission used"))
     throw new Exception("Scheduled anomaly report must include validation anomalies and applied substitutions.");
 Console.WriteLine("PASS: Scheduled anomaly report includes validation anomalies and report substitutions");
+
+var anomalyPreview = OnDemandAnomalyPreviewBuilder.Build("DDQ", "Day Ahead", reportSubmission,
+    [reportPlant], preparedDdq,
+    [new ReportDetectedAnomaly("COL-001", reportPlant.Id, "MW", "-5",
+        "Active power cannot be below 0 MW.", "Open", DateTimeOffset.UtcNow)]);
+if (anomalyPreview.Rows.Count < 2
+    || !anomalyPreview.Rows.Any(row => row[0]?.ToString() == "Validation anomaly")
+    || !anomalyPreview.Rows.Any(row => row[0]?.ToString() == "Report substitution")
+    || !anomalyPreview.Headers.Contains("Anomaly Detail"))
+    throw new Exception("On-demand anomaly preview must include both validation anomalies and report substitutions.");
+Console.WriteLine("PASS: On-demand anomaly preview matches the exported anomaly record types");
 
 const string payloadSubmissionTimes = """
 [

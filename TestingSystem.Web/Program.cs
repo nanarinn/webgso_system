@@ -99,7 +99,10 @@ app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = context =>
     {
-        if (!app.Environment.IsDevelopment()) return;
+        var extension = Path.GetExtension(context.File.Name);
+        var isApplicationAsset = extension.Equals(".css", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".js", StringComparison.OrdinalIgnoreCase);
+        if (!app.Environment.IsDevelopment() && !isApplicationAsset) return;
 
         context.Context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, max-age=0";
         context.Context.Response.Headers.Pragma = "no-cache";

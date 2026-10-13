@@ -63,43 +63,71 @@
             </div>
 
             <div class="compact-filter-right">
-            <div class="filter-section data-type-section">
-                <div class="filter-section-heading"><span>2</span><div><strong>Data type</strong><small>Select the datasets to display. The system keeps the interval supplied by each API.</small></div></div>
-                <div class="data-type-and-interval">
-                    <div class="data-type-checks data-type-interval-checks">
-                        @foreach (var dataType in DataTypes)
-                        {
-                            <div class="data-type-interval-card @(SelectedDataTypes.Contains(dataType) ? "selected" : null)">
-                                <label class="data-type-toggle">
-                                    <input type="checkbox" checked="@SelectedDataTypes.Contains(dataType)"
-                                           @onchange="args => ToggleDataType(dataType, args.Value)" />
-                                    <span>@DataTypeLabel(dataType)</span>
-                                </label>
-                                <label class="data-type-interval-select">
-                                    <span>Interval</span>
-                                    <select value="@IntervalFor(dataType)" disabled="@(!SelectedDataTypes.Contains(dataType))"
-                                            @onchange="args => OnDataTypeIntervalChanged(dataType, args)">
-                                        @foreach (var interval in Intervals)
-                                        {
-                                            <option value="@interval.Value">@interval.Label</option>
-                                        }
-                                    </select>
-                                </label>
-                            </div>
-                        }
-                    </div>
-                </div>
-            </div>
-
             <div class="filter-section period-section">
-                <div class="filter-section-heading"><span>3</span><div><strong>Submission</strong><small>Choose the exact scheduled submission date and time.</small></div></div>
+                <div class="filter-section-heading"><span>2</span><div><strong>Submissions</strong><small>Select one or more completed DDQ collections, then set the interval for each selection.</small></div></div>
                 <div class="period-filter-grid period-only-grid">
                     <fieldset class="filter-field submission-period-field required-filter-field">
-                        <legend>Submission date &amp; time <span aria-hidden="true">*</span></legend>
-                        <div class="date-time-control">
-                            <label><small>Scheduled date &amp; time</small><span class="sblss-picker sblss-picker-datetime"><span class="sblss-picker-copy"><b>@(SubmissionDateTime.HasValue ? $"{SubmissionDateTime:dd/MM/yyyy} {TimeDisplay.TwentyFourHour(SubmissionDateTime.Value)}" : "DD/MM/YYYY HH:mm")</b><small>day/month/year · 24-hour time</small></span><span class="sblss-picker-icon" aria-hidden="true">▣</span><input class="sblss-picker-native" aria-label="Scheduled date and time in day month year and 24 hour format" type="datetime-local" required value="@(SubmissionDateTime?.ToString("yyyy-MM-ddTHH:mm") ?? string.Empty)" @onchange="OnSubmissionDateTimeChanged" /></span></label>
+                        <legend>Collection schedule runs <span aria-hidden="true">*</span></legend>
+                        <div class="submission-filter-controls">
+                            <label class="submission-run-search">
+                                <span>Search and choose a submission</span>
+                                <input @key="SubmissionSearchVersion" type="search" list="available-ddq-submissions"
+                                       placeholder="@(SelectedSubmissionOptions.Count == 0 ? "Search date, time, DDQ type or schedule" : "Search another submission to add...")"
+                                       value="@PendingSubmission" @onchange="AddSubmissionFromSelection" autocomplete="off" />
+                                <datalist id="available-ddq-submissions">
+                                    @foreach (var option in AvailableSubmissionOptions)
+                                    {
+                                        <option value="@SubmissionOptionText(option)"></option>
+                                    }
+                                </datalist>
+                            </label>
+                            <span class="plant-auto-add @(SelectedSubmissionOptions.Count > 0 ? "has-selection" : null)">@SubmissionSelectionStatus</span>
                         </div>
-                        <small>Required. Use the exact date and time produced by the collection schedule.</small>
+                        <div class="submission-filter-chips" aria-live="polite">
+                            @foreach (var option in SelectedSubmissionOptions)
+                            {
+                                <button type="button" class="plant-filter-chip submission-filter-chip"
+                                        @onclick="() => RemoveScheduledSubmission(option.Key)"
+                                        aria-label="Remove @option.DataType submission @TimeDisplay.DateTime(option.SubmissionDateTime)">
+                                    @option.SubmissionDateTime.ToString("dd MMM HH:mm") · @option.DataType
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            }
+                        </div>
+                        <small class="submission-filter-help">@SubmissionHelpText</small>
+
+                        @if (SelectedSubmissionOptions.Count > 0)
+                        {
+                            <section class="selected-submission-config" aria-label="Selected submission intervals">
+                                <div class="selected-submission-config-heading">
+                                    <div><strong>Selected submissions</strong><small>Choose the data interval for every submission.</small></div>
+                                    <span>@SelectedSubmissionOptions.Count</span>
+                                </div>
+                                <div class="selected-submission-config-list">
+                                @foreach (var option in SelectedSubmissionOptions)
+                                {
+                                    <article class="selected-submission-item">
+                                        <div class="selected-submission-identity">
+                                            <span class="selected-submission-type">@option.DataType</span>
+                                            <div><strong>@TimeDisplay.DateTime(option.SubmissionDateTime)</strong><small>@option.PlantCount plant@(option.PlantCount == 1 ? "" : "s") collected</small></div>
+                                        </div>
+                                        <label class="selected-submission-interval">
+                                            <span>Interval</span>
+                                            <select value="@IntervalFor(option)" @onchange="args => OnSubmissionIntervalChanged(option.Key, args)">
+                                                @foreach (var interval in Intervals)
+                                                {
+                                                    <option value="@interval.Value">@interval.Label</option>
+                                                }
+                                            </select>
+                                        </label>
+                                        <button type="button" class="selected-submission-remove" title="Remove submission"
+                                                aria-label="Remove @option.DataType submission @TimeDisplay.DateTime(option.SubmissionDateTime)"
+                                                @onclick="() => RemoveScheduledSubmission(option.Key)">×</button>
+                                    </article>
+                                }
+                                </div>
+                            </section>
+                        }
                     </fieldset>
                 </div>
             </div>
@@ -135,7 +163,7 @@
                 <div>
                     <p class="section-label">Step 2 · Results</p>
                     <h2>Solar data submission</h2>
-                    <p>Submission: @SubmissionDateTimeLabel · @ResultPlants.Count plant(s)</p>
+                    <p>@SubmissionDateTimeLabel · @ResultPlants.Count plant(s)</p>
                 </div>
                 <div class="result-heading-actions">
                     <span class="result-count">@TableRows.Count row(s)</span>
@@ -153,14 +181,17 @@
                 <button type="button" class="@(DisplayMode == "graph" ? "active" : null)" @onclick='() => SetDisplayMode("graph")'><span aria-hidden="true">⌁</span> Graph View</button>
             </div>
 
-            <div class="data-type-tabs" role="tablist" aria-label="Selected data types">
-                @foreach (var dataType in DataTypes.Where(SelectedDataTypes.Contains))
+            <div class="data-type-tabs submission-sheet-tabs" role="tablist" aria-label="Selected submission sheets">
+                @foreach (var option in SelectedSubmissionOptions)
                 {
                     <button type="button"
                             role="tab"
-                            aria-selected="@(ActiveDataType == dataType)"
-                            class="@(ActiveDataType == dataType ? "active" : null)"
-                            @onclick="() => SelectDataTypeTab(dataType)">@DataTypeLabel(dataType)</button>
+                            aria-selected="@(ActiveSubmissionKey == option.Key)"
+                            class="submission-sheet-tab @(ActiveSubmissionKey == option.Key ? "active" : null)"
+                            @onclick="() => SelectSubmissionTab(option.Key)">
+                        <strong>@DataTypeLabel(option.DataType)</strong>
+                        <small>@option.SubmissionDateTime.ToString("dd MMM yyyy · HH:mm")</small>
+                    </button>
                 }
             </div>
 
@@ -174,7 +205,7 @@
                     <div class="excel-sheet-title">SOLAR DATA SUBMISSION / DATA MONITORING</div>
                     <div class="excel-sheet-meta">
                         <span><small>Data type</small><strong>@DataTypeLabel(ActiveDataType)</strong></span>
-                        <span><small>Submission date &amp; time</small><strong>@SubmissionDateTimeLabel</strong></span>
+                        <span><small>Submission date &amp; time</small><strong>@ActiveSubmissionDateTimeLabel</strong></span>
                         <span><small>Data interval</small><strong>@SelectedIntervalLabel</strong></span>
                         <span><small>Data timestamp range</small><strong>@TimestampRangeLabel</strong></span>
                     </div>
@@ -250,6 +281,8 @@
                                 <div><strong>Plant legend</strong><small>@FilteredLegendPlants.Count() of @ResultPlants.Count site(s)</small></div>
                                 <div class="graph-legend-tools">
                                     <label class="legend-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search plant or ID" @bind="LegendSearch" @bind:event="oninput" /></label>
+                                    <button type="button" class="legend-tool" @onclick="ShowAllGraphPlants">Show all</button>
+                                    <button type="button" class="legend-tool" @onclick="HideAllGraphPlants">Hide all</button>
                                     <button type="button" class="crosshair-toggle @(ShowGraphCrosshair ? "active" : null)"
                                             aria-pressed="@ShowGraphCrosshair" @onclick="ToggleGraphCrosshair">
                                         <span aria-hidden="true">⌖</span> Crosshair @(ShowGraphCrosshair ? "On" : "Off")

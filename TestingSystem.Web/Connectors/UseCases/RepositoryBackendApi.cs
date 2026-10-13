@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.SqlClient;
 using System.Net;
 using TestingSystem.Web.Data;
+using TestingSystem.Web.Services;
 
 namespace TestingSystem.Web.Connectors.UseCases;
 
@@ -18,14 +19,17 @@ public sealed record DashboardMetricItem(
     string Description,
     string Reference,
     string Status,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string DataType = "",
+    DateTime SubmissionDateTime = default);
 
 public sealed record DashboardResponse(
     IReadOnlyList<DashboardRecentRecord> RecentRecords,
     IReadOnlyList<DashboardMetricItem> Plants,
     IReadOnlyList<DashboardMetricItem> SuccessfulDdq,
     IReadOnlyList<DashboardMetricItem> FailedDdq,
-    IReadOnlyList<DashboardMetricItem> ActiveMmf);
+    IReadOnlyList<DashboardMetricItem> ActiveMmf,
+    IReadOnlyList<DashboardDdqTypeSummary> DdqTypes);
 
 public sealed record RepositoryStatusResponse(
     string Database,
@@ -76,9 +80,38 @@ public sealed class SqlRepositoryBackendApi(IDbContextFactory<ApplicationDbConte
                 job.PlantId,
                 job.DataType,
                 job.Status,
-                job.StartedAt
+                job.StartedAt,
+                job.SubmissionDateTime
             })
-            .Take(100)
+            .Take(5000)
+            .Join(database.LssPlants.AsNoTracking().Select(plant => new { plant.Id, plant.Name }),
+                job => job.PlantId, plant => plant.Id,
+                (job, plant) => new { Job = job, Plant = plant })
+            .ToListAsync(cancellationToken);
+        var ddqSummaryRows = await database.CollectionJobs.AsNoTracking()
+            .Where(job => job.DataType != "MMF")
+            .GroupBy(job => new { job.DataType, job.SubmissionDateTime, job.Status })
+            .Select(group => new DashboardDdqSummarySource(group.Key.DataType, group.Key.Status,
+                group.Key.SubmissionDateTime, group.Max(job => job.StartedAt),
+                group.Select(job => job.PlantId).Distinct().Count()))
+            .ToListAsync(cancellationToken);
+        var ddqTypes = DashboardDdqSummaryPolicy.Build(ddqSummaryRows);
+        var latestSubmissionTimes = ddqTypes
+            .Where(summary => summary.SubmissionDateTime.HasValue)
+            .Select(summary => summary.SubmissionDateTime!.Value)
+            .Distinct()
+            .ToArray();
+        var latestDdqJobs = await database.CollectionJobs.AsNoTracking()
+            .Where(job => job.DataType != "MMF" && latestSubmissionTimes.Contains(job.SubmissionDateTime))
+            .Select(job => new
+            {
+                job.CollectionId,
+                job.PlantId,
+                job.DataType,
+                job.Status,
+                job.StartedAt,
+                job.SubmissionDateTime
+            })
             .Join(database.LssPlants.AsNoTracking().Select(plant => new { plant.Id, plant.Name }),
                 job => job.PlantId, plant => plant.Id,
                 (job, plant) => new { Job = job, Plant = plant })
@@ -97,11 +130,13 @@ public sealed class SqlRepositoryBackendApi(IDbContextFactory<ApplicationDbConte
             plant.PlantId,
             plant.IsActive ? "Active" : "Inactive",
             plant.CreatedAt)).ToList();
-        var successful = jobs.Where(item => item.Job.DataType != "MMF" && item.Job.Status == "Completed")
-            .Select(item => CreateRequestItem(item.Job.CollectionId, item.Plant.Name, item.Job.StartedAt, "Successful"))
+        var successful = latestDdqJobs.Where(item => item.Job.Status == "Completed")
+            .Select(item => CreateRequestItem(item.Job.CollectionId, item.Plant.Name, item.Job.DataType,
+                item.Job.StartedAt, item.Job.SubmissionDateTime, "Successful"))
             .ToList();
-        var failed = jobs.Where(item => item.Job.DataType != "MMF" && item.Job.Status == "Failed")
-            .Select(item => CreateRequestItem(item.Job.CollectionId, item.Plant.Name, item.Job.StartedAt, "Failed"))
+        var failed = latestDdqJobs.Where(item => item.Job.Status == "Failed")
+            .Select(item => CreateRequestItem(item.Job.CollectionId, item.Plant.Name, item.Job.DataType,
+                item.Job.StartedAt, item.Job.SubmissionDateTime, "Failed"))
             .ToList();
         var activeMmf = plants.Where(plant => !string.IsNullOrWhiteSpace(plant.MmfApiEndpoint))
             .Select(plant => new DashboardMetricItem(
@@ -111,7 +146,7 @@ public sealed class SqlRepositoryBackendApi(IDbContextFactory<ApplicationDbConte
                 "Active",
                 plant.CreatedAt)).ToList();
 
-        return new(recent, plantItems, successful, failed, activeMmf);
+        return new(recent, plantItems, successful, failed, activeMmf, ddqTypes);
     }
 
     public async Task<RepositoryStatusResponse> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -169,12 +204,15 @@ public sealed class SqlRepositoryBackendApi(IDbContextFactory<ApplicationDbConte
     }
 
     private static DashboardMetricItem CreateRequestItem(
-        string collectionId, string plantName, DateTimeOffset updatedAt, string status) => new(
-            $"{plantName} DDQ Submission",
-            $"DDQ collection data for {plantName}",
+        string collectionId, string plantName, string dataType, DateTimeOffset updatedAt,
+        DateTime submissionDateTime, string status) => new(
+            $"{plantName} {DdqDatasetPolicy.CanonicalName(dataType)} Submission",
+            $"{DdqDatasetPolicy.CanonicalName(dataType)} collection data for {plantName}",
             collectionId,
             status,
-            updatedAt);
+            updatedAt,
+        DdqDatasetPolicy.CanonicalName(dataType),
+        submissionDateTime);
 
     private static string DisplayCollectionReference(string reference)
     {

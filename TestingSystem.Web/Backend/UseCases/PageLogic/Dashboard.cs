@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using TestingSystem.Web.Connectors.UseCases;
+using TestingSystem.Web.Services;
 namespace TestingSystem.Web.Components.Frontend.UseCases;
 
 public partial class Dashboard : ComponentBase
@@ -10,13 +11,8 @@ public partial class Dashboard : ComponentBase
     private const string SuccessMetricDescription = "DDQ submissions that completed validation successfully.";
     private const string FailedMetricTitle = "DDQ Failed Requests";
     private const string FailedMetricDescription = "DDQ submissions that require correction or resubmission.";
-    private const string MmfMetricTitle = "Active MMF";
-    private const string MmfMetricDescription = "Plants with an active MMF data stream.";
 
     private int TotalPlants { get; set; }
-    private int DdqSuccessfulRequests { get; set; }
-    private int DdqFailedRequests { get; set; }
-    private int ActiveMmf { get; set; }
     [Inject] private IRepositoryBackendApi RepositoryBackend { get; set; } = default!;
     [Inject] private ILogger<Dashboard> Logger { get; set; } = default!;
 
@@ -24,7 +20,7 @@ public partial class Dashboard : ComponentBase
     private IReadOnlyList<DashboardMetricItem> PlantItems { get; set; } = [];
     private IReadOnlyList<DashboardMetricItem> SuccessfulItems { get; set; } = [];
     private IReadOnlyList<DashboardMetricItem> FailedItems { get; set; } = [];
-    private IReadOnlyList<DashboardMetricItem> MmfItems { get; set; } = [];
+    private IReadOnlyList<DashboardDdqTypeSummary> DdqTypes { get; set; } = [];
     private IReadOnlyList<DashboardMetricItem> SelectedMetricItems { get; set; } = [];
     private string SelectedMetricTitle { get; set; } = string.Empty;
     private string SelectedMetricDescription { get; set; } = string.Empty;
@@ -90,12 +86,9 @@ public partial class Dashboard : ComponentBase
             PlantItems = dashboard.Plants;
             SuccessfulItems = dashboard.SuccessfulDdq;
             FailedItems = dashboard.FailedDdq;
-            MmfItems = dashboard.ActiveMmf;
 
             TotalPlants = PlantItems.Count;
-            DdqSuccessfulRequests = SuccessfulItems.Count;
-            DdqFailedRequests = FailedItems.Count;
-            ActiveMmf = MmfItems.Count;
+            DdqTypes = dashboard.DdqTypes;
         }
         catch (Exception exception)
         {
@@ -120,6 +113,15 @@ public partial class Dashboard : ComponentBase
     }
 
     private void CloseMetric() => IsMetricOpen = false;
+    private void OpenDdqMetric(DashboardDdqTypeSummary summary, string status)
+    {
+        var source = status == "Successful" ? SuccessfulItems : FailedItems;
+        OpenMetric($"{summary.DataType} · {status}",
+            $"Plants with a {status.ToLowerInvariant()} result in the latest {summary.DataType} collection.",
+            source.Where(item => item.DataType == summary.DataType
+                && item.SubmissionDateTime == summary.SubmissionDateTime).ToList());
+        SelectedMetricCode = status == "Successful" ? "OK" : "ERR";
+    }
     private void OpenHealthStatus() => IsHealthStatusOpen = true;
     private void CloseHealthStatus() => IsHealthStatusOpen = false;
 

@@ -16,7 +16,7 @@
     {
         var item = group.Schedule;
         <div class="schedule-admin-row">
-            <div class="admin-entity schedule-identity"><span>SC</span><div><strong>@group.DisplayName</strong><small>@group.DisplayCode</small></div></div>
+            <div class="admin-entity schedule-identity"><div><strong>@group.DisplayName</strong><small>@group.DisplayCode</small></div></div>
             <span class="schedule-total-cell" title="@group.PlantTitle">@(group.Plants.Count == 1 ? "1 plant" : $"{group.Plants.Count} plants")</span>
             <div class="schedule-plant-action-cell"><button class="schedule-view-plants" type="button" @onclick="() => OpenPlantList(group)"><span aria-hidden="true">&#9783;</span> View plants</button></div>
             <strong class="schedule-type-cell">@item.DataType</strong>

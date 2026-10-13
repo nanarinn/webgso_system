@@ -39,7 +39,7 @@
             @foreach (var user in TablePaging.Slice(FilteredUsers, UserPage))
             {
                 <div class="user-admin-row @(user.Status == UserAccessStatus.Pending ? "pending-user-row" : "")">
-                    <div class="admin-entity"><span>@GetInitials(user.DisplayName)</span><div><strong>@user.DisplayName</strong><small>@user.Email</small></div></div>
+                    <div class="admin-entity"><div><strong>@user.DisplayName</strong><small>@user.Email</small></div></div>
                     <div class="identity-source"><strong>@(user.IsEntraUser ? "Microsoft Entra" : "Local account")</strong><small>@(user.IsEntraUser ? user.EntraObjectId : user.UserName)</small></div>
                     <span>@FormatDate(user.RequestedAt)</span>
                     <span class="admin-role role-@RoleCss(user.Role)">@RoleLabel(user.Role)</span>

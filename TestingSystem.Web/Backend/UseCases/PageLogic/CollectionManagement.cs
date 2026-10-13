@@ -24,6 +24,11 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     private List<PlantConnection> Plants { get; set; } = [];
 
     private List<DemoCollectionJob> Jobs { get; set; } = [];
+    private List<CollectionBatch>? FilteredBatchCache { get; set; }
+    private string FilteredBatchCacheSearchTerm { get; set; } = string.Empty;
+    private int JobsRevision { get; set; }
+    private int FilteredBatchCacheJobsRevision { get; set; } = -1;
+    private CollectionRefreshStamp? LastRefreshStamp { get; set; }
     private string SearchTermValue { get; set; } = string.Empty;
     private string SearchTerm
     {
@@ -31,6 +36,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         set
         {
             SearchTermValue = value;
+            FilteredBatchCache = null;
             CollectionPage = 1;
         }
     }
@@ -65,9 +71,9 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     private static readonly IReadOnlyList<CollectionSectionDefinition> CollectionSectionDefinitions =
     [
         new("DDQ|Rolling 24 Hour", "DDQ", "Rolling 24 Hour", "Rolling 24 Hour"),
-        new("DDQ|Daily", "DDQ", "Daily", "Daily"),
-        new("DDQ|Weekly", "DDQ", "Weekly", "Weekly"),
-        new("DDQ|4 Month", "DDQ", "4 Month", "4 Month"),
+        new("DDQ|Daily", "DDQ", "Daily", "Day Ahead"),
+        new("DDQ|Weekly", "DDQ", "Weekly", "Week Ahead"),
+        new("DDQ|4 Month", "DDQ", "4 Month", "4 Month Ahead"),
         new("MMF|MMF", "MMF", "MMF", "MMF")
     ];
     private string SelectedCollectionSectionKey { get; set; } = CollectionSectionDefinitions[0].Key;
@@ -104,25 +110,39 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 || job.Description.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-    private List<CollectionBatch> FilteredBatches => FilteredJobs
-        .GroupBy(job => new
+    private List<CollectionBatch> FilteredBatches
+    {
+        get
         {
-            job.ApiType,
-            job.DataType,
-            job.Mode,
-            ScheduleGroup = CollectionScheduleGroup(job),
-            SubmissionMinute = CollectionBatchSlot(job)
-        })
-        .Select(group => new CollectionBatch(
-            $"{group.Key.ApiType}-{group.Key.DataType}-{group.Key.ScheduleGroup}-{group.Key.SubmissionMinute:yyyyMMddHHmm}",
-            group.Key.ApiType,
-            string.IsNullOrWhiteSpace(group.Key.DataType) ? "General data" : group.Key.DataType,
-            group.Key.Mode,
-            group.Key.SubmissionMinute,
-            group.Max(job => job.RunAt),
-            group.OrderBy(job => job.PlantName).ToList()))
-        .OrderByDescending(batch => batch.RunAt)
-        .ToList();
+            if (FilteredBatchCache is not null
+                && FilteredBatchCacheJobsRevision == JobsRevision
+                && FilteredBatchCacheSearchTerm == SearchTerm)
+                return FilteredBatchCache;
+
+            FilteredBatchCache = FilteredJobs
+                .GroupBy(job => new
+                {
+                    job.ApiType,
+                    job.DataType,
+                    job.Mode,
+                    ScheduleGroup = CollectionScheduleGroup(job),
+                    SubmissionMinute = CollectionBatchSlot(job)
+                })
+                .Select(group => new CollectionBatch(
+                    $"{group.Key.ApiType}-{group.Key.DataType}-{group.Key.ScheduleGroup}-{group.Key.SubmissionMinute:yyyyMMddHHmm}",
+                    group.Key.ApiType,
+                    string.IsNullOrWhiteSpace(group.Key.DataType) ? "General data" : group.Key.DataType,
+                    group.Key.Mode,
+                    group.Key.SubmissionMinute,
+                    group.Max(job => job.RunAt),
+                    group.OrderBy(job => job.PlantName).ToList()))
+                .OrderByDescending(batch => batch.RunAt)
+                .ToList();
+            FilteredBatchCacheSearchTerm = SearchTerm;
+            FilteredBatchCacheJobsRevision = JobsRevision;
+            return FilteredBatchCache;
+        }
+    }
 
     private static DateTime CollectionBatchSlot(DemoCollectionJob job)
     {
@@ -189,8 +209,10 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        CurrentActorName = await ResolveCurrentActorNameAsync();
-        await LoadPageAsync();
+        var actorTask = ResolveCurrentActorNameAsync();
+        var pageTask = LoadPageAsync();
+        await Task.WhenAll(actorTask, pageTask);
+        CurrentActorName = await actorTask;
         SelectFirstAvailableSection();
         RefreshTask = RefreshJobsAsync(RefreshCancellation.Token);
     }
@@ -230,10 +252,13 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
         try
         {
             await using var database = await ContextFactory.CreateDbContextAsync();
-            var plantEntities = await database.LssPlants.AsNoTracking().Include(plant => plant.ApiConfigurations)
+            var plantTask = database.LssPlants.AsNoTracking().Include(plant => plant.ApiConfigurations)
                 .Where(plant => plant.IsActive)
                 .OrderBy(plant => plant.Name)
                 .ToListAsync();
+            var jobsTask = LoadJobsAsync();
+            await Task.WhenAll(plantTask, jobsTask);
+            var plantEntities = await plantTask;
             Plants = plantEntities.Select(plant => new PlantConnection(
                     plant.Id,
                     plant.PlantId,
@@ -247,11 +272,11 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 .Where(plant => plant.ApiEndpoints.Count > 0)
                 .ToList();
             SelectedPlantId = Plants.FirstOrDefault()?.DatabaseId ?? 0;
-            await LoadJobsAsync();
         }
         catch (Exception exception)
         {
             Jobs = [];
+            InvalidateFilteredBatchCache();
             LoadErrorMessage = $"Collection history could not be loaded: {exception.GetBaseException().Message}";
         }
         finally
@@ -268,17 +293,21 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     private async Task LoadJobsAsync()
     {
         const int jobsPerSection = 750;
-        var idTasks = new[]
-        {
-            LoadLatestSectionJobIdsAsync(job => job.DataType == "Rolling 24 Hour", jobsPerSection),
-            LoadLatestSectionJobIdsAsync(job => job.DataType == "Day Ahead" || job.DataType == "Daily", jobsPerSection),
-            LoadLatestSectionJobIdsAsync(job => job.DataType == "Week Ahead" || job.DataType == "Weekly", jobsPerSection),
-            LoadLatestSectionJobIdsAsync(job => job.DataType == "4 Month Ahead" || job.DataType == "4 Month", jobsPerSection),
-            LoadLatestSectionJobIdsAsync(job => job.DataType == "MMF", jobsPerSection)
-        };
-        var sectionJobIds = (await Task.WhenAll(idTasks)).SelectMany(ids => ids).ToHashSet();
-
         await using var database = await ContextFactory.CreateDbContextAsync();
+        IQueryable<long> LatestIds(Expression<Func<CollectionJobEntity, bool>> predicate) =>
+            database.CollectionJobs.AsNoTracking()
+                .Where(predicate)
+                .OrderByDescending(job => job.StartedAt)
+                .ThenByDescending(job => job.Id)
+                .Select(job => job.Id)
+                .Take(jobsPerSection);
+
+        var sectionJobIds = LatestIds(job => job.DataType == "Rolling 24 Hour")
+            .Concat(LatestIds(job => job.DataType == "Day Ahead" || job.DataType == "Daily"))
+            .Concat(LatestIds(job => job.DataType == "Week Ahead" || job.DataType == "Weekly"))
+            .Concat(LatestIds(job => job.DataType == "4 Month Ahead" || job.DataType == "4 Month"))
+            .Concat(LatestIds(job => job.DataType == "MMF"));
+
         Jobs = await (from job in database.CollectionJobs.AsNoTracking()
             join plant in database.LssPlants.AsNoTracking() on job.PlantId equals plant.Id
             join schedule in database.CollectionSchedules.AsNoTracking()
@@ -308,20 +337,29 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 job.ErrorMessage ?? string.Empty,
                 schedule == null ? "" : schedule.ScheduleCode))
             .ToListAsync();
+        LastRefreshStamp = await ReadRefreshStampAsync(database);
+        InvalidateFilteredBatchCache();
         Sequence = Math.Max(Sequence, Jobs.Count);
     }
 
-    private async Task<List<long>> LoadLatestSectionJobIdsAsync(
-        Expression<Func<CollectionJobEntity, bool>> predicate, int take)
+    private static async Task<CollectionRefreshStamp> ReadRefreshStampAsync(ApplicationDbContext database)
     {
-        await using var database = await ContextFactory.CreateDbContextAsync();
-        return await database.CollectionJobs.AsNoTracking()
-            .Where(predicate)
-            .OrderByDescending(job => job.StartedAt)
-            .ThenByDescending(job => job.Id)
-            .Select(job => job.Id)
-            .Take(take)
-            .ToListAsync();
+        var stamp = await database.CollectionJobs.AsNoTracking()
+            .GroupBy(_ => 1)
+            .Select(group => new CollectionRefreshStamp(
+                group.Max(job => job.Id),
+                group.Count(job => job.Status == CollectionJobStatus.Queued
+                    || job.Status == CollectionJobStatus.Processing
+                    || job.Status == "Running"),
+                group.Max(job => job.CompletedAt)))
+            .SingleOrDefaultAsync();
+        return stamp ?? new CollectionRefreshStamp(0, 0, null);
+    }
+
+    private void InvalidateFilteredBatchCache()
+    {
+        JobsRevision++;
+        FilteredBatchCache = null;
     }
 
     private void OpenJobDetail(DemoCollectionJob job)
@@ -347,6 +385,9 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 {
                     try
                     {
+                        await using var database = await ContextFactory.CreateDbContextAsync(cancellationToken);
+                        var refreshStamp = await ReadRefreshStampAsync(database);
+                        if (refreshStamp == LastRefreshStamp) return;
                         await LoadJobsAsync();
                         LoadErrorMessage = string.Empty;
                     }
@@ -817,6 +858,8 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
     }
 
     private sealed record CollectionCompletion(string Status, string ResponseMessage, string? ErrorMessage);
+
+    private sealed record CollectionRefreshStamp(long LatestJobId, int ActiveJobCount, DateTimeOffset? LatestCompletion);
 
     private sealed record ManualBatchOption(string Key, string ApiType, string DataType, string Label);
 }

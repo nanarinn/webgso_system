@@ -14,11 +14,17 @@
     <Compile Include="../../TestingSystem.Web/Database/UseCases/SolarApiReadingTable.cs" Link="SolarApiReading.cs" />
     <Compile Include="../../TestingSystem.Web/Database/UseCases/OperationalTables.cs" Link="OperationalTables.cs" />
     <Compile Include="../../TestingSystem.Web/Database/UseCases/MmfLocationAveraging.cs" Link="MmfLocationAveraging.cs" />
+    <Compile Include="../../TestingSystem.Web/Demo/DemoData.cs" Link="DemoData.cs" />
     <Compile Include="../../TestingSystem.Web/Backend/UseCases/Exports/DdqExcelWorkbookExporter.cs" Link="DdqExcelWorkbookExporter.cs" />
+    <Compile Include="../../TestingSystem.Web/Backend/UseCases/Exports/OnDemandDdqExcelExporter.cs" Link="OnDemandDdqExcelExporter.cs" />
+    <Compile Include="../../TestingSystem.Web/Backend/UseCases/Exports/OnDemandMmfExcelExporter.cs" Link="OnDemandMmfExcelExporter.cs" />
+    <Compile Include="../../TestingSystem.Web/Backend/UseCases/Exports/OnDemandAnomalyPreviewBuilder.cs" Link="OnDemandAnomalyPreviewBuilder.cs" />
     <Compile Include="../../TestingSystem.Web/Services/CollectionSchedulePolicy.cs" Link="CollectionSchedulePolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/CollectionCommandIdentity.cs" Link="CollectionCommandIdentity.cs" />
     <Compile Include="../../TestingSystem.Web/Services/CollectionProcessingPolicy.cs" Link="CollectionProcessingPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/DdqDatasetPolicy.cs" Link="DdqDatasetPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/DashboardDdqSummaryPolicy.cs" Link="DashboardDdqSummaryPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/DdqScheduledSubmissionPolicy.cs" Link="DdqScheduledSubmissionPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/ScheduledApiPayloadTranslator.cs" Link="ScheduledApiPayloadTranslator.cs" />
     <Compile Include="../../TestingSystem.Web/Services/MmfTestApiPayload.cs" Link="MmfTestApiPayload.cs" />
     <Compile Include="../../TestingSystem.Web/Services/MmfParameterCatalog.cs" Link="MmfParameterCatalog.cs" />
@@ -30,8 +36,10 @@
     <Compile Include="../../TestingSystem.Web/Services/OnDemandReportOwnership.cs" Link="OnDemandReportOwnership.cs" />
     <Compile Include="../../TestingSystem.Web/Services/LssPlantApiConfigurationPolicy.cs" Link="LssPlantApiConfigurationPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/LssApiPayloadVerifier.cs" Link="LssApiPayloadVerifier.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/LssApiPayloadDetector.cs" Link="LssApiPayloadDetector.cs" />
     <Compile Include="../../TestingSystem.Web/Services/ConfiguredValidationRuleEvaluator.cs" Link="ConfiguredValidationRuleEvaluator.cs" />
     <Compile Include="../../TestingSystem.Web/Services/MmfSensorQualityPolicy.cs" Link="MmfSensorQualityPolicy.cs" />
+    <Compile Include="../../TestingSystem.Web/Services/MmfGapFillPolicy.cs" Link="MmfGapFillPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/CollectionValidationPolicy.cs" Link="CollectionValidationPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/ReportSubstitutionPolicy.cs" Link="ReportSubstitutionPolicy.cs" />
     <Compile Include="../../TestingSystem.Web/Services/ReportAnomalyCsvExporter.cs" Link="ReportAnomalyCsvExporter.cs" />

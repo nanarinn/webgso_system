@@ -26,7 +26,7 @@ else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
     </div>
 }
 
-<section class="metric-grid" aria-label="Operational summary">
+<section class="dashboard-overview-summary" aria-label="Operational summary">
     <button class="metric-card metric-card-blue" type="button" disabled="@(!DashboardDataAvailable)"
             @onclick="() => OpenMetric(PlantMetricTitle, PlantMetricDescription, PlantItems)">
         <div>
@@ -34,27 +34,24 @@ else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
             <span>Total plants</span>
         </div>
     </button>
-    <button class="metric-card metric-card-green" type="button" disabled="@(!DashboardDataAvailable)"
-            @onclick="() => OpenMetric(SuccessMetricTitle, SuccessMetricDescription, SuccessfulItems)">
-        <div>
-            <strong>@MetricValue(DdqSuccessfulRequests)</strong>
-            <span>DDQ Successful Requests</span>
+
+    <section class="dashboard-ddq-compact" aria-label="DDQ collection status by data type">
+        <header>
+            <div><h2>DDQ Collection Status</h2></div>
+            <a href="collection-management">View history</a>
+        </header>
+        <div class="dashboard-ddq-compact-list">
+            @foreach (var summary in DdqTypes)
+            {
+                <div class="dashboard-ddq-compact-row">
+                    <div class="dashboard-ddq-type"><i></i><strong>@summary.DataType</strong></div>
+                    <time><small>Last pull</small><span>@(summary.LastCollectedAt.HasValue ? TimeDisplay.DateTimeWithSeconds(summary.LastCollectedAt.Value) : "No collection yet")</span></time>
+                    <button class="dashboard-ddq-count success" type="button" disabled="@(!DashboardDataAvailable)" title="View successful collections" @onclick='() => OpenDdqMetric(summary, "Successful")'><span>Successful</span><strong>@summary.SuccessfulCount</strong></button>
+                    <button class="dashboard-ddq-count failed" type="button" disabled="@(!DashboardDataAvailable)" title="View failed collections" @onclick='() => OpenDdqMetric(summary, "Failed")'><span>Failed</span><strong>@summary.FailedCount</strong></button>
+                </div>
+            }
         </div>
-    </button>
-    <button class="metric-card metric-card-yellow" type="button" disabled="@(!DashboardDataAvailable)"
-            @onclick="() => OpenMetric(FailedMetricTitle, FailedMetricDescription, FailedItems)">
-        <div>
-            <strong>@MetricValue(DdqFailedRequests)</strong>
-            <span>DDQ Failed Requests</span>
-        </div>
-    </button>
-    <button class="metric-card metric-card-navy" type="button" disabled="@(!DashboardDataAvailable)"
-            @onclick="() => OpenMetric(MmfMetricTitle, MmfMetricDescription, MmfItems)">
-        <div>
-            <strong>@MetricValue(ActiveMmf)</strong>
-            <span>Active MMF</span>
-        </div>
-    </button>
+    </section>
 </section>
 
 <section class="content-grid">

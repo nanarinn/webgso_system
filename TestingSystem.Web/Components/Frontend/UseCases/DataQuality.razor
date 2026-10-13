@@ -36,7 +36,7 @@
    }
   </div>
   <TablePagination TotalItems="@VisibleRules.Count" @bind-Page="RulePage" />
-  <div class="quality-policy-note"><span>i</span><p><strong>Collection and reporting flow</strong>The API response and translated readings are saved as received. Fixed structural rules protect duplicate keys, timestamps and formats. For MMF, parameter names are detected from API readings; administrators create rules for those parameters and configure their own minimum, maximum and change-rate limits.</p></div>
+  <div class="quality-policy-note"><span>i</span><p><strong>Collection and reporting flow</strong>The API response and translated readings are saved as received. Fixed structural rules protect duplicate keys, timestamps and formats. For MMF, parameter names are detected from API readings; administrators create rules for those parameters and configure their own minimum and maximum limits.</p></div>
  </section>
 </div>
 @if (EditorOpen)
@@ -54,7 +54,6 @@
    <fieldset class="quality-check-builder"><legend>Checks to apply</legend>
     <label class="quality-check-row"><input type="checkbox" @bind="Editor.UseMinimum" /><span><strong>Minimum threshold</strong><small>Flag values below this number.</small></span><input type="number" step="any" disabled="@(!Editor.UseMinimum)" @bind="Editor.MinimumValue" placeholder="Min" /></label>
     <label class="quality-check-row"><input type="checkbox" @bind="Editor.UseMaximum" /><span><strong>Maximum threshold</strong><small>Flag values above this number.</small></span><input type="number" step="any" disabled="@(!Editor.UseMaximum)" @bind="Editor.MaximumValue" placeholder="Max" /></label>
-    <label class="quality-check-row"><input type="checkbox" @bind="Editor.UseChange" /><span><strong>Changing value / hysteresis</strong><small>Flag changes above this limit.</small></span><input type="number" min="0" step="any" disabled="@(!Editor.UseChange)" @bind="Editor.ChangeThreshold" placeholder="Change" /></label>
     <label class="quality-check-row missing"><input type="checkbox" @bind="Editor.CheckMissing" /><span><strong>Missing / null data</strong><small>Flag missing parameters and interval gaps.</small></span></label>
    </fieldset>
    <label class="quality-active-choice"><input type="checkbox" @bind="Editor.IsActive" /><span><strong>Activate this rule</strong><small>Apply it when the next matching report is generated.</small></span></label>

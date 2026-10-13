@@ -245,7 +245,13 @@ public partial class MmfAnalytics : ComponentBase
     private void SetDisplayMode(string mode) => DisplayMode = mode is "graph" ? "graph" : "table";
     private SolarApiReading? ReadingFor(string parameter, int plantId, DateTime timestamp) =>
         ReadingIndex.GetValueOrDefault(new(parameter.ToUpperInvariant(), plantId, timestamp));
-    private decimal? ValueFor(int plantId, DateTime timestamp) => ReadingFor(ActiveParameter, plantId, timestamp)?.Value;
+    private decimal? ValueFor(int plantId, DateTime timestamp)
+    {
+        var exact = ReadingFor(ActiveParameter, plantId, timestamp)?.Value;
+        var previous = ReadingFor(ActiveParameter, plantId, timestamp.AddMinutes(-AppliedInterval))?.Value;
+        var next = ReadingFor(ActiveParameter, plantId, timestamp.AddMinutes(AppliedInterval))?.Value;
+        return MmfGapFillPolicy.Resolve(exact, previous, next);
+    }
     private string UnitForParameter => MmfParameterCatalog.UnitFor(ActiveParameter) is { Length: > 0 } catalogUnit
         ? catalogUnit
         : ReadingIndex.Values.FirstOrDefault(x =>

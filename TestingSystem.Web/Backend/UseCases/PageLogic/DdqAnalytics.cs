@@ -27,16 +27,19 @@ public partial class DdqAnalytics : ComponentBase
     private List<LssPlant> RegisteredPlants = [];
     private List<LssPlant> ResultPlants = [];
     private HashSet<int> SelectedPlantIds = [];
-    private HashSet<string> SelectedDataTypes = ["Rolling 24 Hour"];
+    private HashSet<string> SelectedDataTypes = [];
     private HashSet<string> SelectedStates = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> SelectedRegions = new(StringComparer.OrdinalIgnoreCase);
-    private Dictionary<string, int> SelectedIntervals = DataTypes.ToDictionary(
-        dataType => dataType, dataType => DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes);
+    private Dictionary<string, int> SelectedSubmissionIntervals = [];
     private List<DdqTableRow> TableRows = [];
     private List<SolarApiReading> LoadedReadings = [];
+    private IReadOnlyList<DdqScheduledSubmissionOption> ScheduledSubmissionOptions = [];
+    private HashSet<string> SelectedSubmissionKeys { get; set; } = [];
+    private string PendingSubmission { get; set; } = string.Empty;
+    private int SubmissionSearchVersion;
     private int FilterVersion;
-    private DateTime? SubmissionDateTime { get; set; }
     private string ActiveDataType { get; set; } = "Rolling 24 Hour";
+    private string ActiveSubmissionKey { get; set; } = string.Empty;
     private string ValidationMessage { get; set; } = string.Empty;
     private string ResultDescription { get; set; } = string.Empty;
     private bool HasApplied { get; set; }
@@ -60,21 +63,118 @@ public partial class DdqAnalytics : ComponentBase
             .Where(p => p.IsActive)
             .OrderBy(p => p.Name)
             .ToListAsync();
-        var importedWindow = await database.PublishedReadings()
-            .Where(x => SelectedDataTypes.Contains(x.DataType))
-            .GroupBy(_ => 1)
-            .Select(group => new
-            {
-                Submission = group.Max(x => x.SubmissionDateTime)
-            })
-            .FirstOrDefaultAsync();
-        if (importedWindow is not null)
+        await LoadScheduledSubmissionOptionsAsync(database);
+    }
+
+    private async Task LoadScheduledSubmissionOptionsAsync(ApplicationDbContext database)
+    {
+        var sourceRows = await (
+            from job in database.CollectionJobs.AsNoTracking()
+            join schedule in database.CollectionSchedules.AsNoTracking()
+                on job.CollectionScheduleId equals (int?)schedule.Id
+            where job.Status == CollectionJobStatus.Completed
+                && schedule.ApiType == "DDQ"
+                && database.SolarApiReadings.Any(reading => reading.CollectionJobId == job.Id)
+            orderby job.SubmissionDateTime descending
+            select new DdqScheduledSubmissionSource(
+                job.DataType,
+                job.SubmissionDateTime,
+                schedule.Name,
+                job.PlantId))
+            .Take(5000)
+            .ToListAsync();
+
+        ScheduledSubmissionOptions = DdqScheduledSubmissionPolicy.Build(sourceRows);
+    }
+
+    private void AddScheduledSubmission(DdqScheduledSubmissionOption option)
+    {
+        SelectedSubmissionKeys.Add(option.Key);
+        SelectedSubmissionIntervals.TryAdd(option.Key,
+            DdqDatasetPolicy.Get(option.DataType).ReferenceTemplateIntervalMinutes);
+        SynchroniseSelectedDataTypes();
+        ValidationMessage = string.Empty;
+    }
+
+    private void ToggleScheduledSubmission(string key, object? value)
+    {
+        var option = ScheduledSubmissionOptions.FirstOrDefault(candidate => candidate.Key == key);
+        if (option is null) return;
+
+        if (value is true)
         {
-            SubmissionDateTime = TruncateToMinute(importedWindow.Submission);
+            AddScheduledSubmission(option);
+        }
+        else
+        {
+            SelectedSubmissionKeys.Remove(key);
+            SelectedSubmissionIntervals.Remove(key);
+            SynchroniseSelectedDataTypes();
         }
     }
 
-    private async Task OnPlantsChanged(HashSet<int> plantIds)
+    private void RemoveScheduledSubmission(string key) => ToggleScheduledSubmission(key, false);
+
+    private void SynchroniseSelectedDataTypes()
+    {
+        SelectedDataTypes = SelectedSubmissionOptions
+            .Select(option => option.DataType)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var selectedOptions = SelectedSubmissionOptions;
+        if (selectedOptions.Count == 0)
+        {
+            ActiveDataType = "Rolling 24 Hour";
+            ActiveSubmissionKey = string.Empty;
+            return;
+        }
+
+        if (!SelectedSubmissionKeys.Contains(ActiveSubmissionKey))
+            ActiveSubmissionKey = selectedOptions[0].Key;
+        ActiveDataType = selectedOptions.First(option => option.Key == ActiveSubmissionKey).DataType;
+    }
+
+    private IReadOnlyList<DdqScheduledSubmissionOption> SelectedSubmissionOptions =>
+        ScheduledSubmissionOptions.Where(option => SelectedSubmissionKeys.Contains(option.Key)).ToArray();
+
+    private IEnumerable<DdqScheduledSubmissionOption> AvailableSubmissionOptions =>
+        ScheduledSubmissionOptions.Where(option => !SelectedSubmissionKeys.Contains(option.Key));
+
+    private static string SubmissionOptionText(DdqScheduledSubmissionOption option) => option.DisplayLabel;
+
+    private string SubmissionSelectionStatus => SelectedSubmissionOptions.Count == 0
+        ? "Select from the suggestions"
+        : $"{SelectedSubmissionOptions.Count} selected · ready for another";
+
+    private string SubmissionHelpText => ScheduledSubmissionOptions.Count == 0
+        ? "No completed scheduled DDQ collection is available yet. Run Collection Schedule first."
+        : SelectedSubmissionOptions.Count == 0
+            ? "No submission selected. Choose one or more completed collections."
+            : $"{SelectedSubmissionOptions.Count} submission(s) selected. Add more submissions or remove a selection.";
+
+    private void AddSubmissionFromSelection(ChangeEventArgs args)
+    {
+        PendingSubmission = args.Value?.ToString()?.Trim() ?? string.Empty;
+        var option = AvailableSubmissionOptions.FirstOrDefault(candidate =>
+            SubmissionOptionText(candidate).Equals(PendingSubmission, StringComparison.OrdinalIgnoreCase));
+        if (option is null) return;
+
+        AddScheduledSubmission(option);
+        PendingSubmission = string.Empty;
+        SubmissionSearchVersion++;
+    }
+
+    private void OnSubmissionIntervalChanged(string key, ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var interval)
+            && Intervals.Any(item => item.Value == interval))
+            SelectedSubmissionIntervals[key] = interval;
+    }
+
+    private int IntervalFor(DdqScheduledSubmissionOption option) =>
+        SelectedSubmissionIntervals.GetValueOrDefault(option.Key,
+            DdqDatasetPolicy.Get(option.DataType).ReferenceTemplateIntervalMinutes);
+
+    private Task OnPlantsChanged(HashSet<int> plantIds)
     {
         SelectedPlantIds = plantIds;
         if (plantIds.Count > 0)
@@ -82,10 +182,11 @@ public partial class DdqAnalytics : ComponentBase
             SelectedStates.Clear();
             SelectedRegions.Clear();
         }
-        await RefreshLatestSubmissionAsync();
+        ValidationMessage = string.Empty;
+        return Task.CompletedTask;
     }
 
-    private async Task OnStatesChanged(HashSet<string> states)
+    private Task OnStatesChanged(HashSet<string> states)
     {
         SelectedStates = states;
         if (states.Count > 0)
@@ -94,10 +195,11 @@ public partial class DdqAnalytics : ComponentBase
             SelectedPlantIds = [];
             FilterVersion++;
         }
-        await RefreshLatestSubmissionAsync();
+        ValidationMessage = string.Empty;
+        return Task.CompletedTask;
     }
 
-    private async Task OnRegionsChanged(HashSet<string> regions)
+    private Task OnRegionsChanged(HashSet<string> regions)
     {
         SelectedRegions = regions;
         if (regions.Count > 0)
@@ -106,63 +208,9 @@ public partial class DdqAnalytics : ComponentBase
             SelectedPlantIds = [];
             FilterVersion++;
         }
-        await RefreshLatestSubmissionAsync();
+        ValidationMessage = string.Empty;
+        return Task.CompletedTask;
     }
-
-    private async Task ToggleDataType(string dataType, object? value)
-    {
-        if (value is true) SelectedDataTypes.Add(dataType);
-        else SelectedDataTypes.Remove(dataType);
-        await RefreshLatestSubmissionAsync();
-    }
-
-    private async Task RefreshLatestSubmissionAsync()
-    {
-        if (SelectedDataTypes.Count == 0)
-        {
-            SubmissionDateTime = null;
-            ValidationMessage = "Select at least one data type.";
-            return;
-        }
-
-        var matchingPlantIds = AnalyticsPlantFilter.Match(
-            RegisteredPlants, SelectedPlantIds, SelectedStates, SelectedRegions)
-            .Select(plant => plant.Id)
-            .ToArray();
-        if (matchingPlantIds.Length == 0)
-        {
-            SubmissionDateTime = null;
-            ValidationMessage = "No active plants match the selected location filter.";
-            return;
-        }
-
-        await using var database = await ContextFactory.CreateDbContextAsync();
-        var latestSubmission = await database.PublishedReadings()
-            .Where(reading => matchingPlantIds.Contains(reading.PlantId)
-                && SelectedDataTypes.Contains(reading.DataType))
-            .MaxAsync(reading => (DateTime?)reading.SubmissionDateTime);
-        SubmissionDateTime = latestSubmission.HasValue ? TruncateToMinute(latestSubmission.Value) : null;
-        ValidationMessage = latestSubmission.HasValue
-            ? string.Empty
-            : "No stored DDQ submission is available for the selected plant and data type. Run the collection first.";
-    }
-
-    private void OnDataTypeIntervalChanged(string dataType, ChangeEventArgs args)
-    {
-        if (int.TryParse(args.Value?.ToString(), out var interval)
-            && Intervals.Any(item => item.Value == interval))
-            SelectedIntervals[dataType] = interval;
-    }
-
-    private int IntervalFor(string dataType) => SelectedIntervals.GetValueOrDefault(dataType,
-        DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes);
-    private void OnSubmissionDateTimeChanged(ChangeEventArgs args) =>
-        SubmissionDateTime = ParseOptionalDateTime(args.Value?.ToString());
-
-    private static DateTime? ParseOptionalDateTime(string? value) =>
-        DateTime.TryParseExact(value, ["yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss"],
-            CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTime) ? dateTime : null;
-
     private async Task ApplyFilters()
     {
         if (IsApplyingFilters) return;
@@ -185,9 +233,9 @@ public partial class DdqAnalytics : ComponentBase
         ResultPlants = [];
         TableRows = [];
 
-        if (!SubmissionDateTime.HasValue)
+        if (SelectedSubmissionOptions.Count == 0)
         {
-            ValidationMessage = "Submission date and time is required.";
+            ValidationMessage = "Select at least one completed DDQ submission.";
             return;
         }
 
@@ -205,7 +253,8 @@ public partial class DdqAnalytics : ComponentBase
             return;
         }
 
-        ActiveDataType = DataTypes.First(SelectedDataTypes.Contains);
+        ActiveSubmissionKey = SelectedSubmissionOptions[0].Key;
+        ActiveDataType = SelectedSubmissionOptions[0].DataType;
         HiddenGraphPlantIds.Clear();
         LegendSearch = string.Empty;
         await LoadTableRowsAsync();
@@ -215,31 +264,41 @@ public partial class DdqAnalytics : ComponentBase
             : SelectedStates.Count > 0 ? $"{SelectedStates.Count} selected state(s)"
             : SelectedRegions.Count > 0 ? $"{SelectedRegions.Count} selected region(s)"
             : "all active plants";
-        var intervals = string.Join(", ", DataTypes.Where(SelectedDataTypes.Contains)
-            .Select(dataType => $"{DataTypeLabel(dataType)}: {IntervalText(IntervalFor(dataType))}"));
-        ResultDescription = $"{ResultPlants.Count} plant(s) from {location}; {SelectedDataTypes.Count} data type(s); "
+        var intervals = string.Join(", ", SelectedSubmissionOptions
+            .Select(option => $"{option.DataType} {option.SubmissionDateTime:dd MMM HH:mm}: {IntervalText(IntervalFor(option))}"));
+        ResultDescription = $"{ResultPlants.Count} plant(s) from {location}; {SelectedSubmissionOptions.Count} submission(s); "
             + $"{TimestampRangeDescription}; {intervals}.";
 
     }
 
-    private async Task SelectDataTypeTab(string dataType)
+    private async Task SelectSubmissionTab(string submissionKey)
     {
         ValidationMessage = string.Empty;
-        ActiveDataType = dataType;
+        var option = SelectedSubmissionOptions.FirstOrDefault(candidate => candidate.Key == submissionKey);
+        if (option is null) return;
+        ActiveSubmissionKey = option.Key;
+        ActiveDataType = option.DataType;
         await LoadTableRowsAsync();
     }
 
     private async Task LoadTableRowsAsync()
     {
         var plantIds = ResultPlants.Select(x => x.Id).ToArray();
-        var submissionStart = SubmissionDateTime;
-        var submissionEnd = SubmissionDateTime?.AddMinutes(1);
-        var selectedInterval = IntervalFor(ActiveDataType);
+        var activeOption = SelectedSubmissionOptions.FirstOrDefault(option => option.Key == ActiveSubmissionKey);
+        if (activeOption is null)
+        {
+            TableRows = [];
+            LoadedReadings = [];
+            return;
+        }
+        var submissionStart = activeOption.SubmissionDateTime;
+        var submissionEnd = submissionStart.AddMinutes(1);
+        var selectedInterval = IntervalFor(activeOption);
         await using var database = await ContextFactory.CreateDbContextAsync();
         var loadedReadings = await database.PublishedReadings()
             .Where(x => x.DataType == ActiveDataType && plantIds.Contains(x.PlantId)
-                        && (!submissionStart.HasValue || x.SubmissionDateTime >= submissionStart.Value)
-                        && (!submissionEnd.HasValue || x.SubmissionDateTime < submissionEnd.Value)
+                        && x.SubmissionDateTime >= submissionStart
+                        && x.SubmissionDateTime < submissionEnd
                         && (x.IntervalStart.Hour * 60 + x.IntervalStart.Minute) % selectedInterval == 0)
             .OrderByDescending(x => x.Id)
             .ToListAsync();
@@ -267,14 +326,16 @@ public partial class DdqAnalytics : ComponentBase
 
     private void ResetFilters()
     {
-        SubmissionDateTime = null;
+        SelectedSubmissionKeys = [];
+        PendingSubmission = string.Empty;
+        SubmissionSearchVersion++;
         SelectedStates = new(StringComparer.OrdinalIgnoreCase);
         SelectedRegions = new(StringComparer.OrdinalIgnoreCase);
         SelectedPlantIds = [];
-        SelectedDataTypes = ["Rolling 24 Hour"];
-        SelectedIntervals = DataTypes.ToDictionary(
-            dataType => dataType, dataType => DdqDatasetPolicy.Get(dataType).ReferenceTemplateIntervalMinutes);
+        SelectedDataTypes = [];
+        SelectedSubmissionIntervals = [];
         ActiveDataType = "Rolling 24 Hour";
+        ActiveSubmissionKey = string.Empty;
         FilterVersion++;
         ValidationMessage = string.Empty;
         ResultDescription = string.Empty;
@@ -287,10 +348,30 @@ public partial class DdqAnalytics : ComponentBase
         LegendSearch = string.Empty;
     }
 
-    private string SelectedIntervalLabel => IntervalText(IntervalFor(ActiveDataType));
-    private string SubmissionDateTimeLabel => SubmissionDateTime.HasValue
-        ? TimeDisplay.DateTime(SubmissionDateTime.Value)
-        : "No submission selected";
+    private string SelectedIntervalLabel
+    {
+        get
+        {
+            var option = SelectedSubmissionOptions.FirstOrDefault(candidate => candidate.Key == ActiveSubmissionKey);
+            return option is null ? "No interval selected" : IntervalText(IntervalFor(option));
+        }
+    }
+
+    private string SubmissionDateTimeLabel => SelectedSubmissionOptions.Count switch
+    {
+        0 => "No submission selected",
+        1 => TimeDisplay.DateTime(SelectedSubmissionOptions[0].SubmissionDateTime),
+        _ => $"{SelectedSubmissionOptions.Count} submissions selected"
+    };
+
+    private string ActiveSubmissionDateTimeLabel
+    {
+        get
+        {
+            var option = SelectedSubmissionOptions.FirstOrDefault(candidate => candidate.Key == ActiveSubmissionKey);
+            return option is null ? "No submission selected" : TimeDisplay.DateTime(option.SubmissionDateTime);
+        }
+    }
     private string TimestampRangeLabel => ReadingTimestampRange(LoadedReadings);
     private string TimestampRangeDescription => LoadedReadings.Count == 0
         ? "all timestamps returned by the API"
@@ -309,25 +390,25 @@ public partial class DdqAnalytics : ComponentBase
             var workbookSheets = new List<DdqWorkbookSheet>();
             var anomalyRows = new List<IReadOnlyList<object?>>();
             var plantIds = ResultPlants.Select(plant => plant.Id).ToArray();
-            var submissionStart = SubmissionDateTime;
-            var submissionEnd = SubmissionDateTime?.AddMinutes(1);
             await using var database = await ContextFactory.CreateDbContextAsync();
             var validationRules = await database.ValidationRules.AsNoTracking()
                 .Where(rule => rule.DataType == "DDQ" && rule.IsActive).ToListAsync();
 
-            foreach (var dataType in DataTypes.Where(SelectedDataTypes.Contains))
+            foreach (var selectedSubmission in SelectedSubmissionOptions)
             {
-                var selectedInterval = IntervalFor(dataType);
+                var dataType = selectedSubmission.DataType;
+                var selectedInterval = IntervalFor(selectedSubmission);
+                var submissionStart = selectedSubmission.SubmissionDateTime;
+                var submissionEnd = submissionStart.AddMinutes(1);
                 var readings = await database.PublishedReadings()
                     .Where(reading => reading.DataType == dataType && plantIds.Contains(reading.PlantId)
-                        && (!submissionStart.HasValue || reading.SubmissionDateTime >= submissionStart.Value)
-                        && (!submissionEnd.HasValue || reading.SubmissionDateTime < submissionEnd.Value)
+                        && reading.SubmissionDateTime >= submissionStart
+                        && reading.SubmissionDateTime < submissionEnd
                         && (reading.IntervalStart.Hour * 60 + reading.IntervalStart.Minute) % selectedInterval == 0)
                     .OrderByDescending(reading => reading.Id)
                     .ToListAsync();
 
-                var effectiveSubmission = submissionStart
-                    ?? readings.Select(reading => reading.SubmissionDateTime).DefaultIfEmpty(DateTime.Now).Max();
+                var effectiveSubmission = submissionStart;
                 var previousSubmission = effectiveSubmission.AddDays(-1);
                 var previousReadings = await database.PublishedReadings()
                     .Where(reading => reading.DataType == dataType && plantIds.Contains(reading.PlantId)
@@ -381,11 +462,11 @@ public partial class DdqAnalytics : ComponentBase
                 var metadata = new (string Label, string Value)[]
                 {
                     ("Data Type", dataType),
-                    ("Submission Date & Time", SubmissionDateTimeLabel),
+                    ("Submission Date & Time", TimeDisplay.DateTime(selectedSubmission.SubmissionDateTime)),
                     ("Data Interval", IntervalText(selectedInterval)),
                     ("Data Timestamp Range", ReadingTimestampRange(readings))
                 };
-                workbookSheets.Add(new DdqWorkbookSheet(dataType,
+                workbookSheets.Add(new DdqWorkbookSheet($"{dataType} {selectedSubmission.SubmissionDateTime:yyyyMMdd HHmm}",
                     "SOLAR DATA SUBMISSION / DATA MONITORING", metadata, headers, sheetRows, 5));
             }
 
@@ -399,8 +480,8 @@ public partial class DdqAnalytics : ComponentBase
             {
                 ("Data Type", string.Join(", ", DataTypes.Where(SelectedDataTypes.Contains))),
                 ("Submission Date & Time", SubmissionDateTimeLabel),
-                ("Data Interval", string.Join(", ", DataTypes.Where(SelectedDataTypes.Contains)
-                    .Select(dataType => $"{DataTypeLabel(dataType)}: {IntervalText(IntervalFor(dataType))}"))),
+                ("Data Interval", string.Join(", ", SelectedSubmissionOptions
+                    .Select(option => $"{option.DataType} {option.SubmissionDateTime:dd MMM HH:mm}: {IntervalText(IntervalFor(option))}"))),
                 ("Data Timestamp Range", TimestampRangeLabel)
             };
             workbookSheets.Add(new DdqWorkbookSheet("Anomaly Report", "ANOMALY REPORT",
@@ -423,9 +504,6 @@ public partial class DdqAnalytics : ComponentBase
     private static int PeriodNumber(DateTime timestamp, int intervalMinutes) =>
         (timestamp.Hour * 60 + timestamp.Minute) / Math.Max(1, intervalMinutes) + 1;
 
-    private static DateTime TruncateToMinute(DateTime value) =>
-        new(value.Year, value.Month, value.Day, value.Hour, value.Minute, 0, value.Kind);
-
     private static string IntervalText(int value) => value == 60 ? "1 hour" : $"{value} minutes";
 
     private static string TemplatePlantCode(string plantId)
@@ -447,6 +525,10 @@ public partial class DdqAnalytics : ComponentBase
     {
         if (!HiddenGraphPlantIds.Add(plantId)) HiddenGraphPlantIds.Remove(plantId);
     }
+
+    private void ShowAllGraphPlants() => HiddenGraphPlantIds.Clear();
+
+    private void HideAllGraphPlants() => HiddenGraphPlantIds = ResultPlants.Select(plant => plant.Id).ToHashSet();
 
     private void ToggleGraphCrosshair() => ShowGraphCrosshair = !ShowGraphCrosshair;
 

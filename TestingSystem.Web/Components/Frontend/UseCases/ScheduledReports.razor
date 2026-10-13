@@ -50,7 +50,7 @@
                 @foreach (var schedule in TablePaging.Slice(FilteredSchedules, ReportSchedulePage))
                 {
                     <div class="report-simple-row">
-                        <div class="admin-entity schedule-identity"><span>RS</span><div><strong>@schedule.Name</strong><small>@schedule.Id</small></div></div>
+                        <div class="admin-entity schedule-identity"><div><strong>@schedule.Name</strong><small>@schedule.Id</small></div></div>
                         <span><strong>@GetPlantSummary(schedule.Plants)</strong><small>@PlantNames.Count plant(s)</small></span>
                         <span title="@string.Join(", ", EffectiveDataFields(schedule))"><strong>@GetDataSummary(schedule)</strong><small>@EffectiveInterval(schedule) minute data interval</small></span>
                         <span><strong>@EffectiveScheduleType(schedule)</strong><small>@ScheduleDescription(schedule)</small></span>
@@ -74,7 +74,7 @@
                 @foreach (var delivery in TablePaging.Slice(FilteredDeliveries, DeliveryPage))
                 {
                     <div class="delivery-row delivery-modern-row">
-                        <div class="automation-name"><span>@DeliverySource(delivery)</span><div><strong>@delivery.ScheduleName</strong><small>@delivery.Id</small></div></div>
+                        <div class="automation-name"><div><strong>@delivery.ScheduleName</strong><small>@delivery.Id</small></div></div>
                         <span><strong>@DeliveryDataSummary(delivery)</strong><small>@DeliveryIntervalSummary(delivery)</small></span>
                         <span><strong>@DeliveryScheduleType(delivery)</strong><small>@DeliveryScheduleDescription(delivery)</small></span>
                         <time>@delivery.GeneratedAt.ToString("dd MMM yyyy")<small>@delivery.GeneratedAt.ToString("HH:mm:ss")</small></time>

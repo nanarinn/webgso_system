@@ -9,7 +9,7 @@
         <div>
             <p class="section-label">Flexible analysis</p>
             <h1>On-Demand Analysis</h1>
-            <p class="page-subtitle">Generate DDQ or MMF datasets for active Large Scale Solar plants, review the results and export the main and anomaly CSV reports.</p>
+            <p class="page-subtitle">Generate DDQ or MMF datasets for active Large Scale Solar plants, review the results and export the main data and anomaly reports.</p>
         </div>
         <button class="primary-action generate-action" type="button" @onclick="OpenGenerateDialog">
             <span class="generate-plus">+</span> Generate
@@ -53,25 +53,46 @@
                 <span>View</span>
                 <span>Export</span>
                 <span>Anomaly report</span>
+                <span>Delete</span>
             </div>
             @foreach (var result in TablePaging.Slice(Results, AnalysisPage))
             {
                 <div class="on-demand-row" role="row">
                     <div class="analysis-name">
-                        <span class="analysis-type analysis-type-@result.Type.ToLowerInvariant()">@result.Type</span>
                         <strong>@result.Name</strong>
                     </div>
                     <time datetime="@result.GeneratedAt.ToString("O")">@TimeDisplay.DateTimeWithSeconds(result.GeneratedAt)</time>
-                    <span class="analysis-description"><strong>@(string.IsNullOrWhiteSpace(result.DataSelection) ? (result.Type == "DDQ" ? "Rolling 24 Hour" : "All MMF parameters") : result.DataSelection)</strong><small>@(result.Type == "MMF" && result.DataRangeStart.HasValue && result.DataRangeEnd.HasValue ? $"{TimeDisplay.DateTimeLong(result.DataRangeStart.Value)} – {TimeDisplay.DateTimeLong(result.DataRangeEnd.Value)}" : TimeDisplay.DateTimeLong(result.SubmissionDate)) · @IntervalText(result.IntervalMinutes) · @(result.PlantCount > 0 ? result.PlantCount : ActivePlantCount) plant(s) · @result.RecordCount.ToString("N0") records</small></span>
+                    <span class="analysis-description"><strong>@(string.IsNullOrWhiteSpace(result.DataSelection) ? (result.Type == "DDQ" ? "Rolling 24 Hour" : "All MMF parameters") : result.DataSelection)</strong><small>@(result.Type == "MMF" && result.DataRangeStart.HasValue && result.DataRangeEnd.HasValue ? $"{TimeDisplay.DateTimeLong(result.DataRangeStart.Value)} – {TimeDisplay.DateTimeLong(result.DataRangeEnd.Value)}" : TimeDisplay.DateTimeLong(result.SubmissionDate)) · @IntervalText(result.IntervalMinutes) · @ResultScopeCountLabel(result) · @result.RecordCount.ToString("N0") records</small></span>
                     <span><span class="status-pill status-@result.Status.ToLowerInvariant()">@result.Status</span></span>
                     <button class="table-action view-action" type="button" @onclick="() => ViewResult(result)">View</button>
-                    <button class="table-action export-action" type="button" disabled="@(result.Status != "Successful")" @onclick="() => ExportResultAsync(result)">Export CSV</button>
+                    <button class="table-action export-action" type="button" disabled="@(result.Status != "Successful")" @onclick="() => ExportResultAsync(result)">Export Excel</button>
                     <button class="table-action anomaly-download" type="button" disabled="@(result.Status != "Successful")" @onclick="() => ExportAnomalyResultAsync(result)">Anomaly (@result.AnomalyCount)</button>
+                    <button class="table-action delete-analysis-action" type="button" @onclick="() => RequestDelete(result)">Delete</button>
                 </div>
             }
         </div>
         <TablePagination TotalItems="@Results.Count" @bind-Page="AnalysisPage" />
     </section>
+
+    @if (DeleteTarget is not null)
+    {
+        <div class="schedule-confirm-overlay">
+            <section class="schedule-status-confirmation delete-confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="analysis-delete-title">
+                <button class="profile-close" type="button" aria-label="Close confirmation" disabled="@IsDeleting" @onclick="CancelDelete">&#215;</button>
+                <span class="schedule-status-warning">!</span>
+                <div>
+                    <p class="section-label">Delete analysis</p>
+                    <h3 id="analysis-delete-title">Delete this generated analysis?</h3>
+                    <p><b>@DeleteTarget.Name</b> and its generated record will be permanently removed from MS SQL. Files that were already downloaded are not affected.</p>
+                    @if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }
+                    <div>
+                        <button type="button" class="profile-cancel" disabled="@IsDeleting" @onclick="CancelDelete">Keep Analysis</button>
+                        <button type="button" class="confirm-delete-action" disabled="@IsDeleting" @onclick="DeleteResultAsync">@(IsDeleting ? "Deleting..." : "Confirm Delete")</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    }
 
     @if (IsSummaryDialogOpen)
     {
@@ -126,42 +147,86 @@
                         <label class="analysis-choice @(SelectedType == "DDQ" ? "selected" : null)">
                             <InputRadio Value="@("DDQ")" />
                             <span>DDQ</span>
-                            <small>Choose one DDQ forecast data type for all plants.</small>
+                            <small>Choose one completed collection-schedule submission.</small>
                         </label>
                         <label class="analysis-choice @(SelectedType == "MMF" ? "selected" : null)">
                             <InputRadio Value="@("MMF")" />
                             <span>MMF</span>
-                            <small>Include every available MMF parameter for all plants.</small>
+                            <small>Include every MMF parameter by plant, state or region.</small>
                         </label>
                     </InputRadioGroup>
 
                     <div class="on-demand-request-grid">
                         @if (SelectedType == "DDQ")
                         {
-                            <label class="filter-field"><span>DDQ data type</span><select value="@SelectedDataType" @onchange="OnDdqDataTypeChanged">@foreach (var type in DdqDataTypes) { <option value="@type">@type</option> }</select><small>Select one forecast dataset. The latest available submission is selected automatically.</small></label>
+                            <div class="filter-field on-demand-ddq-submission-selector">
+                                <span>DDQ submission</span>
+                                @if (SelectedDdqSubmission is null)
+                                {
+                                    <input @key="DdqSubmissionSearchVersion" type="search" list="on-demand-ddq-submissions"
+                                           placeholder="Search date, time, DDQ type or schedule"
+                                           value="@PendingDdqSubmission" @onchange="SelectDdqSubmission" autocomplete="off" />
+                                    <datalist id="on-demand-ddq-submissions">
+                                        @foreach (var option in AvailableDdqSubmissionOptions)
+                                        {
+                                            <option value="@DdqSubmissionOptionText(option)"></option>
+                                        }
+                                    </datalist>
+                                    <small>Select one completed submission from Collection Schedule.</small>
+                                }
+                                else
+                                {
+                                    <button type="button" class="on-demand-selected-submission" @onclick="RemoveDdqSubmission">
+                                        <span><strong>@SelectedDdqSubmission.DataType</strong><small>@TimeDisplay.DateTime(SelectedDdqSubmission.SubmissionDateTime) · @SelectedDdqSubmission.PlantCount plant(s)</small></span>
+                                        <b aria-hidden="true">×</b>
+                                    </button>
+                                    <small>Remove this selection to choose another submission.</small>
+                                }
+                            </div>
                         }
                         else
                         {
                             <label class="filter-field"><span>MMF data</span><input value="All MMF parameters" readonly /><small>Every available parameter is included at the selected interval.</small></label>
                         }
                         <label class="filter-field"><span>Data interval</span><select @bind="SelectedInterval">@foreach (var interval in DataIntervals) { <option value="@interval.Value">@interval.Label</option> }</select><small>Only timestamps aligned with this interval are included.</small></label>
-                        @if (SelectedType == "DDQ")
-                        {
-                            <label class="filter-field"><span>Submission date &amp; time</span><span class="sblss-picker sblss-picker-datetime"><span class="sblss-picker-copy"><b>@SelectedSubmissionDate.ToString("dd/MM/yyyy") @TimeDisplay.TwentyFourHour(SelectedSubmissionDate)</b><small>day/month/year · 24-hour time</small></span><span class="sblss-picker-icon" aria-hidden="true">▣</span><input class="sblss-picker-native" aria-label="Submission date and time in day month year and 24 hour format" type="datetime-local" max="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" @bind="SelectedSubmissionDate" @bind:format="yyyy-MM-ddTHH:mm" required /></span><small>Use the exact date and time configured by the collection schedule.</small></label>
-                        }
                     </div>
                     @if (SelectedType == "MMF")
                     {
+                        <fieldset class="on-demand-mmf-scope">
+                            <legend>MMF result scope</legend>
+                            <InputRadioGroup @bind-Value="MmfLocationScope" Name="mmfLocationScope" class="mmf-scope-options">
+                                <label class="mmf-scope-option @(MmfLocationScope == "All Plants" ? "selected" : null)">
+                                    <InputRadio Value="@("All Plants")" /><span><strong>All Plants</strong><small>One result row for every active LSS plant.</small></span>
+                                </label>
+                                <label class="mmf-scope-option @(MmfLocationScope == "All States" ? "selected" : null)">
+                                    <InputRadio Value="@("All States")" /><span><strong>All States</strong><small>Average plant readings into one row per state.</small></span>
+                                </label>
+                                <label class="mmf-scope-option @(MmfLocationScope == "All Regions" ? "selected" : null)">
+                                    <InputRadio Value="@("All Regions")" /><span><strong>All Regions</strong><small>Average plant readings into one row per region.</small></span>
+                                </label>
+                            </InputRadioGroup>
+                        </fieldset>
                         <fieldset class="on-demand-mmf-range">
-                            <legend><span class="range-step">MMF</span><span><strong>Data timestamp range</strong><small>Choose the MMF readings to include in this analysis.</small></span></legend>
-                            <div class="on-demand-range-grid">
-                                <label class="filter-field"><span>Start date &amp; time</span><span class="sblss-picker sblss-picker-datetime"><span class="sblss-picker-copy"><b>@MmfRangeStart.ToString("dd/MM/yyyy") @TimeDisplay.TwentyFourHour(MmfRangeStart)</b><small>day/month/year · 24-hour time</small></span><span class="sblss-picker-icon" aria-hidden="true">▣</span><input class="sblss-picker-native" aria-label="MMF start date and time in day month year and 24 hour format" type="datetime-local" required max="@MmfRangeEnd.ToString("yyyy-MM-ddTHH:mm")" @bind="MmfRangeStart" @bind:format="yyyy-MM-ddTHH:mm" /></span><small>First MMF timestamp included.</small></label>
-                                <span class="range-flow" aria-hidden="true">&#8594;</span>
-                                <label class="filter-field"><span>End date &amp; time</span><span class="sblss-picker sblss-picker-datetime"><span class="sblss-picker-copy"><b>@MmfRangeEnd.ToString("dd/MM/yyyy") @TimeDisplay.TwentyFourHour(MmfRangeEnd)</b><small>day/month/year · 24-hour time</small></span><span class="sblss-picker-icon" aria-hidden="true">▣</span><input class="sblss-picker-native" aria-label="MMF end date and time in day month year and 24 hour format" type="datetime-local" required min="@MmfRangeStart.ToString("yyyy-MM-ddTHH:mm")" @bind="MmfRangeEnd" @bind:format="yyyy-MM-ddTHH:mm" /></span><small>Last MMF timestamp included.</small></label>
+                            <legend><span class="range-step">3</span><span><strong>MMF data range</strong><small>Select the exact start and end date and time.</small></span></legend>
+                            <div class="on-demand-date-pair">
+                                <div class="date-time-control">
+                                    <span>Start</span>
+                                    <div>
+                                        <label><small>Date</small><span class="sblss-picker"><span class="sblss-picker-copy"><b>@MmfStartDateInput.ToString("dd/MM/yyyy")</b><small>day/month/year</small></span><span class="sblss-picker-icon" aria-hidden="true">▣</span><input class="sblss-picker-native" aria-label="MMF start date in day month year format" type="date" required @bind="MmfStartDateInput" @bind:format="yyyy-MM-dd" /></span></label>
+                                        <label><small>Time</small><span class="sblss-picker sblss-picker-time"><span class="sblss-picker-copy"><b>@TimeDisplay.TwentyFourHour(MmfStartTimeInput)</b><small>24-hour time</small></span><span class="sblss-picker-icon sblss-clock-icon" aria-hidden="true">◷</span><input class="sblss-picker-native" aria-label="MMF start time in 24 hour format" type="time" required step="900" @bind="MmfStartTimeInput" /></span></label>
+                                    </div>
+                                </div>
+                                <div class="date-time-control">
+                                    <span>End</span>
+                                    <div>
+                                        <label><small>Date</small><span class="sblss-picker"><span class="sblss-picker-copy"><b>@MmfEndDateInput.ToString("dd/MM/yyyy")</b><small>day/month/year</small></span><span class="sblss-picker-icon" aria-hidden="true">▣</span><input class="sblss-picker-native" aria-label="MMF end date in day month year format" type="date" required @bind="MmfEndDateInput" @bind:format="yyyy-MM-dd" /></span></label>
+                                        <label><small>Time</small><span class="sblss-picker sblss-picker-time"><span class="sblss-picker-copy"><b>@TimeDisplay.TwentyFourHour(MmfEndTimeInput)</b><small>24-hour time</small></span><span class="sblss-picker-icon sblss-clock-icon" aria-hidden="true">◷</span><input class="sblss-picker-native" aria-label="MMF end time in 24 hour format" type="time" required step="900" @bind="MmfEndTimeInput" /></span></label>
+                                    </div>
+                                </div>
                             </div>
                         </fieldset>
                     }
-                    <div class="on-demand-all-plants"><span>&#10003;</span><div><strong>All active LSS plants included</strong><small>The generated file will combine available data from @ActivePlantCount configured active plant(s) at @IntervalText(SelectedInterval) interval.</small></div></div>
+                    <div class="on-demand-all-plants"><span>&#10003;</span><div><strong>@(SelectedType == "DDQ" ? "All active LSS plants included" : $"{MmfLocationScope} included")</strong><small>The generated file will use available data from @ActivePlantCount configured active plant(s) at @IntervalText(SelectedInterval) interval.</small></div></div>
 
                     <div class="profile-actions">
                         <button class="profile-cancel" type="button" disabled="@IsGenerating" @onclick="CloseGenerateDialog">Cancel</button>
@@ -177,43 +242,102 @@
     @if (SelectedResult is not null)
     {
         <div class="on-demand-overlay" role="presentation">
-            <section class="on-demand-dialog result-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title">
+            <section class="on-demand-dialog result-dialog result-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title">
                 <div class="on-demand-dialog-header">
                     <div>
-                        <p class="section-label">Analysis details</p>
+                        <p class="section-label">@(IsAnomalyPreview ? "Anomaly preview" : "Excel data preview")</p>
                         <h2 id="result-title">@SelectedResult.Name</h2>
                     </div>
-                    <button class="profile-close" type="button" @onclick="CloseResult" aria-label="Close analysis details">×</button>
+                    <div class="result-preview-header-actions">
+                        @if (IsAnomalyPreview)
+                        {
+                            <button class="table-action anomaly-preview-toggle" type="button" disabled="@IsPreviewLoading" @onclick="ShowDataPreview">View Data</button>
+                        }
+                        else
+                        {
+                            <button class="table-action anomaly-preview-toggle" type="button" disabled="@(IsPreviewLoading || SelectedResult.Status != "Successful")" @onclick="ShowAnomalyPreview">View Anomaly (@SelectedResult.AnomalyCount)</button>
+                        }
+                        <button class="table-action anomaly-download" type="button" disabled="@(SelectedResult.Status != "Successful")" @onclick="() => ExportAnomalyResultAsync(SelectedResult)">Export Anomaly (@SelectedResult.AnomalyCount)</button>
+                        <button class="primary-action generate-action" type="button" disabled="@(SelectedResult.Status != "Successful")" @onclick="() => ExportResultAsync(SelectedResult)">Export Excel <span>↓</span></button>
+                        <button class="profile-close" type="button" @onclick="CloseResult" aria-label="Close data preview">×</button>
+                    </div>
                 </div>
 
                 <div class="result-dialog-body">
-                    <div class="result-status-banner status-banner-@SelectedResult.Status.ToLowerInvariant()">
+                    <div class="result-preview-summary">
                         <span class="analysis-type analysis-type-@SelectedResult.Type.ToLowerInvariant()">@SelectedResult.Type</span>
-                        <div>
-                            <strong>@SelectedResult.Status</strong>
-                            <small>Generation reference @SelectedResult.Reference</small>
-                        </div>
-                    </div>
-                    <dl class="result-details">
-                        @if (SelectedResult.Type == "DDQ")
-                        {
-                            <div><dt>Submission date &amp; time</dt><dd>@TimeDisplay.DateTimeLong(SelectedResult.SubmissionDate)</dd></div>
-                        }
-                        <div><dt>Generated at</dt><dd>@TimeDisplay.DateTimeWithSeconds(SelectedResult.GeneratedAt)</dd></div>
-                        <div><dt>Data selection</dt><dd>@(string.IsNullOrWhiteSpace(SelectedResult.DataSelection) ? (SelectedResult.Type == "DDQ" ? "Rolling 24 Hour" : "All MMF parameters") : SelectedResult.DataSelection)</dd></div>
-                        <div><dt>Data interval</dt><dd>@IntervalText(SelectedResult.IntervalMinutes)</dd></div>
+                        <span><small>Reference</small><strong>@SelectedResult.Reference</strong></span>
                         @if (SelectedResult.Type == "MMF" && SelectedResult.DataRangeStart.HasValue && SelectedResult.DataRangeEnd.HasValue)
                         {
-                            <div class="result-description-row"><dt>Data timestamp range</dt><dd>@TimeDisplay.DateTimeLong(SelectedResult.DataRangeStart.Value) – @TimeDisplay.DateTimeLong(SelectedResult.DataRangeEnd.Value)</dd></div>
+                            <span><small>Selected data range</small><strong>@TimeDisplay.DateTime(SelectedResult.DataRangeStart.Value) – @TimeDisplay.DateTime(SelectedResult.DataRangeEnd.Value)</strong></span>
                         }
-                        <div><dt>Plants and records</dt><dd>@(SelectedResult.PlantCount > 0 ? SelectedResult.PlantCount : ActivePlantCount) plant(s) · @SelectedResult.RecordCount.ToString("N0") record(s)</dd></div>
-                        <div><dt>Anomalies found</dt><dd>@SelectedResult.AnomalyCount.ToString("N0")</dd></div>
-                        <div class="result-description-row"><dt>Description</dt><dd>@SelectedResult.Description</dd></div>
-                    </dl>
-                    <div class="profile-actions">
+                        <span><small>Interval</small><strong>@IntervalText(SelectedResult.IntervalMinutes)</strong></span>
+                        <span><small>Records</small><strong>@SelectedResult.RecordCount.ToString("N0")</strong></span>
+                        <span><small>Anomalies</small><strong>@SelectedResult.AnomalyCount.ToString("N0")</strong></span>
+                    </div>
+
+                    @if (IsPreviewLoading)
+                    {
+                        <div class="result-preview-state" role="status">
+                            <span class="result-preview-spinner" aria-hidden="true"></span>
+                            <strong>Preparing Excel preview…</strong>
+                            <small>Reading the stored analysis data from MS SQL.</small>
+                        </div>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(PreviewError))
+                    {
+                        <div class="result-preview-state result-preview-error" role="alert">
+                            <strong>Preview unavailable</strong>
+                            <small>@PreviewError</small>
+                        </div>
+                    }
+                    else if (SelectedPreviewSheet is not null)
+                    {
+                        @if (!IsAnomalyPreview && PreviewSheets.Count > 1)
+                        {
+                            <nav class="result-sheet-tabs" aria-label="Excel worksheets">
+                                @for (var index = 0; index < PreviewSheets.Count; index++)
+                                {
+                                    var sheetIndex = index;
+                                    <button type="button" class="@(SelectedPreviewSheetIndex == sheetIndex ? "active" : null)"
+                                            @onclick="() => SelectPreviewSheet(sheetIndex)">@PreviewSheets[sheetIndex].Name</button>
+                                }
+                            </nav>
+                        }
+                        @if (IsAnomalyPreview && SelectedPreviewSheet.Rows.Count == 0)
+                        {
+                            <div class="result-preview-state anomaly-preview-empty" role="status">
+                                <strong>No anomalies found</strong>
+                                <small>This analysis has no validation anomaly or report substitution record.</small>
+                            </div>
+                        }
+                        else
+                        {
+                        <section class="result-workbook-preview @(IsAnomalyPreview ? "anomaly-workbook-preview" : null)">
+                            <div class="result-workbook-title">@SelectedPreviewSheet.Title</div>
+                            <div class="result-workbook-meta">
+                                @foreach (var item in SelectedPreviewSheet.Metadata)
+                                {
+                                    <span><small>@item.Label</small><strong>@item.Value</strong></span>
+                                }
+                            </div>
+                            <div class="result-workbook-scroll">
+                                <table>
+                                    <thead><tr>@foreach (var header in SelectedPreviewSheet.Headers) { <th>@header</th> }</tr></thead>
+                                    <tbody>
+                                        @foreach (var row in SelectedPreviewSheet.Rows)
+                                        {
+                                            <tr>@foreach (var cell in row) { <td class="@(cell is null ? "empty-cell" : null)">@PreviewCell(cell)</td> }</tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                        }
+                    }
+
+                    <div class="profile-actions result-preview-actions">
                         <button class="profile-cancel" type="button" @onclick="CloseResult">Close</button>
-                        <button class="table-action anomaly-download" type="button" disabled="@(SelectedResult.Status != "Successful")" @onclick="() => ExportAnomalyResultAsync(SelectedResult)">Download Anomaly CSV (@SelectedResult.AnomalyCount)</button>
-                        <button class="primary-action generate-action" type="button" disabled="@(SelectedResult.Status != "Successful")" @onclick="() => ExportResultAsync(SelectedResult)">Export CSV <span>↓</span></button>
                     </div>
                 </div>
             </section>

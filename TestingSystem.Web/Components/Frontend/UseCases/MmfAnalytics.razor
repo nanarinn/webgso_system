@@ -97,7 +97,7 @@
                 @if (DisplayMode == "table")
                 {
                     <div class="mmf-pivot-scroll"><table class="mmf-pivot-table"><thead><tr><th class="sticky-plant">@ScopeColumnHeading</th>@for (var index = 0; index < TimeColumns.Count; index++) { <th title="@TimeHeading(TimeColumns[index])">@HourHeading(index)</th> }</tr></thead><tbody>
-                    @foreach (var plant in ResultPlants) { <tr><th class="sticky-plant" title="@($"{plant.Name} · {plant.PlantId}")">@ResultRowLabel(plant)</th>@foreach (var time in TimeColumns) { var value=ValueFor(plant.Id,time); <td class="@(value.HasValue ? null : "missing-cell")" title="@TimeHeading(time)">@(value?.ToString("N2") ?? "-")</td> }</tr> }
+                    @foreach (var plant in ResultPlants) { <tr><th class="sticky-plant" title="@($"{plant.Name} · {plant.PlantId}")">@ResultRowLabel(plant)</th>@foreach (var time in TimeColumns) { var isPatched=ReadingFor(ActiveParameter,plant.Id,time) is null; var value=ValueFor(plant.Id,time); <td class="@(value.HasValue ? (isPatched ? "patched-cell" : null) : "missing-cell")" title="@(isPatched && value.HasValue ? $"{TimeHeading(time)} · Patched from the adjacent MMF intervals" : TimeHeading(time))">@(value?.ToString("N2") ?? "-")</td> }</tr> }
                     </tbody></table></div>
                 }
                 else

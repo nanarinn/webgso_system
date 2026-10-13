@@ -14,8 +14,31 @@ public static class DemoData
             ? $"MMF {selection} data generated at {interval} interval for all {plantCount} active LSS plant(s) between {dataRangeStart:dd MMM yyyy HH:mm} and {dataRangeEnd:dd MMM yyyy HH:mm} ({recordCount:N0} records)."
             : $"{type} {selection} data generated at {interval} interval for all {plantCount} active LSS plant(s) from the {submissionDate:dd MMM yyyy HH:mm} scheduled submission ({recordCount:N0} records).";
         if (status == "Failed") description += " Generation completed with validation errors and requires review.";
-        return new(reference, $"{type} Analysis {sequence:000}", type, submissionDate, generatedAt, description,
+        return new(reference, AnalysisDisplayName(type, selection, generatedAt, dataRangeStart, dataRangeEnd), type, submissionDate, generatedAt, description,
             status, selection, plantCount, recordCount, anomalyCount, intervalMinutes, dataRangeStart, dataRangeEnd);
+    }
+
+    public static string AnalysisDisplayName(string type, string dataSelection, DateTime generatedAt,
+        DateTime? dataRangeStart = null, DateTime? dataRangeEnd = null)
+    {
+        if (type.Equals("MMF", StringComparison.OrdinalIgnoreCase)
+            && dataRangeStart.HasValue && dataRangeEnd.HasValue)
+        {
+            var start = dataRangeStart.Value;
+            var end = dataRangeEnd.Value;
+            var range = start.Date == end.Date
+                ? start.ToString("dd MMM yyyy")
+                : start.Year == end.Year && start.Month == end.Month
+                    ? $"{start:dd}–{end:dd MMM yyyy}"
+                    : $"{start:dd MMM yyyy} – {end:dd MMM yyyy}";
+            return $"MMF · Data {range}";
+        }
+
+        var detail = type.Equals("DDQ", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(dataSelection)
+                ? $" {dataSelection}"
+                : string.Empty;
+        return $"{type}{detail} · {generatedAt:dd MMM yyyy HH:mm:ss}";
     }
 
     public static string SimplifyAnalysisName(string name) =>

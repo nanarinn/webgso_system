@@ -27,9 +27,6 @@ public partial class LssPlants : ComponentBase
     private bool IsTestingApi { get; set; }
     private bool IsSavingPlant { get; set; }
     private int? EditingPlantId { get; set; }
-    private int TestPlantId { get; set; }
-    private string TestApiSource { get; set; } = "DDQ";
-    private string TestDataType { get; set; } = "Rolling 24 Hour";
     private string TestApiEndpoint { get; set; } = string.Empty;
     private LssApiTestResult? LastTestResult { get; set; }
     private string FormError { get; set; } = string.Empty;
@@ -40,6 +37,7 @@ public partial class LssPlants : ComponentBase
     private string NewPlantId { get; set; } = string.Empty;
     private string NewState { get; set; } = "Johor";
     private int NewCapacity { get; set; } = 50;
+    private bool NewIsActive { get; set; } = true;
     private List<ApiLinkInput> NewApiLinks { get; set; } = [];
     private string NewMmfApiLink { get; set; } = string.Empty;
     private string MmfValidationState { get; set; } = "idle";
@@ -72,6 +70,7 @@ public partial class LssPlants : ComponentBase
         NewPlantId = $"PLT-{Plants.Count + 1:000}";
         NewState = "Johor";
         NewCapacity = 50;
+        NewIsActive = true;
         NewApiLinks = [new ApiLinkInput { DataType = "Rolling 24 Hour" }];
         NewMmfApiLink = string.Empty;
         MmfValidationState = "idle";
@@ -88,6 +87,7 @@ public partial class LssPlants : ComponentBase
         NewPlantId = plant.PlantId;
         NewState = plant.State;
         NewCapacity = (int)plant.CapacityMw;
+        NewIsActive = plant.IsActive;
         NewApiLinks = plant.ApiConfigurations.Where(x => x.ApiType == "DDQ")
             .Select(x => new ApiLinkInput { DataType = x.DataType, ApiLink = x.ApiLink }).ToList();
         if (NewApiLinks.Count == 0)
@@ -131,72 +131,38 @@ public partial class LssPlants : ComponentBase
 
     private void OpenApiTestDialog()
     {
-        TestPlantId = Plants[0].Id;
-        TestApiSource = "DDQ";
-        TestDataType = "Rolling 24 Hour";
+        TestApiEndpoint = string.Empty;
         LastTestResult = null;
-        LoadSelectedEndpoint();
         IsApiTestDialogOpen = true;
     }
 
     private void CloseApiTestDialog() => IsApiTestDialogOpen = false;
 
-    private IEnumerable<string> TestDataTypes => TestApiSource == "DDQ" ? DdqDataTypes : ["MMF"];
-
-    private void TestApiSourceChanged()
-    {
-        TestDataType = TestApiSource == "DDQ" ? DdqDataTypes[0] : "MMF";
-        LoadSelectedEndpoint();
-    }
-
-    private void LoadSelectedEndpoint()
-    {
-        var plant = Plants.First(item => item.Id == TestPlantId);
-        TestApiEndpoint = plant.ApiConfigurations.FirstOrDefault(item =>
-                item.ApiType == TestApiSource && item.DataType == TestDataType)?.ApiLink
-            ?? (TestApiSource == "DDQ" ? plant.DdqApiEndpoint : plant.MmfApiEndpoint);
-        LastTestResult = null;
-    }
-
     private async Task TestApiAsync()
     {
+        if (string.IsNullOrWhiteSpace(TestApiEndpoint))
+        {
+            LastTestResult = new(false, "Enter an API link to test.", null, 0);
+            return;
+        }
         IsTestingApi = true;
         try
         {
-            LastTestResult = await ApiClient.TestConnectionAsync(
-                TestApiEndpoint.Trim(), TestApiSource, TestDataType);
-            await using var database = await ContextFactory.CreateDbContextAsync();
-            var plant = await database.LssPlants.SingleAsync(item => item.Id == TestPlantId);
-            if (LastTestResult.IsConnected)
-            {
-                var endpoint = TestApiEndpoint.Trim();
-                var configuration = await database.PlantApiConfigurations.SingleOrDefaultAsync(item =>
-                    item.PlantId == TestPlantId && item.ApiType == TestApiSource && item.DataType == TestDataType);
-                if (configuration is null)
-                {
-                    configuration = new PlantApiConfiguration
-                    {
-                        PlantId = TestPlantId,
-                        ApiType = TestApiSource,
-                        DataType = TestDataType
-                    };
-                    database.PlantApiConfigurations.Add(configuration);
-                }
-                configuration.ApiLink = endpoint;
-                if (TestApiSource == "DDQ") plant.DdqApiEndpoint = endpoint;
-                else plant.MmfApiEndpoint = endpoint;
-            }
-            plant.ApiConnectionStatus = LastTestResult.IsConnected ? "Connected" : "Failed";
-            plant.LastApiTestSource = TestApiSource;
-            plant.LastApiTestMessage = LastTestResult.Message;
-            plant.LastApiTestAt = DateTimeOffset.UtcNow;
-            await database.SaveChangesAsync();
+            var startedAt = DateTimeOffset.UtcNow;
+            var endpoint = TestApiEndpoint.Trim();
+            var response = await ApiClient.CollectAsync("API link", "Connection test", endpoint);
+            var elapsed = (long)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
+            var detection = response.IsSuccessful
+                ? LssApiPayloadDetector.Detect(response.Payload, response.ContentType)
+                : new LssApiPayloadDetection(false, string.Empty, string.Empty, 0, response.Message);
+            LastTestResult = new(detection.IsValid,
+                detection.IsValid ? $"HTTP {response.HttpStatusCode}. {detection.Message}" : detection.Message,
+                response.HttpStatusCode, elapsed);
             var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
-            await AuditTrail.RecordAsync(principal, "Test plant API connection",
-                LastTestResult.IsConnected ? "Success" : "Failed", "LssPlant", plant.PlantId,
-                $"{TestApiSource} {TestDataType} endpoint test: {LastTestResult.Message}",
-                $"plant:{plant.PlantId}");
-            await LoadPlantsAsync();
+            var endpointHost = Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) ? uri.Host : "Invalid endpoint";
+            await AuditTrail.RecordAsync(principal, "Test API link",
+                LastTestResult.IsConnected ? "Success" : "Failed", "API endpoint", endpointHost,
+                $"API host {endpointHost}; {LastTestResult.Message}", $"api-host:{endpointHost}");
         }
         finally
         {
@@ -279,7 +245,7 @@ public partial class LssPlants : ComponentBase
             plant.CapacityMw = NewCapacity;
             plant.DdqApiEndpoint = ddqLinks[0].ApiLink;
             plant.MmfApiEndpoint = mmfApiLink;
-            plant.IsActive = true;
+            plant.IsActive = NewIsActive;
             plant.ApiConnectionStatus = "Connected";
             plant.LastApiTestSource = "DDQ & MMF";
             plant.LastApiTestMessage = $"Verified {ddqLinks.Count} DDQ endpoint(s) and one MMF endpoint before saving.";
@@ -296,7 +262,7 @@ public partial class LssPlants : ComponentBase
             var principal = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
             await AuditTrail.RecordAsync(principal, wasEditing ? "Update LSS plant configuration" : "Create LSS plant configuration",
                 "Success", "LssPlant", plant.PlantId,
-                $"Plant {plant.Name}; state {plant.State}; capacity {plant.CapacityMw:0.##} MW; {ddqLinks.Count} DDQ endpoint(s); 1 MMF endpoint.",
+                $"Plant {plant.Name}; state {plant.State}; capacity {plant.CapacityMw:0.##} MW; status {(plant.IsActive ? "Active" : "Inactive")}; {ddqLinks.Count} DDQ endpoint(s); 1 MMF endpoint.",
                 $"plant:{plant.PlantId}");
             IsDialogOpen = false;
             await LoadPlantsAsync();

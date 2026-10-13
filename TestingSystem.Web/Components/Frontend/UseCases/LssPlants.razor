@@ -65,7 +65,7 @@
                     <tr class="@(endpointIndex == 0 ? "plant-first-endpoint" : "plant-next-endpoint")">
                         @if (endpointIndex == 0)
                         {
-                            <th class="plant-table-identity" rowspan="@endpoints.Count" scope="rowgroup"><div class="admin-entity"><span>@GetCode(plant.Name)</span><div><strong>@plant.Name</strong><small>@plant.PlantId</small></div></div></th>
+                            <th class="plant-table-identity" rowspan="@endpoints.Count" scope="rowgroup"><div class="admin-entity"><div><strong>@plant.Name</strong><small>@plant.PlantId</small></div></div></th>
                             <td class="plant-table-state" rowspan="@endpoints.Count">@plant.State</td>
                         }
                         <td><span class="api-type-badge api-type-@api.ApiType.ToLowerInvariant()">@api.ApiType</span></td>
@@ -104,6 +104,23 @@
                     <label><span>State</span><select @bind="NewState">@foreach (var state in States) { <option>@state</option> }</select></label>
                     <label><span>Capacity (MW)</span><input type="number" min="1" required @bind="NewCapacity" /></label>
                 </div>
+
+                @if (EditingPlantId.HasValue)
+                {
+                    <div class="wide schedule-status-field plant-status-field">
+                        <span class="schedule-field-label">Plant status</span>
+                        <div class="schedule-status-options" role="group" aria-label="Plant status">
+                            <button type="button" class="active-option @(NewIsActive ? "selected" : null)" aria-pressed="@NewIsActive" @onclick="() => NewIsActive = true">
+                                <span class="status-option-icon">&#10003;</span>
+                                <span><strong>Active</strong><small>Include this plant in collection schedules and analysis.</small></span>
+                            </button>
+                            <button type="button" class="inactive-option @(!NewIsActive ? "selected" : null)" aria-pressed="@(!NewIsActive)" @onclick="() => NewIsActive = false">
+                                <span class="status-option-icon">&#8212;</span>
+                                <span><strong>Inactive</strong><small>Keep this plant saved without running new collections.</small></span>
+                            </button>
+                        </div>
+                    </div>
+                }
 
                 <div class="api-config-heading">
                     <div><strong>DDQ endpoints <span class="required-indicator">Required</span></strong><small>Complete DDQ first. Choose one unique data type for every API link.</small></div>
@@ -158,19 +175,16 @@
                     <button class="profile-close" type="button" @onclick="CloseApiTestDialog">&#215;</button>
                 </div>
                 <div class="api-test-form">
-                    <p>Select a registered plant endpoint. Only a verified data payload will replace the URL in MS SQL; failed tests save the failure status only.</p>
+                    <p>Enter a DDQ or MMF API link. The system will test the connection and detect the supported payload automatically.</p>
                     <div class="admin-form-grid">
-                        <label><span>LSS plant</span><select @bind="TestPlantId" @bind:after="LoadSelectedEndpoint">@foreach (var plant in Plants) { <option value="@plant.Id">@plant.Name</option> }</select></label>
-                        <label><span>API type</span><select @bind="TestApiSource" @bind:after="TestApiSourceChanged"><option>DDQ</option><option>MMF</option></select></label>
-                        <label><span>Data type</span><select @bind="TestDataType" @bind:after="LoadSelectedEndpoint">@foreach (var dataType in TestDataTypes) { <option value="@dataType">@dataType</option> }</select></label>
-                        <label class="wide"><span>API link</span><input type="url" required @bind="TestApiEndpoint" /></label>
+                        <label class="wide"><span>API link</span><input type="url" required placeholder="https://api.example.com/data" @bind="TestApiEndpoint" /></label>
                     </div>
 
                     @if (LastTestResult is not null)
                     {
                         <section class="api-test-result @(LastTestResult.IsConnected ? "connected" : "failed")">
                             <span>@(LastTestResult.IsConnected ? "OK" : "!")</span>
-                            <div><strong>@(LastTestResult.IsConnected ? "API Connected" : "API Test Failed")</strong><p>@(LastTestResult.IsConnected ? "API verified." : "Invalid API endpoint.")</p><small>Response time: @LastTestResult.ElapsedMilliseconds ms</small></div>
+                            <div><strong>@(LastTestResult.IsConnected ? "API Connected" : "API Test Failed")</strong><p>@LastTestResult.Message</p><small>Response time: @LastTestResult.ElapsedMilliseconds ms</small></div>
                         </section>
                     }
 

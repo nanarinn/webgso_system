@@ -67,7 +67,6 @@ public partial class DataQuality : ComponentBase
             FieldName = rule.FieldName, Description = rule.Description,
             UseMinimum = rule.MinimumValue.HasValue, MinimumValue = rule.MinimumValue,
             UseMaximum = rule.MaximumValue.HasValue, MaximumValue = rule.MaximumValue,
-            UseChange = rule.ChangeThreshold.HasValue, ChangeThreshold = rule.ChangeThreshold,
             CheckMissing = rule.CheckMissing, IsActive = rule.IsActive
         };
         FormError = null;
@@ -86,7 +85,6 @@ public partial class DataQuality : ComponentBase
             await using var database = await ContextFactory.CreateDbContextAsync();
             var minimum = Editor.UseMinimum ? Editor.MinimumValue : null;
             var maximum = Editor.UseMaximum ? Editor.MaximumValue : null;
-            var change = Editor.UseChange ? Editor.ChangeThreshold : null;
             var fieldName = Editor.FieldName.Trim();
             var existingRules = await database.ValidationRules.AsNoTracking()
                 .Where(item => item.DataType == Editor.DataType && (!Editor.Id.HasValue || item.Id != Editor.Id.Value))
@@ -95,7 +93,6 @@ public partial class DataQuality : ComponentBase
                 string.Equals(item.FieldName.Trim(), fieldName, StringComparison.OrdinalIgnoreCase)
                 && item.MinimumValue == minimum
                 && item.MaximumValue == maximum
-                && item.ChangeThreshold == change
                 && item.CheckMissing == Editor.CheckMissing);
             if (duplicate is not null)
             {
@@ -134,7 +131,7 @@ public partial class DataQuality : ComponentBase
             rule.Severity = "Error";
             rule.MinimumValue = minimum;
             rule.MaximumValue = maximum;
-            rule.ChangeThreshold = change;
+            rule.ChangeThreshold = null;
             rule.Condition = BuildCondition(rule);
             rule.IsActive = Editor.IsActive;
             rule.RuleSource = ValidationRuleCatalog.Configured;
@@ -199,14 +196,12 @@ public partial class DataQuality : ComponentBase
         if (string.IsNullOrWhiteSpace(editor.Name)) return "Enter a rule name.";
         if (string.IsNullOrWhiteSpace(editor.FieldName))
             return "Enter a field/parameter, or use * for all parameters.";
-        if (!editor.UseMinimum && !editor.UseMaximum && !editor.UseChange && !editor.CheckMissing)
-            return "Select at least one check: minimum, maximum, changing value or missing/null.";
+        if (!editor.UseMinimum && !editor.UseMaximum && !editor.CheckMissing)
+            return "Select at least one check: minimum, maximum or missing/null.";
         if (editor.UseMinimum && !editor.MinimumValue.HasValue) return "Enter the minimum threshold.";
         if (editor.UseMaximum && !editor.MaximumValue.HasValue) return "Enter the maximum threshold.";
         if (editor.UseMinimum && editor.UseMaximum && editor.MinimumValue > editor.MaximumValue)
             return "Minimum threshold cannot be greater than maximum threshold.";
-        if (editor.UseChange && (!editor.ChangeThreshold.HasValue || editor.ChangeThreshold < 0))
-            return "Enter a valid changing-value threshold of zero or greater.";
         return null;
     }
 
@@ -275,8 +270,6 @@ public partial class DataQuality : ComponentBase
         public decimal? MinimumValue { get; set; }
         public bool UseMaximum { get; set; }
         public decimal? MaximumValue { get; set; }
-        public bool UseChange { get; set; }
-        public decimal? ChangeThreshold { get; set; }
         public bool CheckMissing { get; set; }
         public bool IsActive { get; set; } = true;
     }
