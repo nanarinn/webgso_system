@@ -7,39 +7,12 @@
     "**/*.log": true,
     "**/.dotnet": true,
     "**/.local-certs": true,
-    "**/outputs": true
+    "**/outputs": true,
+    "**/target": true,
+    "**/.reports": true,
+    "**/.tools": true,
+    "**/.java-runtime": true
   },
   "terminal.integrated.defaultProfile.windows": "PowerShell",
-  "docker.composeBuild": false,
-  "terminal.integrated.env.windows": {
-    "DOTNET_ROOT": "${workspaceFolder}\\.dotnet",
-    "PATH": "${workspaceFolder}\\.dotnet;${env:PATH}"
-  },
-  "dotnetAcquisitionExtension.existingDotnetPath": [
-    {
-      "extensionId": "ms-dotnettools.csharp",
-      "path": "C:\\Users\\User\\Documents\\ChatGPT\\SBLSS SYSTEM\\.dotnet\\dotnet.exe"
-    },
-    {
-      "extensionId": "ms-dotnettools.csdevkit",
-      "path": "C:\\Users\\User\\Documents\\ChatGPT\\SBLSS SYSTEM\\.dotnet\\dotnet.exe"
-    }
-  ],
-  "mssql.connections": [
-    {
-      "profileName": "SBLSS VMware SQL",
-      "server": "192.168.227.128",
-      "port": 1433,
-      "database": "SingleBuyerLssRepository",
-      "user": "sblss_host_app",
-      "password": "",
-      "authenticationType": "SqlLogin",
-      "encrypt": "Mandatory",
-      "trustServerCertificate": true,
-      "savePassword": false,
-      "emptyPasswordInput": false,
-      "groupId": "ROOT",
-      "id": "da5f039d-043a-4c76-b282-0fbd925f452f"
-    }
-  ]
+  "java.configuration.updateBuildConfiguration": "automatic"
 }

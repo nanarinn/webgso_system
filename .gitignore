@@ -25,3 +25,8 @@ coverage/
 .packages/
 .build-verify/
 .bootstrap-build/
+target/
+.tools/
+.reports/
+.java-runtime/
+*.pid

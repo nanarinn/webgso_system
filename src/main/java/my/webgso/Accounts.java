@@ -1,0 +1,217 @@
+package my.webgso;
+
+import java.time.*;
+import java.util.*;
+import my.webgso.Models.*;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.*;
+import org.springframework.security.core.*;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.*;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class Accounts implements AuthenticationProvider {
+  public record Principal(String id, String username, String displayName, String stamp)
+      implements java.io.Serializable {}
+
+  private final Store db;
+  private final IdentityPasswordEncoder passwords = new IdentityPasswordEncoder();
+
+  public Accounts(Store db) {
+    this.db = db;
+  }
+
+  public List<String> roles(String userId) {
+    return db.jdbc()
+        .queryForList(
+            "SELECT r.\"Name\" FROM \"AspNetRoles\" r JOIN \"AspNetUserRoles\" ur ON"
+                + " r.\"Id\"=ur.\"RoleId\" WHERE ur.\"UserId\"=?",
+            String.class,
+            userId);
+  }
+
+  public Authentication token(ApplicationUser user) {
+    return UsernamePasswordAuthenticationToken.authenticated(
+        new Principal(user.id, user.userName, user.displayName, user.securityStamp),
+        null,
+        roles(user.id).stream().map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList());
+  }
+
+  @Override
+  @Transactional(noRollbackFor = AuthenticationException.class)
+  public Authentication authenticate(Authentication request) throws AuthenticationException {
+    String login = request.getName().trim().toUpperCase(Locale.ROOT);
+    var users =
+        db.list(
+            ApplicationUser.class,
+            "WHERE \"NormalizedUserName\"=? OR \"NormalizedEmail\"=? FOR UPDATE",
+            login,
+            login);
+    if (users.isEmpty()) {
+      passwords.matches(request.getCredentials().toString(), DUMMY);
+      throw new BadCredentialsException("Invalid credentials");
+    }
+    var user = users.getFirst();
+    if (user.lockoutEnd != null && user.lockoutEnd.isAfter(OffsetDateTime.now()))
+      throw new LockedException("Account temporarily locked");
+    if (!passwords.matches(request.getCredentials().toString(), user.passwordHash)) {
+      user.accessFailedCount = (user.accessFailedCount == null ? 0 : user.accessFailedCount) + 1;
+      if (user.accessFailedCount >= 5) {
+        user.lockoutEnd = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(15);
+        user.accessFailedCount = 0;
+      }
+      db.update(user);
+      throw new BadCredentialsException("Invalid credentials");
+    }
+    if (!"Approved".equals(user.accessStatus))
+      throw new DisabledException("Access has not been approved");
+    user.accessFailedCount = 0;
+    user.lockoutEnd = null;
+    if (passwords.upgradeEncoding(user.passwordHash))
+      user.passwordHash = passwords.encode(request.getCredentials().toString());
+    db.update(user);
+    audit(user.userName, "Sign in", "User", user.id, "Success", "Local authentication");
+    return token(user);
+  }
+
+  private static final String DUMMY =
+      new IdentityPasswordEncoder().encode(UUID.randomUUID().toString());
+
+  @Override
+  public boolean supports(Class<?> type) {
+    return UsernamePasswordAuthenticationToken.class.isAssignableFrom(type);
+  }
+
+  @Transactional
+  public ApplicationUser register(String name, String email, String displayName, String password) {
+    if (!name.matches("[a-zA-Z0-9_.@-]{3,100}")
+        || !email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")
+        || email.length() > 256
+        || displayName.isBlank()
+        || displayName.length() > 160)
+      throw new IllegalArgumentException("Enter a valid username, email and display name.");
+    if (password.length() < 12
+        || password.length() > 72
+        || !password.matches("(?s).*[A-Z].*")
+        || !password.matches("(?s).*[a-z].*")
+        || !password.matches("(?s).*\\d.*")
+        || password.chars().allMatch(Character::isLetterOrDigit))
+      throw new IllegalArgumentException(
+          "Use 12–72 characters including uppercase, lowercase, a number and a symbol.");
+    if (!db.list(
+            ApplicationUser.class,
+            "WHERE \"NormalizedUserName\"=? OR \"NormalizedEmail\"=?",
+            name.toUpperCase(Locale.ROOT),
+            email.toUpperCase(Locale.ROOT))
+        .isEmpty())
+      throw new IllegalArgumentException("The username or email is already registered.");
+    var user = new ApplicationUser();
+    user.id = UUID.randomUUID().toString();
+    user.userName = name;
+    user.normalizedUserName = name.toUpperCase(Locale.ROOT);
+    user.email = email;
+    user.normalizedEmail = email.toUpperCase(Locale.ROOT);
+    user.displayName = displayName;
+    user.passwordHash = passwords.encode(password);
+    user.securityStamp = UUID.randomUUID().toString();
+    user.concurrencyStamp = UUID.randomUUID().toString();
+    user.accessRequestedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    db.insert(user);
+    audit(name, "Access requested", "User", user.id, "Pending", "Local account registration");
+    var admins =
+        db.jdbc()
+            .queryForList(
+                "SELECT ur.\"UserId\" FROM \"AspNetUserRoles\" ur JOIN \"AspNetRoles\" r ON"
+                    + " r.\"Id\"=ur.\"RoleId\" WHERE r.\"Name\"='SuperAdministrator'",
+                String.class);
+    for (String admin : admins)
+      notify(admin, user.id, "Access request", displayName + " requested repository access.");
+    return user;
+  }
+
+  @Transactional
+  public void review(
+      Authentication actor, String targetId, String decision, String requestedRole, String note) {
+    Principal reviewer = (Principal) actor.getPrincipal();
+    var target =
+        db.list(ApplicationUser.class, "WHERE \"Id\"=? FOR UPDATE", targetId).stream()
+            .findFirst()
+            .orElseThrow();
+    if (targetId.equals(reviewer.id))
+      throw new IllegalArgumentException("Ask another Super Admin to review your account.");
+    if (!Set.of("Approved", "Rejected", "Inactive").contains(decision)
+        || !Set.of("Staff", "Administrator", "SuperAdministrator").contains(requestedRole))
+      throw new IllegalArgumentException("Invalid access decision");
+    boolean superAdmin =
+        actor.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_SuperAdministrator"));
+    var targetRoles = roles(targetId);
+    if (!superAdmin
+        && (!actor.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_Administrator"))
+            || targetRoles.stream()
+                .anyMatch(r -> r.equals("Administrator") || r.equals("SuperAdministrator"))
+            || !requestedRole.equals("Staff")))
+      throw new AccessDeniedException(
+          "Only a Super Admin can grant or change administrator access.");
+    target.accessStatus = decision;
+    target.accessReviewedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    target.accessReviewedBy = reviewer.username;
+    target.accessReviewNote = note;
+    target.securityStamp = UUID.randomUUID().toString();
+    db.update(target);
+    if (decision.equals("Approved")) setRole(targetId, requestedRole);
+    audit(reviewer.username, "Access " + decision, "User", targetId, "Success", note);
+    notify(
+        targetId,
+        reviewer.id,
+        "Access " + decision,
+        "Your repository access request is " + decision.toLowerCase(Locale.ROOT) + ". " + note);
+  }
+
+  public void setRole(String id, String role) {
+    var ids =
+        db.jdbc()
+            .queryForList(
+                "SELECT \"Id\" FROM \"AspNetRoles\" WHERE \"Name\"=?", String.class, role);
+    String roleId = ids.isEmpty() ? UUID.randomUUID().toString() : ids.getFirst();
+    if (ids.isEmpty())
+      db.jdbc()
+          .update(
+              "INSERT INTO \"AspNetRoles\""
+                  + " (\"Id\",\"Name\",\"NormalizedName\",\"ConcurrencyStamp\") VALUES (?,?,?,?)",
+              roleId,
+              role,
+              role.toUpperCase(Locale.ROOT),
+              UUID.randomUUID().toString());
+    db.jdbc().update("DELETE FROM \"AspNetUserRoles\" WHERE \"UserId\"=?", id);
+    db.jdbc()
+        .update("INSERT INTO \"AspNetUserRoles\" (\"UserId\",\"RoleId\") VALUES (?,?)", id, roleId);
+  }
+
+  public void audit(
+      String actor, String action, String entity, String ref, String result, String detail) {
+    var event = new AuditEvent();
+    event.actor = actor;
+    event.action = action;
+    event.entityType = entity;
+    event.entityReference = ref;
+    event.result = result;
+    event.detail = detail;
+    event.correlationId = UUID.randomUUID().toString();
+    db.insert(event);
+  }
+
+  public void notify(String userId, String relatedId, String subject, String body) {
+    var user = db.find(ApplicationUser.class, userId).orElseThrow();
+    var notification = new UserAccessNotification();
+    notification.userId = userId;
+    notification.relatedUserId = relatedId;
+    notification.email = user.email;
+    notification.notificationType = "Access";
+    notification.subject = subject;
+    notification.body = body;
+    notification.deliveryStatus = "InApp";
+    db.insert(notification);
+  }
+}

@@ -1,86 +1,82 @@
-# Single Buyer Large Scale Solar Repository
+# Single Buyer Large Scale Solar Repository — Java
 
-A .NET 8 Blazor system backed by PostgreSQL and managed locally with pgAdmin 4.
+The application runs on **Java 21, Spring Boot, Spring Security, JDBC and Thymeleaf**. Java renders the HTML/CSS views; JavaScript provides optional navigation and batch progress updates. No C#, Blazor, ASP.NET runtime or .NET build is required.
 
-## Run locally
-
-Requirements:
-
-- .NET 8 SDK (installed globally or in the project `.dotnet` folder)
-- PostgreSQL Server 18 and pgAdmin 4
-
-For first-time database setup, double-click `setup-postgresql.cmd`. Enter the password created for the PostgreSQL `postgres` account during installation. The setup creates the `webgso_system` database, creates a restricted `webgso_app` login, stores its generated password in .NET user-secrets, creates every EF Core table, and adds linked demo data.
-
-After setup, start the connected system with:
+## Start locally
 
 ```powershell
-.\run-postgresql.cmd
+.\run-java.cmd
 ```
 
-Open `http://localhost:5186`. In pgAdmin, refresh **Servers > PostgreSQL 18 > Databases** to see `webgso_system` and its tables.
+Open [http://localhost:5186](http://localhost:5186). The launcher reads the existing PostgreSQL connection from the local `sblss-system-local` secret store when `WEBGSO_DB_PASSWORD` is absent. It does not print or copy that password into Git. Java uses the existing database tables and accounts without recreating the database.
 
-To review the interface without PostgreSQL, run `run-ui-only.cmd`. UI-only changes are temporary and are not written to a database.
-
-Database credentials are never committed. `setup-postgresql.ps1` stores the application connection string in .NET user-secrets.
-
-Open `http://localhost:5186/login` for the connected application.
-
-For local MMF collection testing, register an MMF API link such as:
-
-`http://localhost:5186/api/test-data/mmf/LSS1?interval=15`
-
-The optional query parameters are `date=yyyy-MM-dd` and `interval=15`, `30`, or `60`. The endpoint returns the 13 MMF parameters represented by the supplied MMF sample, with five sensor readings per parameter and timestamp.
-
-Plant API endpoints are fetched by the backend. In Development, loopback/private test endpoints are allowed. Outside Development, endpoints must use HTTPS and resolve to public addresses unless an administrator explicitly lists an internal hostname under `LssApi:AllowedPrivateHosts`; HTTP exceptions must be listed separately under `LssApi:AllowInsecureHosts`. Redirects from configured plant API URLs are not followed.
-
-### Local account sign-in
-
-The application uses PostgreSQL-backed local accounts rather than Microsoft Entra ID. Create or
-reset the first Super Admin account with:
+Java 21 must be available through `JAVA_HOME` or PATH. The launcher also detects a portable JDK in `.java-runtime/jdk` or a sibling `.tools/jdk` directory, supplied locally for this migration. The official Maven wrapper downloads Maven when needed.
 
 ```powershell
-.\setup-local-admin.cmd
+.\mvnw.cmd verify
+.\run-java.ps1 -Port 5187    # Run alongside another application
+.\run-java.ps1 -Build        # Verify and rebuild first
 ```
 
-The script requests the username, email, display name and password interactively. The password is
-passed to the application only for that setup process and is not written to Git. Users can then
-create an account from `/register`; new accounts remain `Pending` until reviewed in User Management.
-An Administrator can approve Staff access, while a Super Admin can approve Staff or Administrator
-access. Approved users sign in at `http://localhost:5186/login` with their username/email and password.
+Stop the running JAR before rebuilding it on Windows. The Windows launcher defaults to the JDK's TCP pipe fallback for compatibility with packaged environments that cannot connect an AF_UNIX wakeup pipe. Set `WEBGSO_WINDOWS_TCP_FALLBACK=false` to disable that process-only workaround. Windows security settings are not changed.
 
-Access request, approval and rejection notifications are stored in `UserAccessNotifications` and
-shown from the notification bell. New requests notify every active Super Admin; decisions notify
-the requesting user. Email uses the Microsoft Graph configuration below when available and falls
-back to the `ApprovalEmail` SMTP settings. Never commit credentials.
+## Configuration
 
-### Report and access notification email through Microsoft Graph
+Set environment variables before starting the service. [.env.example](.env.example) lists the supported keys; it is a reference file and is not automatically loaded. For the VS Code PostgreSQL debugger, supply an ignored `.env.local` with environment values.
 
-Report Automation and User Management send email through Microsoft Graph. In the Entra
-app registration, add the Microsoft Graph **Application** permission `Mail.Send` and grant tenant
-administrator consent. The configured sender must be a valid Microsoft 365 mailbox. The report
-service can reuse the `EntraId` tenant, client ID and client secret; only the following settings are
-then required:
+| Variable | Purpose |
+| --- | --- |
+| `WEBGSO_DB_URL` | Normally `jdbc:postgresql://localhost:5432/webgso_system` |
+| `WEBGSO_DB_USER`, `WEBGSO_DB_PASSWORD` | Restricted application credentials |
+| `PORT` | HTTP port for direct JAR startup; the launcher uses `-Port` |
+| `WEBGSO_ADDRESS` | Bind address; defaults to loopback |
+| `WEBGSO_SECURE_COOKIE` | Set `true` behind production HTTPS |
+| `WEBGSO_WORKERS_ENABLED` | Enable automated workers after stopping the former service |
+| `WEBGSO_API_PRIVATE_HOSTS` | Explicit comma-separated private API host allowlist |
+| `WEBGSO_API_HTTP_HOSTS` | Explicit HTTP host exceptions |
+| `WEBGSO_ADMIN_USERNAME`, `WEBGSO_ADMIN_EMAIL`, `WEBGSO_ADMIN_PASSWORD` | Create a first Super Admin only when the username does not exist |
+
+The launcher uses the `local` profile, which explicitly permits loopback API fixtures. Use `run-java.ps1 -Production` or run the JAR directly for production defaults. Production plant APIs require HTTPS and public destinations unless explicitly allowlisted. DNS is checked at connection time, redirects are rejected, and payload sizes are capped.
+
+For an empty PostgreSQL database, create a restricted database owner using PostgreSQL administration tools, configure credentials and start once with `--webgso.schema.initialize=true`. This executes `src/main/resources/schema-java.sql`. Leave initialization disabled for the existing database. Accounts remain pending until approved. The Java password encoder reads existing Identity V2/V3 hashes and creates compatible PBKDF2-SHA512 hashes, preserving rollback compatibility.
+
+## Isolated demo
 
 ```powershell
-dotnet user-secrets set "ReportEmail:Enabled" "true" --project .\TestingSystem.Web\TestingSystem.Web.csproj
-dotnet user-secrets set "ReportEmail:SenderMailbox" "reports@your-company.example" --project .\TestingSystem.Web\TestingSystem.Web.csproj
+.\run-java-demo.cmd -Port 5187
 ```
 
-To use a separate app registration, also set `ReportEmail:TenantId`, `ReportEmail:ClientId`, and
-`ReportEmail:ClientSecret` in user secrets. Never put the client secret in `appsettings.json`.
-Delivery attempts appear under **Report Automation > Delivery monitor** as Processing, Delivered,
-or Failed. A report is attached only when the selected DDQ or MMF readings exist in PostgreSQL.
+This explicit profile uses synthetic data in an in-memory H2 database, separate from PostgreSQL. Login: `demo.admin` / `DemoAdmin123!`. Data is discarded on process exit. These credentials are created only in the demo profile and are not displayed on the production login page.
 
-Development accounts are configured in `TestingSystem.Web/appsettings.Development.json`. Change their passwords before sharing or deployment.
+## Application areas
 
-## Code folders
+- Overview, recent collections and registered plants.
+- DDQ/MMF analytics with timestamp, submission, plant, state, region and parameter filters; chart and paged readings.
+- Manual and bounded concurrent batch collection, retained raw responses, validation anomalies, retries and explicitly requested DDQ replacement.
+- Plant configuration, dataset-specific API links and connection tests.
+- Collection schedules using timezone, interval/day/month or Spring cron controls.
+- On-demand Excel/CSV reports, anomaly/substitution exports, previous-day fallback, capacity capping and zero fallback. Downloads enforce ownership. Legacy report selections can be regenerated.
+- Report schedules, recipients and delivery monitoring through SMTP or Microsoft Graph.
+- Registration, approval/rejection/deactivation, role restrictions, notifications, lockout and 15-minute idle sessions.
+- Audit logs, configured validation rules and anomaly resolution.
 
-- `TestingSystem.Web/Components/Frontend/UseCases` - Razor frontend markup.
-- `TestingSystem.Web/Backend/UseCases/PageLogic` - C# page logic.
-- `TestingSystem.Web/Connectors/UseCases` - frontend/backend, API and service connectors.
-- `TestingSystem.Web/Database/UseCases` - PostgreSQL entity/table definitions.
-- `TestingSystem.Web/Database/Common` - database connection and table creation.
-- `TestingSystem.Web/Database/Common/DummyApiDataSeeder.cs` - creates the complete related development workflow in PostgreSQL.
-- `TestingSystem.Web/wwwroot/styles` - CSS.
+Workers are disabled by default during cutover, preventing simultaneous collection or delivery by two runtimes. Enable `WEBGSO_WORKERS_ENABLED=true` after stopping the old runtime. Real email additionally requires `WEBGSO_MAIL_ENABLED=true` and a configured sender/service. Automated tests send no real email.
 
-All operational data is stored in dedicated relational PostgreSQL tables. The application no longer uses generic JSON records for schedules, jobs, reports, recipients or delivery attempts.
+For SMTP configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `WEBGSO_MAIL_FROM`. For Graph additionally set `WEBGSO_GRAPH_TENANT_ID`, `WEBGSO_GRAPH_CLIENT_ID`, `WEBGSO_GRAPH_CLIENT_SECRET` with application permission `Mail.Send`. These settings must be supplied to Java separately from the former .NET configuration. This implementation limits Graph simple-send attachments to 2.5 MB.
+
+Generated snapshots stay in the ignored private `.reports` directory. Preserve it across deployments. If a snapshot is absent, downloads regenerate it from the database, as the former application's live exports did.
+
+## Source and deployment
+
+```text
+pom.xml                            Dependencies and build
+src/main/java/my/webgso/            Java application and workflows
+src/main/resources/templates/       Server-rendered HTML views
+src/main/resources/static/          Brand assets, styles and browser enhancements
+src/main/resources/schema-java.sql  Optional fresh-database schema
+src/test/java/my/webgso/            Policy/security/workflow integration tests
+```
+
+`Dockerfile` builds/tests the JAR and runs it as a non-root user. Supply environment variables, reverse-proxy HTTPS, secure cookies and persistent storage at `/app/.reports`. Browsers never receive database credentials.
+
+The original C#/Blazor implementation remains recoverable in Git at `606bf85`. Java server forms replace Blazor component interactions, so layouts and HTTP interaction details differ. Core workflow tests do not establish exact parity with every historical interaction or real plant/email integration. Verify deployment-specific endpoints and delivery settings before operational cutover.

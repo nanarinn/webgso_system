@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Request could not be completed</title>
+    <link rel="stylesheet" href="/styles/app.css" />
+    <link rel="stylesheet" href="/styles/java.css" />
+  </head>
+  <body>
+    <main class="registration-shell">
+      <p class="section-label">Single Buyer LSS Repository</p>
+      <h1>Request could not be completed</h1>
+      <p role="alert" th:text="${message}"></p>
+      <a class="primary-action" href="/">Return to repository</a
+      ><a class="secondary-action" href="/login">Sign in</a>
+    </main>
+  </body>
+</html>

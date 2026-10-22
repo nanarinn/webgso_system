@@ -1,0 +1,7 @@
+.git
+.tools
+.reports
+.env*
+target
+TestingSystem.Web
+tests

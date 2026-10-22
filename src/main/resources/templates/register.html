@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Create an account | Single Buyer</title>
+    <link rel="stylesheet" href="/styles/app.css" />
+    <link rel="stylesheet" href="/styles/java.css" />
+  </head>
+  <body>
+    <main class="registration-shell">
+      <img class="brand-logo" src="/single-buyer-logo.png" alt="Single Buyer" />
+      <p class="section-label">Authorised access</p>
+      <h1>Create a local account</h1>
+      <p>
+        Your account will remain pending until an administrator approves access.
+      </p>
+      <form class="java-form" th:action="@{/account/register}" method="post">
+        <label
+          >Display name<input
+            name="displayName"
+            autocomplete="name"
+            required
+            maxlength="160" /></label
+        ><label
+          >Username<input
+            name="username"
+            autocomplete="username"
+            required
+            minlength="3"
+            maxlength="100"
+            pattern="[a-zA-Z0-9_.@-]+" /></label
+        ><label
+          >Email<input
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+            maxlength="256" /></label
+        ><label
+          >Password<input
+            name="password"
+            type="password"
+            autocomplete="new-password"
+            minlength="12"
+            maxlength="72"
+            required
+        /></label>
+        <p class="page-subtitle">
+          Use 12–72 characters including uppercase, lowercase, a number and a
+          symbol.
+        </p>
+        <label
+          >Confirm password<input
+            name="confirmPassword"
+            type="password"
+            autocomplete="new-password"
+            required /></label
+        ><button class="primary-action">Request access</button
+        ><a href="/login">Back to sign in</a>
+      </form>
+    </main>
+  </body>
+</html>

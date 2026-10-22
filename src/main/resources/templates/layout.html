@@ -1,0 +1,122 @@
+<!doctype html>
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:fragment="shell(content,title)"
+>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title th:text="${title}+' | Single Buyer LSS Repository'"></title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="/styles/app.css" />
+    <link rel="stylesheet" href="/styles/interface.css" />
+    <link rel="stylesheet" href="/styles/java.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div class="app-shell">
+      <aside class="app-sidebar">
+        <div class="brand-lockup sidebar-brand">
+          <img
+            class="brand-logo"
+            src="/single-buyer-logo.png"
+            alt="Single Buyer"
+          /><span><small>LSS Repository</small></span>
+        </div>
+        <input
+          id="mobile-nav"
+          type="checkbox"
+          class="nav-toggle"
+          aria-label="Navigation menu"
+        /><label class="mobile-nav-label" for="mobile-nav">☰ Menu</label>
+        <div class="nav-body">
+          <p class="nav-section-title">Workspace</p>
+          <nav>
+            <a class="nav-link" href="/">◫ <span>Overview</span></a
+            ><a class="nav-link" href="/ddq-analytics"
+              >↗ <span>DDQ Analytics</span></a
+            ><a class="nav-link" href="/mmf-analytics"
+              >☀ <span>MMF Analytics</span></a
+            ><a class="nav-link" href="/on-demand-analysis"
+              >▤ <span>On-Demand Analysis</span></a
+            ><a class="nav-link" href="/collection-management"
+              >⇣ <span>Collection Management</span></a
+            >
+          </nav>
+          <div class="admin-navigation" th:if="${isAdmin}">
+            <p class="nav-section-title">Administration</p>
+            <nav>
+              <a
+                class="nav-link admin-nav-link"
+                th:each="link:${navigation}"
+                th:href="${link.path}"
+                th:text="${link.title}"
+              ></a
+              ><a class="nav-link admin-nav-link" href="/admin/users"
+                >User Management</a
+              >
+            </nav>
+          </div>
+          <div class="nav-spacer"></div>
+          <div class="sidebar-status">
+            <span class="status-light"></span
+            ><span
+              ><strong>Single Buyer</strong
+              ><small>Large Scale Solar Repository</small></span
+            >
+          </div>
+          <footer class="system-footer system-footer-sidebar">
+            <div class="footer-brand">
+              <img src="/sae-green-logo.png" alt="SAE Green" /><span
+                ><strong>SAE Green Sdn. Bhd.</strong
+                ><small>Technology &amp; delivery partner</small></span
+              >
+            </div>
+          </footer>
+        </div>
+      </aside>
+      <main class="app-main">
+        <header class="app-topbar">
+          <div class="environment-badge"><span></span> Secure repository</div>
+          <div class="topbar-account">
+            <details class="notification-menu">
+              <summary
+                th:text="'Notifications ('+${#lists.size(notifications)}+')'"
+              ></summary>
+              <div class="notification-panel">
+                <p th:if="${#lists.isEmpty(notifications)}">No notifications</p>
+                <article th:each="n:${notifications}">
+                  <strong th:text="${n.subject}"></strong>
+                  <p th:text="${n.body}"></p>
+                  <form
+                    th:if="${n.readAt==null}"
+                    th:action="@{/notifications/{id}/read(id=${n.id})}"
+                    method="post"
+                  >
+                    <button class="secondary-action">Mark read</button>
+                  </form>
+                </article>
+              </div>
+            </details>
+            <span th:text="${account.displayName}"></span>
+            <form th:action="@{/account/logout}" method="post">
+              <button class="secondary-action">Sign out</button>
+            </form>
+          </div>
+        </header>
+        <article id="main-content" class="app-content" tabindex="-1">
+          <div
+            class="page-inline-notice"
+            role="status"
+            th:if="${message}"
+            th:text="${message}"
+          ></div>
+          <th:block th:replace="${content}"></th:block>
+        </article>
+      </main>
+    </div>
+    <script src="/scripts/java-ui.js" defer></script>
+  </body>
+</html>

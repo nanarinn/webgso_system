@@ -1,0 +1,105 @@
+<!doctype html>
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: shell(~{::section},${title})}"
+>
+  <section>
+    <header class="page-heading">
+      <div>
+        <p class="section-label">Data operations</p>
+        <h1>Collection Management</h1>
+        <p class="page-subtitle">
+          Fetch registered plant APIs and inspect collection outcomes.
+        </p>
+      </div>
+    </header>
+    <article class="panel">
+      <h2>Run a manual collection</h2>
+      <form class="java-filters" th:action="@{/collections/run}" method="post">
+        <label
+          >Plant<select name="plantId" required>
+            <option
+              th:each="p:${plants}"
+              th:value="${p.id}"
+              th:text="${p.plantId}+' · '+${p.name}"
+            ></option></select></label
+        ><label
+          >Dataset<select name="dataType">
+            <option
+              th:each="d:${dataTypes}"
+              th:text="${d}"
+            ></option></select></label
+        ><label
+          >Submission date and time<input
+            type="datetime-local"
+            name="submission"
+            th:value="${now}"
+            required /></label
+        ><label class="java-check"
+          ><input type="checkbox" name="replace" value="true" />Replace existing
+          DDQ data for this submission</label
+        ><button class="primary-action">Collect data</button>
+      </form>
+    </article>
+    <details class="panel java-panel">
+      <summary>Collect a dataset from all active plants</summary>
+      <form class="java-filters" th:action="@{/collections/batch}" method="post">
+        <label>Dataset<select name="dataType"><option th:each="d:${dataTypes}" th:text="${d}"></option></select></label>
+        <label>Submission date and time<input type="datetime-local" name="submission" th:value="${now}" required></label>
+        <label class="java-check"><input type="checkbox" name="replace" value="true">Replace existing DDQ data for this submission</label>
+        <button class="primary-action">Collect all active plants</button>
+      </form>
+    </details>
+    <article class="panel java-panel" th:if="${batch}" th:attr="data-batch-id=${batch.id}">
+      <h2>Batch progress</h2><p data-batch-summary th:text="${batch.complete()}?'Batch completed':'Collection is running. This status updates automatically.'"></p>
+      <div class="java-table-wrap"><table><thead><tr><th>Plant</th><th>Status</th><th>Outcome</th></tr></thead><tbody data-batch-items><tr th:each="item:${batch.items.values()}"><td th:text="${item.plantName}"></td><td th:text="${item.status}"></td><td th:text="${item.message}"></td></tr></tbody></table></div>
+    </article>
+    <article class="panel java-panel">
+      <h2>Collection history</h2>
+      <div class="java-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Collection ID</th>
+              <th>Plant</th>
+              <th>Dataset</th>
+              <th>Mode</th>
+              <th>Submission</th>
+              <th>Status</th>
+              <th>Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="j:${jobs}">
+              <td>
+                <a
+                  th:href="@{/collections/{id}(id=${j.id})}"
+                  th:text="${j.collectionId}"
+                ></a>
+              </td>
+              <td th:text="${j.plantId}"></td>
+              <td th:text="${j.dataType}"></td>
+              <td th:text="${j.mode}"></td>
+              <td th:text="${j.submissionDateTime}"></td>
+              <td><span class="status-pill" th:text="${j.status}"></span></td>
+              <td
+                th:text="${j.errorMessage==null?j.responseMessage:j.errorMessage}"
+              ></td>
+            </tr>
+            <tr th:if="${#lists.isEmpty(jobs)}">
+              <td colspan="7" class="java-empty">No collections yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <nav class="java-pagination">
+        <a th:if="${page>0}" th:href="@{''(page=${page-1})}">Previous</a
+        ><span th:text="'Page '+${page+1}"></span
+        ><a th:if="${(page+1)*25<total}" th:href="@{''(page=${page+1})}"
+          >Next</a
+        >
+      </nav>
+    </article>
+  </section>
+</html>

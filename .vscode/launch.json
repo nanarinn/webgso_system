@@ -2,20 +2,20 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug Single Buyer LSS Repository",
-      "type": "coreclr",
+      "type": "java",
+      "name": "WEBGSO Java (PostgreSQL)",
       "request": "launch",
-      "preLaunchTask": "Build SBLSS",
-      "program": "${workspaceFolder}/TestingSystem.Web/bin/Debug/net8.0/TestingSystem.Web.dll",
-      "cwd": "${workspaceFolder}/TestingSystem.Web",
-      "stopAtEntry": false,
-      "serverReadyAction": {
-        "action": "openExternally",
-        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
-      },
-      "env": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
+      "mainClass": "my.webgso.WebgsoApplication",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env.local"
+    },
+    {
+      "type": "java",
+      "name": "WEBGSO Java (isolated demo)",
+      "request": "launch",
+      "mainClass": "my.webgso.WebgsoApplication",
+      "cwd": "${workspaceFolder}",
+      "args": "--spring.profiles.active=demo --server.port=5187"
     }
   ]
 }

@@ -1,0 +1,89 @@
+<!doctype html>
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: shell(~{::section},${title})}"
+>
+  <section>
+    <header class="page-heading">
+      <div>
+        <p class="section-label">Repository overview</p>
+        <h1>Large Scale Solar portfolio</h1>
+        <p class="page-subtitle">
+          Monitor configured plants, collection outcomes and recent API
+          activity.
+        </p>
+      </div>
+    </header>
+    <div class="java-metrics">
+      <a class="metric-card metric-card-blue" href="/ddq-analytics"
+        ><strong th:text="${plantCount}"></strong><span>Total plants</span></a
+      ><a class="metric-card" href="/mmf-analytics"
+        ><strong
+          th:text="${#numbers.formatInteger(readingCount,1,'COMMA')}"
+        ></strong
+        ><span>Stored readings</span></a
+      ><a class="metric-card" href="/collection-management"
+        ><strong th:text="${collectionCount}"></strong
+        ><span>Collections</span></a
+      ><a class="metric-card" href="/collection-management"
+        ><strong th:text="${anomalyCount}"></strong
+        ><span>Open anomalies</span></a
+      >
+    </div>
+    <div class="content-grid">
+      <article class="panel panel-wide">
+        <div class="panel-heading">
+          <h2>Recent API collections</h2>
+          <a href="/collection-management">View all</a>
+        </div>
+        <div class="record-list">
+          <a
+            class="record-row java-record"
+            th:each="job:${jobs}"
+            th:href="@{/collections/{id}(id=${job.id})}"
+            ><div class="record-name">
+              <strong th:text="${job.collectionId}"></strong
+              ><span
+                th:text="${job.dataType}+' · Plant '+${job.plantId}"
+              ></span>
+            </div>
+            <span class="status-pill" th:text="${job.status}"></span
+            ><time
+              th:text="${#temporals.format(job.startedAt,'dd MMM yyyy HH:mm')}"
+            ></time
+          ></a>
+          <p th:if="${#lists.isEmpty(jobs)}">
+            No collections yet. Configure plant API links to begin.
+          </p>
+        </div>
+      </article>
+      <aside class="panel focus-panel">
+        <p class="section-label section-label-light">System status</p>
+        <h2>Repository connected</h2>
+        <p>Operational data is read from the configured database.</p>
+        <a class="health-proof-button" href="/api/status"
+          >View health status →</a
+        >
+      </aside>
+    </div>
+    <article class="panel java-panel">
+      <div class="panel-heading">
+        <h2>Registered solar plants</h2>
+        <a th:if="${isAdmin}" href="/admin/lss-plants">Manage plants</a>
+      </div>
+      <div class="java-plant-grid">
+        <article th:each="plant:${plants}">
+          <small th:text="${plant.plantId}"></small>
+          <h3 th:text="${plant.name}"></h3>
+          <p th:text="${plant.state}"></p>
+          <strong th:text="${plant.capacityMw}+' MW'"></strong
+          ><span
+            class="status-pill"
+            th:text="${plant.isActive}?'Active':'Inactive'"
+          ></span>
+        </article>
+      </div>
+    </article>
+  </section>
+</html>

@@ -1,24 +1,14 @@
-# Single Buyer LSS Repository - Codex Guide
+# WEBGSO Java development guide
 
-## Project
-
-- Main solution: `SBLSS.System.sln`
-- Web application: `TestingSystem.Web`
-- Stack: C#, .NET 8, Blazor Web App, ASP.NET Core Identity, EF Core, PostgreSQL 18, pgAdmin 4
-
-## Working rules
-
-- Build with `dotnet build SBLSS.System.sln` after code changes.
-- Keep secrets in `.env` or user secrets; never commit real passwords.
-- Run the host application against local PostgreSQL with `run-postgresql.cmd`.
-- Preserve the Single Buyer color system and responsive visual style.
-- Use role-based authorization for Administrator-only operations.
-- Add or update tests when implementing business logic.
-
-## Useful checks
-
-- App health endpoint: `/health`
-- API connectivity endpoint: `/api/ping`
-- Protected database proof endpoint: `/api/status`
-- Docker web port: `${APP_PORT:-8088}`
-- Local PostgreSQL port: `5432`
+- Runtime: Java 21, Spring Boot, Spring MVC/Thymeleaf, Spring Security, JDBC and PostgreSQL.
+- Verify with `mvnw.cmd verify` on Windows or `./mvnw verify` elsewhere. Stop a running JAR before replacing it on Windows.
+- Keep credentials in process/service environment or the existing local secret store. Never commit real passwords or tokens.
+- Use the explicit `demo` profile for isolated synthetic data. Never enable schema initialization against the existing database as a migration shortcut.
+- Preserve quoted PostgreSQL table/column names, local forecast timestamps and UTC lifecycle instants.
+- Enforce administration roles, CSRF, report ownership and current account approval/security stamps on the server.
+- Preserve plant API HTTPS, DNS, private-host, redirect and response-size restrictions.
+- Test changes to business rules, permissions, parsing, scheduling and reports.
+- Preserve Single Buyer branding and responsive layouts. Keep product flows focused on repository operations.
+- Java source: `src/main/java/my/webgso`; views: `src/main/resources/templates`; tests: `src/test/java/my/webgso`.
+- `/health` is public. `/api/ping`, `/api/status` and `/api/dashboard` require authentication.
+- Keep workers disabled while the old runtime is active. Real email requires explicit service configuration.

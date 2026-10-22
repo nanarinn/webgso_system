@@ -1,0 +1,56 @@
+<!doctype html>
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: shell(~{::section},${title})}"
+>
+  <section>
+    <header class="page-heading">
+      <div>
+        <p class="section-label">Repository configuration</p>
+        <h1 th:text="${title}"></h1>
+      </div>
+      <a class="secondary-action" th:href="${resource.path}">Back to list</a>
+    </header>
+    <article class="panel">
+      <form
+        class="java-form java-edit"
+        th:action="@{${resource.path}+'/save'}"
+        method="post"
+      >
+        <input type="hidden" name="id" th:value="${id}" /><label
+          th:each="f:${fields}"
+          ><span th:text="${f.label}"></span
+          ><select th:if="${!#lists.isEmpty(f.options)}" th:name="${f.name}">
+            <option
+              th:each="o:${f.options}"
+              th:value="${o}"
+              th:text="${o}"
+              th:selected="${o==f.value}"
+            ></option></select
+          ><input
+            th:if="${#lists.isEmpty(f.options) and f.type=='checkbox'}"
+            type="checkbox"
+            th:name="${f.name}"
+            value="true"
+            th:checked="${f.checked}" /><input
+            th:if="${#lists.isEmpty(f.options) and f.type!='checkbox'}"
+            th:type="${f.type}"
+            th:name="${f.name}"
+            th:value="${f.value}"
+            step="any"
+            th:attr="list=${f.name=='plantId'?'plant-hints':null}"
+        /></label>
+        <p class="page-subtitle">
+          Times use HH:mm. Weekly schedules use a weekday name. Four-month
+          schedules use a day number and comma-separated months. Uncheck Active
+          to suspend a configuration.
+        </p>
+        <div class="java-actions">
+          <button class="primary-action">Save configuration</button
+          ><a class="secondary-action" th:href="${resource.path}">Cancel</a>
+        </div>
+      </form>
+    </article>
+  </section>
+</html>

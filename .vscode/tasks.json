@@ -2,27 +2,12 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Build SBLSS",
-      "type": "process",
-      "command": "${workspaceFolder}/.dotnet/dotnet.exe",
-      "args": ["build", "${workspaceFolder}/SBLSS.System.sln"],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": "$msCompile"
-    },
-    {
-      "label": "Run SBLSS with VM database and LAN",
-      "type": "process",
-      "command": "${workspaceFolder}/run-sblss-system.cmd",
-      "problemMatcher": []
-    },
-    {
-      "label": "Pull GitHub and check VM connection",
-      "type": "process",
-      "command": "${workspaceFolder}/update-github-and-connect-vm.cmd",
-      "problemMatcher": []
+      "label": "Verify WEBGSO Java",
+      "type": "shell",
+      "command": ".\\mvnw.cmd",
+      "args": ["verify"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$javac"]
     }
   ]
 }

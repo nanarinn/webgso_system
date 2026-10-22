@@ -1,10 +1,3 @@
 {
-  "recommendations": [
-    "ms-dotnettools.csharp",
-    "ms-dotnettools.csdevkit",
-    "ms-mssql.mssql",
-    "eamodio.gitlens",
-    "github.vscode-github-actions",
-    "github.copilot"
-  ]
+  "recommendations": ["vscjava.vscode-java-pack", "vmware.vscode-boot-dev-pack"]
 }
