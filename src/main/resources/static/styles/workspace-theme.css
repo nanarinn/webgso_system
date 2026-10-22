@@ -1,0 +1,58 @@
+/* Shared workspace palette, matching the login page. Keep status colours semantic. */
+:root {
+  --sb-yellow: #d3eaa5;
+  --sb-yellow-soft: #edf2e5;
+  --sb-green: #357654;
+  --sb-green-light: #97b876;
+  --sb-blue: #184f3c;
+  --sb-blue-light: #9cba70;
+  --sb-cyan: #385f4b;
+  --sb-navy: #103d30;
+  --sb-primary: #184f3c;
+  --sb-ink: #193d35;
+  --sb-muted: #617368;
+  --sb-border: #d8e0d2;
+  --sb-background: #f6f8f3;
+}
+
+body { background: var(--sb-background); }
+.app-shell, .app-main { background: var(--sb-background); }
+.app-sidebar { background: #103d30; color: #f0f5e8; }
+.app-topbar { background: #f6f8f3f5; }
+.sidebar-brand { border-bottom-color: #ffffff24; }
+.sidebar-brand small, .sidebar-status small { color: #b9cebb; }
+.nav-section-title { color: #b9cebb; }
+.nav-body { scrollbar-color: #759578 #103d30; }
+.nav-body .nav-link { color: #e0eadd; }
+.nav-body .nav-link:hover { color: #f0f5e8; background: #ffffff12; }
+.nav-body .nav-link.active,
+.nav-body .nav-link[aria-current="page"] {
+  color: #103d30;
+  background: #d3eaa5;
+}
+.sidebar-status { background: #ffffff0c; border-color: #ffffff24; }
+.sidebar-status .status-light { background: #d3eaa5; box-shadow: 0 0 0 4px #d3eaa51a; }
+.environment-badge span { background: #357654; box-shadow: 0 0 0 4px #3576541f; }
+.panel, .metric-card, .graph-panel, .notification-panel {
+  border-color: var(--sb-border);
+  box-shadow: 0 8px 24px #193d3508;
+}
+.primary-action { background: #184f3c; }
+.primary-action:hover { background: #103d30; box-shadow: 0 12px 24px #103d3026; }
+.secondary-action { color: #184f3c; border-color: #d0dbc9; }
+.secondary-action:hover { color: #103d30; border-color: #9cba70; background: #edf2e5; }
+.focus-panel { background: #103d30; color: #f0f5e8; }
+.focus-panel .section-label, .focus-panel a { color: #d3eaa5; }
+th, pre { background: #edf2e8; }
+tbody tr:hover { background: #f2f6ed; }
+.java-filters input, .java-filters select, .java-form input, .java-form select,
+.java-search input, .java-user-review input, .java-user-review select {
+  border-color: #d0dbc9;
+}
+.java-filters input:focus, .java-filters select:focus,
+.java-form input:focus, .java-form select:focus, .java-search input:focus {
+  border-color: #9cba70;
+  box-shadow: 0 0 0 3px #b5cf864d;
+}
+.chart-axis { stroke: #d0dbc9; }
+:focus-visible { outline-color: #9cba70; }
