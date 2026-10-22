@@ -90,6 +90,36 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  @org.springframework.transaction.annotation.Transactional
+  void superAdminOverviewUsesSavedTestResultsAndKeepsStaffOverview() throws Exception {
+    var passed = new LssPlant();
+    passed.plantId = "OVERVIEW-PASS";
+    passed.name = "Overview passed API";
+    passed.apiConnectionStatus = "Connected";
+    passed.lastApiTestAt = OffsetDateTime.parse("2026-10-21T23:15:00Z");
+    db.insert(passed);
+    var failed = new LssPlant();
+    failed.plantId = "OVERVIEW-FAIL";
+    failed.name = "Overview failed API";
+    failed.apiConnectionStatus = "Failed";
+    db.insert(failed);
+    mvc.perform(get("/").with(authentication(adminAuth)))
+        .andExpect(status().isOk())
+        .andExpect(view().name("admin-overview"))
+        .andExpect(model().attribute("apiCount", (int) db.count(LssPlant.class)))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("22 Oct 2026, 07:15 MYT")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Review signups")));
+    var filtered = mvc.perform(get("/").param("apiStatus", "failed").with(authentication(adminAuth)))
+        .andExpect(status().isOk()).andReturn();
+    @SuppressWarnings("unchecked")
+    var activity = (List<Map<String, Object>>) filtered.getModelAndView().getModel().get("apiActivity");
+    assertThat(activity).isNotEmpty().allSatisfy(row -> assertThat(row.get("tone")).isEqualTo("failed"));
+    mvc.perform(get("/").with(authentication(staffAuth)))
+        .andExpect(status().isOk()).andExpect(view().name("dashboard"))
+        .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Review signups"))));
+  }
+
+  @Test
   void registrationRemainsPendingAndCannotSignInUntilReviewed() throws Exception {
     String name = "pending." + System.nanoTime();
     mvc.perform(

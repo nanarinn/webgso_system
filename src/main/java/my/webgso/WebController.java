@@ -109,8 +109,44 @@ public class WebController {
   }
 
   @GetMapping("/")
-  public String dashboard(Model model) {
+  public String dashboard(Model model, Authentication auth,
+      @RequestParam(defaultValue = "all") String apiStatus) {
     model.addAttribute("title", "Overview");
+    if (auth.getAuthorities().stream()
+        .anyMatch(a -> a.getAuthority().equals("ROLE_SuperAdministrator"))) {
+      var apiPlants = db.list(LssPlant.class, "ORDER BY \"LastApiTestAt\" DESC NULLS LAST, \"Name\"");
+      model.addAttribute("apiCount", apiPlants.size());
+      model.addAttribute("apiSuccessCount", apiPlants.stream()
+          .filter(p -> "Connected".equals(p.apiConnectionStatus)).count());
+      model.addAttribute("apiFailedCount", apiPlants.stream()
+          .filter(p -> "Failed".equals(p.apiConnectionStatus)).count());
+      model.addAttribute("apiUntestedCount", apiPlants.stream()
+          .filter(p -> !"Connected".equals(p.apiConnectionStatus) && !"Failed".equals(p.apiConnectionStatus)).count());
+      var activity = new ArrayList<Map<String, Object>>();
+      for (var plant : apiPlants.stream()
+          .filter(p -> !Set.of("success", "failed").contains(apiStatus)
+              || (apiStatus.equals("success") ? "Connected" : "Failed").equals(p.apiConnectionStatus))
+          .limit(10).toList()) {
+        var row = new LinkedHashMap<String, Object>();
+        row.put("name", plant.name);
+        row.put("plantCode", plant.plantId);
+        row.put("category", Objects.toString(plant.lastApiTestSource, "DDQ / MMF"));
+        row.put("status", "Connected".equals(plant.apiConnectionStatus) ? "Active / Success"
+            : "Failed".equals(plant.apiConnectionStatus) ? "Inactive / Failed" : "Not tested");
+        row.put("tone", "Connected".equals(plant.apiConnectionStatus) ? "success"
+            : "Failed".equals(plant.apiConnectionStatus) ? "failed" : "untested");
+        row.put("testedAt", plant.lastApiTestAt == null ? null
+            : plant.lastApiTestAt.atZoneSameInstant(Policies.LOCAL));
+        // The current schema stores a test actor in audit history, rather than an API owner.
+        row.put("owner", "Not recorded");
+        var saved = db.list(CollectionJobEntity.class,
+            "WHERE \"PlantId\"=? ORDER BY \"StartedAt\" DESC LIMIT 1", plant.id);
+        row.put("dataUrl", saved.isEmpty() ? "" : "/collections/" + saved.getFirst().id);
+        activity.add(row);
+      }
+      model.addAttribute("apiActivity", activity);
+      return "admin-overview";
+    }
     model.addAttribute("plantCount", db.count(LssPlant.class));
     model.addAttribute("readingCount", db.count(SolarApiReading.class));
     model.addAttribute("collectionCount", db.count(CollectionJobEntity.class));

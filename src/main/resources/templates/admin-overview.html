@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout :: shell(~{::section},${title})}">
+  <section class="admin-overview">
+    <div class="admin-overview-context">
+      <p><span>Workspace /</span> Admin overview</p>
+      <span>Malaysia Standard Time · UTC+8</span>
+    </div>
+    <header class="admin-overview-heading">
+      <div>
+        <p class="section-label">Admin console</p>
+        <h1>Administration</h1>
+        <p>Manage visibility across staff accounts and registered API services.</p>
+      </div>
+      <div class="java-actions">
+        <a class="secondary-action" href="/admin/users">Review signups</a>
+        <a class="primary-action" href="/admin/lss-plants">View all APIs →</a>
+      </div>
+    </header>
+    <div class="admin-api-metrics">
+      <article class="admin-api-card">
+        <h2>All API</h2><strong th:text="${apiCount}">0</strong>
+        <p>Total registered plant API connections</p>
+        <a href="/admin/lss-plants">View APIs →</a>
+      </article>
+      <article class="admin-api-card">
+        <h2>Active / Success</h2><strong th:text="${apiSuccessCount}">0</strong>
+        <p>Last test passed</p><a href="/?apiStatus=success#latest-api-activity">View APIs →</a>
+      </article>
+      <article class="admin-api-card">
+        <h2>Inactive / Failed</h2><strong th:text="${apiFailedCount}">0</strong>
+        <p>Last test failed</p><a href="/?apiStatus=failed#latest-api-activity">View APIs →</a>
+      </article>
+    </div>
+    <article class="admin-api-activity" id="latest-api-activity">
+      <header>
+        <div><h2>Latest API activity</h2>
+          <p>Latest saved connection tests for registered plants.</p></div>
+        <a class="secondary-action" href="/collection-management">All API records</a>
+      </header>
+      <div class="java-table-wrap">
+        <table>
+          <thead><tr><th>API name</th><th>Owner</th><th>Category</th><th>Status API</th><th>Last tested</th><th>Data</th></tr></thead>
+          <tbody>
+            <tr th:each="api:${apiActivity}">
+              <td><strong th:text="${api.name}"></strong><small th:text="${api.plantCode}"></small></td>
+              <td th:text="${api.owner}"></td><td th:text="${api.category}"></td>
+              <td><span class="admin-api-status" th:classappend="${api.tone}" th:text="${api.status}"></span></td>
+              <td th:text="${api.testedAt == null ? 'Not tested' : #temporals.format(api.testedAt,'dd MMM yyyy, HH:mm') + ' MYT'}"></td>
+              <td><a class="secondary-action" th:if="${!api.dataUrl.isEmpty()}" th:href="${api.dataUrl}">View data</a>
+                <span class="admin-no-data" th:if="${api.dataUrl.isEmpty()}">No saved data</span></td>
+            </tr>
+            <tr th:if="${#lists.isEmpty(apiActivity)}"><td colspan="6" class="java-empty">No registered plant API connections yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <footer>
+        <p>Active / Inactive reflects the last API connection test, not continuous monitoring. Saved collection records remain available separately.</p>
+        <p><span th:text="${apiUntestedCount}"></span> connections not tested. API owners are not recorded in the current plant registry.</p>
+      </footer>
+    </article>
+  </section>
+</html>
