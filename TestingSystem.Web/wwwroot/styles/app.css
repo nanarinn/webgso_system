@@ -491,6 +491,93 @@ a {
     line-height: 1.45;
 }
 
+.demo-access-card {
+    margin-top: 18px;
+    padding: 15px;
+    border: 1px solid #a6d5f4;
+    border-radius: 12px;
+    color: #173f5f;
+    background: #f1f9ff;
+    font-family: "Aptos", "Trebuchet MS", sans-serif;
+}
+
+.demo-access-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.demo-access-heading > span {
+    display: grid;
+    width: 36px;
+    height: 28px;
+    place-items: center;
+    border-radius: 8px 3px 8px 3px;
+    color: #fff;
+    background: var(--sb-blue);
+    font-size: .62rem;
+    font-weight: 900;
+    letter-spacing: .06em;
+}
+
+.demo-access-heading strong,
+.demo-access-heading small {
+    display: block;
+}
+
+.demo-access-heading small {
+    margin-top: 2px;
+    color: var(--sb-muted);
+    font-size: .7rem;
+}
+
+.demo-credentials {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 13px 0 10px;
+}
+
+.demo-credentials > div {
+    padding: 9px 10px;
+    border: 1px solid #d5e8f5;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.demo-credentials dt {
+    margin-bottom: 4px;
+    color: var(--sb-muted);
+    font-size: .65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.demo-credentials dd {
+    margin: 0;
+}
+
+.demo-credentials code {
+    color: var(--sb-ink);
+    font-size: .82rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.demo-access-card > p {
+    margin: 0;
+    color: #806000;
+    font-size: .69rem;
+    line-height: 1.4;
+}
+
+@media (max-width: 520px) {
+    .demo-credentials {
+        grid-template-columns: 1fr;
+    }
+}
+
 .first-access-note {
     display: flex;
     margin-top: 16px;
