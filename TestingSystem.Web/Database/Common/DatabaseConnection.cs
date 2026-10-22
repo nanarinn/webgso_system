@@ -109,7 +109,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         builder.Entity<RawApiResponse>(item =>
         {
             item.Property(x => x.ContentType).HasMaxLength(100);
-            item.Property(x => x.Payload).HasColumnType("nvarchar(max)");
+            item.Property(x => x.Payload).HasColumnType("text");
             item.Property(x => x.Sha256).HasMaxLength(64);
             item.HasIndex(x => x.CollectionJobId);
             item.HasOne<CollectionJobEntity>().WithMany().HasForeignKey(x => x.CollectionJobId).OnDelete(DeleteBehavior.Cascade);
@@ -222,5 +222,17 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             item.HasOne<CollectionJobEntity>().WithMany().HasForeignKey(x => x.CollectionJobId).OnDelete(DeleteBehavior.Cascade);
             item.HasOne<LssPlant>().WithMany().HasForeignKey(x => x.PlantId).OnDelete(DeleteBehavior.Restrict);
         });
+
+        // Npgsql maps DateTime to timestamp with time zone by default. The source API
+        // contracts intentionally use local/unspecified forecast timestamps, while
+        // audit and lifecycle instants use DateTimeOffset. Keep those two concepts
+        // distinct so PostgreSQL accepts every existing application value.
+        foreach (var property in builder.Model.GetEntityTypes()
+                     .SelectMany(entity => entity.GetProperties())
+                     .Where(property => property.ClrType == typeof(DateTime)
+                         || property.ClrType == typeof(DateTime?)))
+        {
+            property.SetColumnType("timestamp without time zone");
+        }
     }
 }

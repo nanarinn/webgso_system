@@ -20,6 +20,27 @@ if (!string.IsNullOrWhiteSpace(externalSecretsFile))
     builder.Configuration.AddEnvironmentVariables();
 }
 
+var uiOnlyMode = builder.Configuration.GetValue<bool>("UiOnly:Enabled");
+if (uiOnlyMode)
+{
+    var previewApp = builder.Build();
+    previewApp.Use(async (context, next) =>
+    {
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["X-Frame-Options"] = "DENY";
+        await next();
+    });
+    previewApp.UseDefaultFiles(new DefaultFilesOptions
+    {
+        DefaultFileNames = { "ui-preview.html" }
+    });
+    previewApp.UseStaticFiles();
+    previewApp.MapFallbackToFile("ui-preview.html");
+    previewApp.Logger.LogWarning("UI-only mode is active. No external database is connected.");
+    previewApp.Run();
+    return;
+}
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
@@ -42,8 +63,8 @@ builder.Services.AddScoped<IUserAccessNotificationService, UserAccessNotificatio
 builder.Services.AddAntiforgery();
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString, sqlOptions =>
-        sqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(5), null)));
+    options.UseNpgsql(connectionString, postgresOptions =>
+        postgresOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(5), null)));
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     {
@@ -58,8 +79,6 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
-builder.Services.AddEntraAuthentication(builder.Configuration);
-
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.Name = "SingleBuyer.LssRepository";
@@ -75,7 +94,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 
 builder.Services.AddHealthChecks()
-    .AddCheck<SqlServerHealthCheck>("sql-server");
+    .AddCheck<PostgreSqlHealthCheck>("postgresql");
 
 var app = builder.Build();
 
@@ -117,7 +136,7 @@ await DatabaseInitializer.InitialiseAsync(app.Services, app.Configuration);
 
 if (args.Contains("--update-database", StringComparer.OrdinalIgnoreCase))
 {
-    Console.WriteLine("Microsoft SQL Server schema is aligned with the current SBLSS system.");
+    Console.WriteLine("PostgreSQL schema is aligned with the current WEBGSO system.");
     return;
 }
 
@@ -178,7 +197,7 @@ if (args.Contains("--reset-workflow-data", StringComparer.OrdinalIgnoreCase))
 
     Console.WriteLine("SBLSS operational workflow data was reset.");
     Console.WriteLine("Removed: plants, API configurations, collection schedules/history, readings, anomalies, reports and audit events.");
-    Console.WriteLine("Retained: Microsoft Entra accounts, roles, access approvals and system validation rules.");
+    Console.WriteLine("Retained: local accounts, roles, access approvals and system validation rules.");
     return;
 }
 
@@ -219,6 +238,63 @@ if (superAdminIndex >= 0)
         EnsureIdentitySucceeded(await users.UpdateSecurityStampAsync(user));
         Console.WriteLine($"{user.DisplayName} <{email}> is now an approved Super Admin.");
     }
+    return;
+}
+
+var localAdminIndex = Array.FindIndex(args, value => value.Equals("--create-local-admin", StringComparison.OrdinalIgnoreCase));
+if (localAdminIndex >= 0)
+{
+    if (localAdminIndex + 3 >= args.Length)
+        throw new ArgumentException("Provide username, email and display name after --create-local-admin.");
+
+    var userName = args[localAdminIndex + 1].Trim();
+    var email = args[localAdminIndex + 2].Trim();
+    var displayName = args[localAdminIndex + 3].Trim();
+    var password = Environment.GetEnvironmentVariable("WEBGSO_BOOTSTRAP_PASSWORD");
+    if (string.IsNullOrWhiteSpace(password))
+        throw new InvalidOperationException("WEBGSO_BOOTSTRAP_PASSWORD was not supplied.");
+
+    await using var scope = app.Services.CreateAsyncScope();
+    var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+    var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    if (!await roles.RoleExistsAsync(SystemRoles.SuperAdministrator))
+        EnsureIdentitySucceeded(await roles.CreateAsync(new IdentityRole(SystemRoles.SuperAdministrator)));
+
+    var user = await users.FindByNameAsync(userName) ?? await users.FindByEmailAsync(email);
+    if (user is null)
+    {
+        user = new ApplicationUser
+        {
+            UserName = userName,
+            Email = email,
+            EmailConfirmed = true,
+            DisplayName = displayName,
+            AccessStatus = UserAccessStatus.Approved,
+            AccessReviewedAt = DateTimeOffset.UtcNow,
+            AccessReviewedBy = "Local administration command",
+            IsEntraUser = false
+        };
+        EnsureIdentitySucceeded(await users.CreateAsync(user, password));
+    }
+    else
+    {
+        user.UserName = userName;
+        user.Email = email;
+        user.EmailConfirmed = true;
+        user.DisplayName = displayName;
+        user.AccessStatus = UserAccessStatus.Approved;
+        user.IsEntraUser = false;
+        user.EntraObjectId = null;
+        EnsureIdentitySucceeded(await users.UpdateAsync(user));
+        var resetToken = await users.GeneratePasswordResetTokenAsync(user);
+        EnsureIdentitySucceeded(await users.ResetPasswordAsync(user, resetToken, password));
+    }
+
+    var currentRoles = await users.GetRolesAsync(user);
+    if (currentRoles.Count > 0)
+        EnsureIdentitySucceeded(await users.RemoveFromRolesAsync(user, currentRoles));
+    EnsureIdentitySucceeded(await users.AddToRoleAsync(user, SystemRoles.SuperAdministrator));
+    Console.WriteLine($"Local Super Admin '{userName}' is ready.");
     return;
 }
 
@@ -292,7 +368,6 @@ if (mmfImportIndex >= 0)
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapLoginEndpoints();
-app.MapEntraLogin();
 app.MapRepositoryBackendApi();
 
 app.MapHealthChecks("/health");

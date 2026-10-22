@@ -317,6 +317,18 @@ a {
 .microsoft-mark i:nth-child(3), .button-microsoft-mark i:nth-child(3) { background: #00a4ef; }
 .microsoft-mark i:nth-child(4), .button-microsoft-mark i:nth-child(4) { background: #ffb900; }
 
+.local-login-mark {
+    display: inline-grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: 9px 3px 9px 3px;
+    color: #fff;
+    background: linear-gradient(135deg, var(--sb-blue), var(--sb-cyan));
+    font-size: .78rem;
+    font-weight: 800;
+}
+
 .mobile-brand {
     display: none;
 }
@@ -349,6 +361,30 @@ a {
     background: #fffbfa;
     font-family: "Aptos", "Trebuchet MS", sans-serif;
     font-size: 0.9rem;
+}
+
+.login-success-alert {
+    border-color: #abefc6;
+    color: #067647;
+    background: #ecfdf3;
+}
+
+.first-access-note a {
+    color: var(--sb-blue);
+    font-weight: 700;
+}
+
+.registration-card {
+    padding-block: 28px;
+}
+
+.registration-card .login-access-card {
+    padding-block: 30px;
+}
+
+.registration-card .input-shell {
+    height: 50px;
+    margin-bottom: 14px;
 }
 
 .login-form {

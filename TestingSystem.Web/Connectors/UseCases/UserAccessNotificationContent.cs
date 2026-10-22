@@ -18,10 +18,10 @@ public static class UserAccessNotificationContent
             approved ? "AccessApproved" : "AccessRejected",
             approved ? "SBLSS repository access approved" : "SBLSS repository access request update",
             approved
-                ? $"Your SBLSS repository access has been approved with the {role} role. You may now sign in with Microsoft."
+                ? $"Your SBLSS repository access has been approved with the {role} role. You may now sign in with your local account."
                 : "Your SBLSS repository access request was not approved. Contact the system administrator if you need assistance.");
     }
 
     private static string DisplayName(ApplicationUser user) =>
-        string.IsNullOrWhiteSpace(user.DisplayName) ? user.Email ?? "A Microsoft Entra user" : user.DisplayName;
+        string.IsNullOrWhiteSpace(user.DisplayName) ? user.Email ?? "A local user" : user.DisplayName;
 }

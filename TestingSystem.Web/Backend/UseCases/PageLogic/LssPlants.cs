@@ -267,7 +267,7 @@ public partial class LssPlants : ComponentBase
             IsDialogOpen = false;
             await LoadPlantsAsync();
             SelectedApiType = "DDQ";
-            SuccessMessage = $"{NewName.Trim()} DDQ and MMF API configurations were verified and successfully {(wasEditing ? "updated" : "added")} in MS SQL.";
+            SuccessMessage = $"{NewName.Trim()} DDQ and MMF API configurations were verified and successfully {(wasEditing ? "updated" : "added")} in PostgreSQL.";
             SuccessTitle = "Successfully verified and saved";
         }
         catch (Exception exception)
@@ -298,7 +298,7 @@ public partial class LssPlants : ComponentBase
                 .SingleOrDefaultAsync();
             if (plant is null)
             {
-                FormError = "This plant no longer exists in MS SQL.";
+                FormError = "This plant no longer exists in PostgreSQL.";
                 IsDeleteConfirmationOpen = false;
                 return;
             }
@@ -318,7 +318,7 @@ public partial class LssPlants : ComponentBase
             await strategy.ExecuteAsync(async () =>
             {
                 await using var transaction = await database.Database.BeginTransactionAsync();
-                // Collection job dependants use ON DELETE CASCADE, so SQL Server can remove
+                // Collection job dependants use ON DELETE CASCADE, so PostgreSQL can remove
                 // responses, readings and anomalies without repeated table scans here.
                 await database.CollectionJobs.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
                 await database.CollectionSchedules.Where(x => x.PlantId == plant.Id).ExecuteDeleteAsync();
@@ -337,7 +337,7 @@ public partial class LssPlants : ComponentBase
             IsDeleteConfirmationOpen = false;
             await LoadPlantsAsync();
             SuccessTitle = "Plant deleted";
-            SuccessMessage = $"{deletedName} ({deletedPlantId}) and all related collection data have been successfully removed from MS SQL.";
+            SuccessMessage = $"{deletedName} ({deletedPlantId}) and all related collection data have been successfully removed from PostgreSQL.";
         }
         catch (Exception exception)
         {

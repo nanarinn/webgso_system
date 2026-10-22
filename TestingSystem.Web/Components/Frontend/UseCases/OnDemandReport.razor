@@ -83,7 +83,7 @@
                 <div>
                     <p class="section-label">Delete analysis</p>
                     <h3 id="analysis-delete-title">Delete this generated analysis?</h3>
-                    <p><b>@DeleteTarget.Name</b> and its generated record will be permanently removed from MS SQL. Files that were already downloaded are not affected.</p>
+                    <p><b>@DeleteTarget.Name</b> and its generated record will be permanently removed from PostgreSQL. Files that were already downloaded are not affected.</p>
                     @if (!string.IsNullOrWhiteSpace(FormError)) { <div class="admin-alert error">@FormError</div> }
                     <div>
                         <button type="button" class="profile-cancel" disabled="@IsDeleting" @onclick="CancelDelete">Keep Analysis</button>
@@ -281,7 +281,7 @@
                         <div class="result-preview-state" role="status">
                             <span class="result-preview-spinner" aria-hidden="true"></span>
                             <strong>Preparing Excel preview…</strong>
-                            <small>Reading the stored analysis data from MS SQL.</small>
+                            <small>Reading the stored analysis data from PostgreSQL.</small>
                         </div>
                     }
                     else if (!string.IsNullOrWhiteSpace(PreviewError))

@@ -51,24 +51,28 @@ public static partial class SampleApiDataImporter
 
         // A submission timestamp belongs to the API/import event, not to the
         // forecast interval inside the payload. Keep one stable Malaysia-time
-        // timestamp for every record produced by the same imported sheet.
-        await database.Database.ExecuteSqlRawAsync("""
-            DECLARE @SampleSubmission datetimeoffset =
-                (SELECT MIN([StartedAt]) FROM [CollectionJobs] WHERE [Mode] = N'Excel sample import');
-
-            UPDATE reading
-            SET [SubmissionDateTime] = CONVERT(datetime2,
-                SWITCHOFFSET(@SampleSubmission, '+08:00'))
-            FROM [SolarApiReadings] reading
-            INNER JOIN [CollectionJobs] job ON job.[Id] = reading.[CollectionJobId]
-            WHERE job.[Mode] = N'Excel sample import';
-
-            UPDATE job
-            SET [SubmissionDate] = CONVERT(date, SWITCHOFFSET(@SampleSubmission, '+08:00')),
-                [SubmissionDateTime] = CONVERT(datetime2, SWITCHOFFSET(@SampleSubmission, '+08:00'))
-            FROM [CollectionJobs] job
-            WHERE job.[Mode] = N'Excel sample import';
-            """);
+        // timestamp for every record produced by the same imported sheet. Use
+        // provider-neutral EF updates so the import works with PostgreSQL.
+        var importedJobs = await database.CollectionJobs
+            .Where(job => job.Mode == "Excel sample import")
+            .Select(job => new { job.Id, job.StartedAt })
+            .ToListAsync();
+        if (importedJobs.Count > 0)
+        {
+            var sampleSubmission = importedJobs.Min(job => job.StartedAt)
+                .ToOffset(TimeSpan.FromHours(8)).DateTime;
+            var sampleDate = DateOnly.FromDateTime(sampleSubmission);
+            var importedJobIds = importedJobs.Select(job => job.Id).ToArray();
+            await database.SolarApiReadings
+                .Where(reading => importedJobIds.Contains(reading.CollectionJobId))
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(reading => reading.SubmissionDateTime, sampleSubmission));
+            await database.CollectionJobs
+                .Where(job => importedJobIds.Contains(job.Id))
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(job => job.SubmissionDate, sampleDate)
+                    .SetProperty(job => job.SubmissionDateTime, sampleSubmission));
+        }
 
         await EnsureCompleteTestMatrixAsync(database, plants);
     }

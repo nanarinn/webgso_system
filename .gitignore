@@ -22,3 +22,6 @@ coverage/
 .clear-collection-data-on-next-start
 .reset-workflow-data-on-next-start
 .dotnet/
+.packages/
+.build-verify/
+.bootstrap-build/

@@ -13,17 +13,12 @@ public static class DatabaseInitializer
         var serviceProvider = scope.ServiceProvider;
         var database = serviceProvider.GetRequiredService<ApplicationDbContext>();
 
-        // Schema upgrades can legitimately take longer than normal page queries when an
-        // existing installation contains a large reading history. Keep the larger timeout
-        // scoped to startup; normal application commands retain their configured timeout.
+        // PostgreSQL creates the complete EF model for a new WEBGSO database. Provider-
+        // specific legacy SQL Server upgrade batches below are intentionally not called;
+        // they remain only to document upgrades used by older installations.
         database.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
 
         await database.Database.EnsureCreatedAsync();
-        await EnsureUserAccessSchemaAsync(database);
-        await EnsurePlantTableAsync(database);
-        await EnsurePlantApiConfigurationsAsync(database);
-        await EnsureSolarApiReadingTableAsync(database);
-        await EnsureFsdCoreTablesAsync(database);
         await ValidationRuleCatalog.SynchronizeAsync(database);
         await SeedUsersAsync(serviceProvider, configuration);
         if (configuration.GetValue<bool>("Authentication:MicrosoftOnly"))

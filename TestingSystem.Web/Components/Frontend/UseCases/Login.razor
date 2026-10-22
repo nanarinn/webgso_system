@@ -1,7 +1,6 @@
 @page "/login"
 @attribute [AllowAnonymous]
 @layout TestingSystem.Web.Components.Layout.LoginLayout
-@inject IConfiguration Configuration
 
 <PageTitle>Sign in | Single Buyer LSS Repository</PageTitle>
 
@@ -35,18 +34,16 @@
 
             <div class="login-access-card">
                 <div class="identity-provider">
-                    <span class="microsoft-mark" aria-hidden="true">
-                        <i></i><i></i><i></i><i></i>
-                    </span>
+                    <span class="local-login-mark" aria-hidden="true">L</span>
                     <span>
                         <small>Secured by</small>
-                        <strong>Microsoft Entra ID</strong>
+                        <strong>WEBGSO local account</strong>
                     </span>
                 </div>
 
                 <p class="section-label">Authorised access</p>
                 <h2>Welcome back</h2>
-                <p class="login-intro">Use your assigned SAE Microsoft account to access the LSS repository.</p>
+                <p class="login-intro">Enter your username or email and password to access the LSS repository.</p>
 
                 @if (Reason == "session-timeout")
                 {
@@ -55,42 +52,49 @@
                     </div>
                 }
 
-                @if (Error is "microsoft" or "microsoft-setup" or "microsoft-consent" or "microsoft-pending" or "microsoft-rejected" or "microsoft-inactive" or "microsoft-assignment" or "microsoft-redirect" or "microsoft-secret" or "access-pending" or "access-rejected" or "access-inactive")
+                @if (Registered == "pending")
+                {
+                    <div class="login-alert login-success-alert" role="status">
+                        Account created. A Super Admin must approve it before you can sign in.
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(Error))
                 {
                     <div class="login-alert" role="alert">
                         @(Error switch
                         {
-                            "microsoft-setup" => "Microsoft sign-in requires completed configuration and HTTPS.",
-                            "microsoft-pending" or "access-pending" => "Your identity was verified. Your access request is waiting for administrator approval.",
-                            "microsoft-rejected" or "access-rejected" => "Your access request was not approved. Contact the system administrator if you need assistance.",
-                            "microsoft-inactive" or "access-inactive" => "This account is inactive. Contact the system administrator to restore access.",
-                            "microsoft-assignment" => "This company account is not assigned to the SBLSS Enterprise Application. Ask the Entra administrator to add the user.",
-                            "microsoft-redirect" => "The Microsoft redirect URI does not match the registered HTTPS /signin-oidc address.",
-                            "microsoft-secret" => "The Microsoft App Registration secret is invalid or expired. Run the local Entra setup with a new Client Secret Value.",
-                            "microsoft-consent" => "Microsoft permission consent was not completed. Ask your tenant administrator if approval is required.",
-                            _ => "Microsoft sign-in was not completed. Ask your administrator to check the app assignment and configuration."
+                            "access-pending" => "Your account is waiting for administrator approval.",
+                            "access-rejected" => "Your access request was not approved. Contact the system administrator.",
+                            "access-inactive" => "This account is inactive. Contact the system administrator to restore access.",
+                            "locked" => "This account is temporarily locked after repeated unsuccessful attempts. Try again later.",
+                            _ => "The username/email or password is incorrect."
                         })
                     </div>
                 }
 
-                <form method="post" action="/account/microsoft" class="login-form">
+                <form method="post" action="/account/login" class="login-form">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="@SafeReturnUrl" />
-                    <button type="submit" class="login-button"
-                            disabled="@(!TestingSystem.Web.Connectors.UseCases.EntraAuthentication.IsReady(Configuration))">
-                        <span class="button-microsoft-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-                        <span>Continue with Microsoft</span>
+                    <label for="login-identifier">Username or email</label>
+                    <div class="input-shell">
+                        <span aria-hidden="true">ID</span>
+                        <input id="login-identifier" name="identifier" type="text" autocomplete="username" required />
+                    </div>
+                    <label for="login-password">Password</label>
+                    <div class="input-shell">
+                        <span aria-hidden="true">PW</span>
+                        <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+                    </div>
+                    <button type="submit" class="login-button">
+                        <span>Sign in</span>
                         <span class="login-arrow" aria-hidden="true">→</span>
                     </button>
-                    @if (!TestingSystem.Web.Connectors.UseCases.EntraAuthentication.IsReady(Configuration))
-                    {
-                        <small class="login-setup-message">Microsoft sign-in needs the App Registration secret on this machine. Run <code>.\setup-entra-local.ps1</code> once.</small>
-                    }
                 </form>
 
                 <div class="first-access-note">
                     <span aria-hidden="true">i</span>
-                    <p><strong>First time signing in?</strong> Your verified account will be sent to an administrator for access approval.</p>
+                    <p><strong>Need an account?</strong> <a href="/register">Create a local account</a>. A Super Admin will review your request.</p>
                 </div>
 
                 <aside class="login-disclaimer" role="note" aria-label="TNB information protection notice">
@@ -106,7 +110,7 @@
 
                 <div class="security-note">
                     <span class="security-dot"></span>
-                    Protected by Microsoft Entra ID and role-based access.
+                    Protected by password authentication and role-based access.
                 </div>
             </div>
         </div>

@@ -217,7 +217,7 @@ public partial class ScheduledReports : ComponentBase
             Schedules.Remove(schedule);
             IsDeleteConfirmationOpen = false;
             IsScheduleDialogOpen = false;
-            SuccessMessage = $"{schedule.Name} was deleted from MS SQL.";
+            SuccessMessage = $"{schedule.Name} was deleted from PostgreSQL.";
         }
         catch (Exception exception)
         {

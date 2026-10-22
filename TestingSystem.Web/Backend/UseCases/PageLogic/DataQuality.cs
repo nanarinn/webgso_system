@@ -1,7 +1,7 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using TestingSystem.Web.Backend.UseCases.UCLSS027Audit;
 using TestingSystem.Web.Data;
@@ -206,7 +206,7 @@ public partial class DataQuality : ComponentBase
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
-        exception.InnerException is SqlException { Number: 2601 or 2627 };
+        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     private static string BuildCondition(ValidationRule rule)
     {

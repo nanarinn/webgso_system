@@ -308,7 +308,7 @@ public partial class OnDemandReport : ComponentBase
                 DataSelection = result.DataSelection, Description = result.Description, PlantCount = result.PlantCount,
                 IntervalMinutes = result.IntervalMinutes, DataRangeStart = result.DataRangeStart, DataRangeEnd = result.DataRangeEnd,
                 RecordCount = result.RecordCount, AnomalyCount = result.AnomalyCount,
-                ErrorMessage = status == "Failed" ? "No matching MS SQL readings were found." : null
+                ErrorMessage = status == "Failed" ? "No matching PostgreSQL readings were found." : null
             });
             await database.SaveChangesAsync();
             Results.Insert(0, result);

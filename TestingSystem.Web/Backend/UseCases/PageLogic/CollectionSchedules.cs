@@ -292,7 +292,7 @@ public partial class CollectionSchedules : ComponentBase
                     + (duplicatePlantIds.Count > 0 ? $" Skipped {duplicatePlantIds.Count} duplicate(s)." : string.Empty),
                     $"schedule:{NewApiType}:{NewDataType}:{NewRunTime}");
                 SuccessTitle = plantIdsToCreate.Length == 1 ? "Schedule added" : "Schedules added";
-                SuccessMessage = $"{plantIdsToCreate.Length} schedule(s) saved to MS SQL."
+                SuccessMessage = $"{plantIdsToCreate.Length} schedule(s) saved to PostgreSQL."
                     + (duplicatePlantIds.Count > 0 ? $" {duplicatePlantIds.Count} duplicate schedule(s) were skipped." : string.Empty);
             }
             IsDialogOpen = false; await LoadAsync(); SelectedApiType = NewApiType;
@@ -322,7 +322,7 @@ public partial class CollectionSchedules : ComponentBase
                 "CollectionSchedule", references, $"Deleted {items.Count} schedule(s).", "schedule:delete");
             IsDialogOpen = false; await LoadAsync();
             SuccessTitle = items.Count == 1 ? "Schedule deleted" : "Schedules deleted";
-            SuccessMessage = $"{items.Count} collection schedule(s) have been removed from MS SQL.";
+            SuccessMessage = $"{items.Count} collection schedule(s) have been removed from PostgreSQL.";
         }
         catch (Exception exception)
         {

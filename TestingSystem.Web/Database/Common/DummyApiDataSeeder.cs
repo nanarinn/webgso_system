@@ -222,7 +222,7 @@ public static class DummyApiDataSeeder
                 DeliveryCode = $"RDL-{schedule.ApiType}-{today:yyyyMMdd}", ReportScheduleId = schedule.Id,
                 ScheduleName = schedule.Name, ApiType = schedule.ApiType, GeneratedAt = today.AddHours(7),
                 ReportStatus = "Generated", EmailStatus = "Sent", OverallStatus = "Delivered",
-                Message = "Dummy workflow completed from MSSQL source data and delivered to all configured recipients."
+                Message = "Dummy workflow completed from PostgreSQL source data and delivered to all configured recipients."
             };
             foreach (var recipient in schedule.Recipients) delivery.Recipients.Add(new ReportDeliveryRecipient { Email = recipient.Email });
             database.ReportDeliveryAttempts.Add(delivery);
@@ -231,7 +231,7 @@ public static class DummyApiDataSeeder
                 ReportId = $"RPT-{schedule.ApiType}-{today:yyyyMMdd}", ReportType = "Scheduled", DataType = schedule.ApiType,
                 RequestedBy = "System Scheduler", RequestedAt = today.AddHours(7), GenerationStatus = "Completed", DeliveryStatus = "Sent",
                 Name = schedule.Name, SubmissionDate = today.AddDays(-1), DataSelection = schedule.DataType,
-                Description = $"{schedule.ApiType} report generated from all active LSS plant data in MSSQL.",
+                Description = $"{schedule.ApiType} report generated from all active LSS plant data in PostgreSQL.",
                 PlantCount = plants.Count, RecordCount = schedule.ApiType == "MMF" ? plants.Count * 96 * MmfParameters.Length : plants.Count * 96
             });
         }
@@ -244,7 +244,7 @@ public static class DummyApiDataSeeder
         database.AuditEvents.AddRange(
             new AuditEvent { OccurredAt = DateTimeOffset.Now.AddHours(-3), Actor = "System Scheduler", Action = "Collect DDQ and MMF data", EntityType = "CollectionJob", EntityReference = today.ToString("yyyy-MM-dd"), Result = "Success", Detail = "Completed the simulated API collection and normalization flow for all active LSS plants." },
             new AuditEvent { OccurredAt = DateTimeOffset.Now.AddHours(-2), Actor = "Data Quality Engine", Action = "Validate collected data", EntityType = "DataAnomaly", EntityReference = "DDQ/MMF", Result = "Warning", Detail = "Applied the fixed DDQ and MMF validation rules and recorded two review examples." },
-            new AuditEvent { OccurredAt = DateTimeOffset.Now.AddHours(-1), Actor = "Report Scheduler", Action = "Generate and deliver reports", EntityType = "ReportExecution", EntityReference = today.ToString("yyyy-MM-dd"), Result = "Success", Detail = "Generated DDQ and MMF reports from MSSQL data and recorded recipient delivery results." });
+            new AuditEvent { OccurredAt = DateTimeOffset.Now.AddHours(-1), Actor = "Report Scheduler", Action = "Generate and deliver reports", EntityType = "ReportExecution", EntityReference = today.ToString("yyyy-MM-dd"), Result = "Success", Detail = "Generated DDQ and MMF reports from PostgreSQL data and recorded recipient delivery results." });
         await database.SaveChangesAsync();
     }
 

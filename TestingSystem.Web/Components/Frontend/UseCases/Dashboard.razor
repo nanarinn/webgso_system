@@ -86,7 +86,7 @@ else if (!string.IsNullOrWhiteSpace(DashboardLoadError))
         <p>Blazor reads this dashboard through the secured server application service.</p>
         <div class="connection-line @(RepositoryStatus is null ? "connection-unknown" : RepositoryStatus.Connected ? "connection-online" : "connection-offline")">
             <span></span>
-            @(RepositoryStatus is null ? "Database status not confirmed" : RepositoryStatus.Connected ? "Configured SQL Server online" : "Configured SQL Server unavailable")
+            @(RepositoryStatus is null ? "Database status not confirmed" : RepositoryStatus.Connected ? "Configured PostgreSQL online" : "Configured PostgreSQL unavailable")
         </div>
         <button class="health-proof-button" type="button" @onclick="OpenHealthStatus">View health status <span>→</span></button>
     </aside>

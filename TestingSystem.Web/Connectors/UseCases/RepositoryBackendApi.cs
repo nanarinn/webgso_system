@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using System.Net;
 using TestingSystem.Web.Data;
 using TestingSystem.Web.Services;
@@ -183,24 +183,18 @@ public sealed class SqlRepositoryBackendApi(IDbContextFactory<ApplicationDbConte
 
     private static string GetDatabaseLabel(DbContext database)
     {
-        if (database.Database.ProviderName?.Contains("SqlServer", StringComparison.OrdinalIgnoreCase) != true)
+        if (database.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) != true)
             return database.Database.ProviderName?.Split('.').LastOrDefault() ?? "Configured database";
 
-        var connection = new SqlConnectionStringBuilder(database.Database.GetDbConnection().ConnectionString);
-        var server = connection.DataSource.Trim();
-        var host = server
-            .Replace("tcp:", "", StringComparison.OrdinalIgnoreCase)
-            .Replace("np:", "", StringComparison.OrdinalIgnoreCase)
-            .Replace("lpc:", "", StringComparison.OrdinalIgnoreCase)
-            .Split(',', '\\')[0]
-            .Trim('[', ']', ' ');
+        var connection = new NpgsqlConnectionStringBuilder(database.Database.GetDbConnection().ConnectionString);
+        var host = (connection.Host ?? string.Empty).Trim();
 
         var isLocal = host is "." or "(local)" or "localhost"
             || host.StartsWith("(localdb)", StringComparison.OrdinalIgnoreCase)
             || string.Equals(host, Environment.MachineName, StringComparison.OrdinalIgnoreCase)
             || IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
 
-        return isLocal ? "Microsoft SQL Server · Local" : "Microsoft SQL Server · Network";
+        return isLocal ? "PostgreSQL · Local" : "PostgreSQL · Network";
     }
 
     private static DashboardMetricItem CreateRequestItem(

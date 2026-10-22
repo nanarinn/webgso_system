@@ -323,7 +323,7 @@ public partial class CollectionManagement : ComponentBase, IAsyncDisposable
                 job.SubmissionDateTime,
                 job.CompletedAt.HasValue ? job.CompletedAt.Value.LocalDateTime : job.StartedAt.LocalDateTime,
                 job.Status == "Completed" ? "Successful" : job.Status,
-                job.Status == "Completed" ? "API data collected and stored in MS SQL." : (job.ErrorMessage ?? "Collection is still being processed."),
+                job.Status == "Completed" ? "API data collected and stored in PostgreSQL." : (job.ErrorMessage ?? "Collection is still being processed."),
                 job.ResponseMessage,
                 job.DurationSeconds,
                 job.Mode.Contains("MMF") || job.DataType == "MMF" ? "MMF" : "DDQ",

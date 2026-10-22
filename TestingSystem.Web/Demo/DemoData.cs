@@ -1,6 +1,6 @@
 namespace TestingSystem.Web.Demo;
 
-// View records used by Blazor pages. Persistent data is loaded from relational MSSQL tables.
+// View records used by Blazor pages. Persistent data is loaded from PostgreSQL tables.
 public static class DemoData
 {
     public static DemoAnalysisResult CreateAnalysis(string type, DateTime submissionDate, DateTime generatedAt, string status, int sequence,

@@ -5,8 +5,7 @@ public sealed class DatabaseSettings
     public const string SectionName = "Database";
 
     public string Server { get; set; } = "localhost";
-    public int Port { get; set; } = 1433;
-    public string Name { get; set; } = "TestingSystemDb";
-    public string User { get; set; } = "sa";
-    public bool TrustServerCertificate { get; set; } = true;
+    public int Port { get; set; } = 5432;
+    public string Name { get; set; } = "webgso_system";
+    public string User { get; set; } = "webgso_app";
 }

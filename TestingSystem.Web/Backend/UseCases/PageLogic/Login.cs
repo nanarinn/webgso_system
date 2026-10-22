@@ -14,6 +14,9 @@ public partial class Login : ComponentBase
     [SupplyParameterFromQuery(Name = "reason")]
     public string? Reason { get; set; }
 
+    [SupplyParameterFromQuery(Name = "registered")]
+    public string? Registered { get; set; }
+
     private string SafeReturnUrl => !string.IsNullOrWhiteSpace(ReturnUrl)
         && ReturnUrl.StartsWith('/')
         && !ReturnUrl.StartsWith("//")
