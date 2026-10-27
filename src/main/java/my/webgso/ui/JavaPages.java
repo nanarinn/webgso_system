@@ -58,7 +58,8 @@ public final class JavaPages {
                 "/styles/app.css",
                 "/styles/interface.css",
                 "/styles/java.css",
-                "/styles/workspace-theme.css?v=4");
+                "/styles/workspace-theme.css?v=4",
+                "/styles/workspace-panels.css?v=1");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (refresh) head.add(el("meta").attr("http-equiv", "refresh").attr("content", "5"));
     return "<!doctype html>"

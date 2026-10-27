@@ -113,7 +113,10 @@ public record PageContext(Map<String, Object> model, HttpServletRequest request)
     headings.forEach(title -> header.add(el("th", title).attr("scope", "col")));
     if (rows.isEmpty() && empty != null)
       rows = List.of(el("tr", el("td", empty).attr("colspan", headings.size()).cls("java-empty")));
-    return el("div", el("table", el("thead", header), el("tbody", rows))).cls("java-table-wrap");
+    return el("div", el("table", el("thead", header), el("tbody", rows)))
+        .cls("java-table-wrap")
+        .attr("data-columns", headings.size())
+        .attr("data-id-column", !headings.isEmpty() && headings.getFirst().equals("ID"));
   }
 
   public static Element heading(String label, String title, String subtitle, Object... actions) {
