@@ -33,6 +33,7 @@ class ApplicationIntegrationTests {
   @Autowired CollectionService collection;
   @Autowired ReportService reports;
   @MockitoBean PlantApiClient client;
+  @MockitoBean ManualBatchService batches;
   ApplicationUser admin, staff;
   Authentication adminAuth, staffAuth;
 
@@ -64,7 +65,8 @@ class ApplicationIntegrationTests {
     mvc.perform(get("/health")).andExpect(status().isOk());
     mvc.perform(get("/login"))
         .andExpect(status().isOk())
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Sign in to your workspace")));
+        .andExpect(
+            content().string(org.hamcrest.Matchers.containsString("Sign in to your workspace")));
     mvc.perform(get("/register")).andExpect(status().isOk());
     for (String path :
         List.of(
@@ -109,14 +111,113 @@ class ApplicationIntegrationTests {
         .andExpect(model().attribute("apiCount", (int) db.count(LssPlant.class)))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("22 Oct 2026, 07:15 MYT")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Review signups")));
-    var filtered = mvc.perform(get("/").param("apiStatus", "failed").with(authentication(adminAuth)))
-        .andExpect(status().isOk()).andReturn();
+    var filtered =
+        mvc.perform(get("/").param("apiStatus", "failed").with(authentication(adminAuth)))
+            .andExpect(status().isOk())
+            .andReturn();
     @SuppressWarnings("unchecked")
-    var activity = (List<Map<String, Object>>) filtered.getModelAndView().getModel().get("apiActivity");
-    assertThat(activity).isNotEmpty().allSatisfy(row -> assertThat(row.get("tone")).isEqualTo("failed"));
+    var activity =
+        (List<Map<String, Object>>) filtered.getModelAndView().getModel().get("apiActivity");
+    assertThat(activity)
+        .isNotEmpty()
+        .allSatisfy(row -> assertThat(row.get("tone")).isEqualTo("failed"));
     mvc.perform(get("/").with(authentication(staffAuth)))
-        .andExpect(status().isOk()).andExpect(view().name("dashboard"))
-        .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Review signups"))));
+        .andExpect(status().isOk())
+        .andExpect(view().name("dashboard"))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Review signups"))));
+  }
+
+  @Test
+  void javaBatchStatusRefreshesOnlyItsFrameAndRetainsOwnerCheck() throws Exception {
+    var batch = new ManualBatchService.Batch("user:" + admin.id);
+    batch.items.put(1, new ManualBatchService.Item(1, "Queued plant", "Queued", "Waiting", null));
+    when(batches.get(batch.id, "user:" + admin.id)).thenReturn(batch);
+    when(batches.get(batch.id, "user:" + staff.id))
+        .thenThrow(
+            new org.springframework.security.access.AccessDeniedException(
+                "This batch belongs to another user"));
+    mvc.perform(get("/collections/batches/" + batch.id + "/status").with(authentication(adminAuth)))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(org.hamcrest.Matchers.containsString("http-equiv=\"refresh\"")));
+    mvc.perform(
+            get("/collection-management").param("batch", batch.id).with(authentication(adminAuth)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("<iframe")))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("http-equiv=\"refresh\""))));
+    mvc.perform(get("/collections/batches/" + batch.id + "/status").with(authentication(staffAuth)))
+        .andExpect(status().isForbidden());
+    batch.items.put(1, new ManualBatchService.Item(1, "Queued plant", "Completed", "Saved", 1L));
+    mvc.perform(get("/collections/batches/" + batch.id + "/status").with(authentication(adminAuth)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Batch completed")))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("http-equiv=\"refresh\""))));
+  }
+
+  @Test
+  void javaRenderedLoginFormIncludesAUsableCsrfToken() throws Exception {
+    var login = mvc.perform(get("/login")).andExpect(status().isOk()).andReturn();
+    String html = login.getResponse().getContentAsString();
+    assertThat(html).doesNotContain("th:", "<script", "java-ui.js");
+    var token =
+        java.util.regex.Pattern.compile("name=\"_csrf\"[^>]*value=\"([^\"]+)\"").matcher(html);
+    assertThat(token.find()).isTrue();
+    var session =
+        (org.springframework.mock.web.MockHttpSession) login.getRequest().getSession(false);
+    assertThat(session).isNotNull();
+    mvc.perform(
+            post("/account/login")
+                .session(session)
+                .param("identifier", admin.userName)
+                .param("password", "StrongPassword123!")
+                .param("_csrf", token.group(1)))
+        .andExpect(redirectedUrl("/"));
+    mvc.perform(
+            post("/account/login")
+                .param("identifier", admin.userName)
+                .param("password", "StrongPassword123!"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void javaPlantTestFormWorksWithoutBrowserScriptAndRejectsStaff() throws Exception {
+    var plant = new LssPlant();
+    plant.plantId = "JAVA-UI-TEST";
+    plant.name = "Java UI API test";
+    plant.ddqApiEndpoint = "https://example.test/java-ui";
+    db.insert(plant);
+    when(client.fetch(plant.ddqApiEndpoint))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200, "application/json", "{\"timestamp\":\"2026-10-20T00:00:00\",\"power\":10}"));
+    mvc.perform(
+            post("/admin/plants/test")
+                .with(authentication(staffAuth))
+                .with(csrf())
+                .param("testPlantId", plant.id.toString())
+                .param("dataType", "Rolling 24 Hour"))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            post("/admin/plants/test")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("testPlantId", plant.id.toString())
+                .param("dataType", "Rolling 24 Hour"))
+        .andExpect(redirectedUrl("/admin/lss-plants"));
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().apiConnectionStatus)
+        .isEqualTo("Connected");
   }
 
   @Test

@@ -1,6 +1,8 @@
 # Single Buyer Large Scale Solar Repository — Java
 
-The application runs on **Java 21, Spring Boot, Spring Security, JDBC and Thymeleaf**. Java renders the HTML/CSS views; JavaScript provides optional navigation and batch progress updates. No C#, Blazor, ASP.NET runtime or .NET build is required.
+The application runs on **Java 21, Spring Boot, Spring Security and JDBC**. Every page is authored with Java components under `src/main/java/my/webgso/ui`, without HTML templates, Thymeleaf or custom JavaScript. Java renders the browser's HTML, inserts CSRF tokens into POST forms and marks the current navigation item. Running batches refresh an embedded status page every five seconds until completion, leaving the collection forms untouched. No C#, Blazor, ASP.NET runtime or .NET build is required.
+
+CSS remains the browser styling format, SQL defines the database, and Maven/XML, properties and launcher scripts configure or run Java. These files are intentionally kept in their native formats; they are not Java source files. Changing their extension to `.java` would not convert them.
 
 ## Start locally
 
@@ -71,8 +73,8 @@ Generated snapshots stay in the ignored private `.reports` directory. Preserve i
 ```text
 pom.xml                            Dependencies and build
 src/main/java/my/webgso/            Java application and workflows
-src/main/resources/templates/       Server-rendered HTML views
-src/main/resources/static/          Brand assets, styles and browser enhancements
+src/main/java/my/webgso/ui/          Java page components and escaping HTML renderer
+src/main/resources/static/          Brand assets and CSS styles (no custom browser scripts)
 src/main/resources/schema-java.sql  Optional fresh-database schema
 src/test/java/my/webgso/            Policy/security/workflow integration tests
 ```

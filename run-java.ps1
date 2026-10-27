@@ -30,7 +30,8 @@ if (-not $Demo -and -not $env:WEBGSO_DB_PASSWORD) {
         }
     }
 }
-if (-not $env:JAVA_HOME) {
+if (-not $env:JAVA_HOME -or -not (Test-Path -LiteralPath (Join-Path $env:JAVA_HOME 'bin\java.exe'))) {
+    $env:JAVA_HOME = $null
     $portableRoot = Join-Path $projectRoot '.java-runtime\jdk'
     if (-not (Test-Path -LiteralPath $portableRoot)) { $portableRoot = Join-Path (Split-Path $projectRoot -Parent) '.tools\jdk' }
     if (Test-Path -LiteralPath $portableRoot) { $env:JAVA_HOME = (Get-ChildItem -LiteralPath $portableRoot -Directory | Select-Object -First 1).FullName }

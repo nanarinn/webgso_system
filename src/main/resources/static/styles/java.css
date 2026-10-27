@@ -1,6 +1,14 @@
 .java-panel {
   margin-top: 24px;
 }
+.java-batch-frame {
+  width: 100%;
+  min-height: 300px;
+  border: 0;
+}
+.java-batch-status {
+  padding: 16px;
+}
 .java-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

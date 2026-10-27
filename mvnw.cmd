@@ -58,6 +58,7 @@ set ERROR_CODE=0
 
 @REM ==== START VALIDATION ====
 @REM Use the migration's portable JDK when JAVA_HOME is not already configured.
+if defined JAVA_HOME if not exist "%JAVA_HOME%\bin\java.exe" set "JAVA_HOME="
 if not defined JAVA_HOME for /d %%J in ("%~dp0.java-runtime\jdk\*") do if exist "%%~fJ\bin\javac.exe" set "JAVA_HOME=%%~fJ"
 if not defined JAVA_HOME for /d %%J in ("%~dp0..\.tools\jdk\*") do if exist "%%~fJ\bin\javac.exe" set "JAVA_HOME=%%~fJ"
 if not "%JAVA_HOME%" == "" goto OkJHome

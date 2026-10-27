@@ -4,7 +4,7 @@
 flowchart LR
     Browser -->|HTTPS| Proxy[Reverse proxy]
     Proxy --> Java[Spring Boot Java service]
-    Java --> Views[Thymeleaf views]
+    Java --> Views[Java component views]
     Java --> Security[Spring Security and account approval]
     Java --> Workflows[Collection, analytics, validation and reports]
     Workflows --> JDBC[Prepared JDBC statements]
