@@ -60,7 +60,7 @@ public class TestDataController {
     }
     return Map.of(
         "source",
-        "SBLSS sample MMF test API",
+        "GSO sample MMF test API",
         "plantCode",
         plantCode.toUpperCase(Locale.ROOT),
         "submissionDateTime",

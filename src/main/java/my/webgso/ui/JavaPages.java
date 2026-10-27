@@ -48,17 +48,17 @@ public final class JavaPages {
             el("meta")
                 .attr("name", "viewport")
                 .attr("content", "width=device-width,initial-scale=1"),
-            el("title", title + " | Single Buyer LSS Repository"),
-            el("link").attr("rel", "icon").attr("href", "/favicon.svg"));
+            el("title", title + " | " + Branding.REPOSITORY),
+            el("link").attr("rel", "icon").attr("type", "image/png").attr("href", Branding.LOGO));
     List<String> styles =
         login
-            ? List.of("/styles/login.css")
+            ? List.of("/styles/login.css?v=2")
             : List.of(
                 "/bootstrap/bootstrap.min.css",
                 "/styles/app.css",
                 "/styles/interface.css",
                 "/styles/java.css",
-                "/styles/workspace-theme.css?v=3");
+                "/styles/workspace-theme.css?v=4");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (refresh) head.add(el("meta").attr("http-equiv", "refresh").attr("content", "5"));
     return "<!doctype html>"
@@ -101,7 +101,7 @@ public final class JavaPages {
                 el("span").cls("status-light"),
                 el(
                     "span",
-                    el("strong", "Single Buyer"),
+                    el("strong", Branding.NAME),
                     el("small", "Large Scale Solar Repository")))
             .cls("sidebar-status"),
         el(
@@ -122,8 +122,8 @@ public final class JavaPages {
                         "div",
                         el("img")
                             .cls("brand-logo")
-                            .attr("src", "/single-buyer-logo.png")
-                            .attr("alt", "Single Buyer"),
+                            .attr("src", Branding.LOGO)
+                            .attr("alt", Branding.LOGO_DESCRIPTION),
                         el("span", el("small", "LSS Repository")))
                     .cls("brand-lockup sidebar-brand"),
                 input("navigation", "checkbox", "on")

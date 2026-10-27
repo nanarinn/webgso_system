@@ -8,7 +8,7 @@
 - Enforce administration roles, CSRF, report ownership and current account approval/security stamps on the server.
 - Preserve plant API HTTPS, DNS, private-host, redirect and response-size restrictions.
 - Test changes to business rules, permissions, parsing, scheduling and reports.
-- Preserve Single Buyer branding and responsive layouts. Keep product flows focused on repository operations.
+- Preserve GSO branding and responsive layouts. Keep product flows focused on repository operations.
 - Java source: `src/main/java/my/webgso`; Java views: `src/main/java/my/webgso/ui`; tests: `src/test/java/my/webgso`.
 - Build page content with the escaping Java component tree. Do not add raw HTML templates, client scripts or unescaped user-provided markup. Every POST form must use PageContext.post to retain CSRF tokens.
 - Keep CSS and database SQL in their native formats. These are presentation assets and database definitions, not a second application programming language.

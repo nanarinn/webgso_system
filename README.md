@@ -1,4 +1,4 @@
-# Single Buyer Large Scale Solar Repository — Java
+# GSO Large Scale Solar Repository — Java
 
 The application runs on **Java 21, Spring Boot, Spring Security and JDBC**. Every page is authored with Java components under `src/main/java/my/webgso/ui`, without HTML templates, Thymeleaf or custom JavaScript. Java renders the browser's HTML, inserts CSRF tokens into POST forms and marks the current navigation item. Running batches refresh an embedded status page every five seconds until completion, leaving the collection forms untouched. No C#, Blazor, ASP.NET runtime or .NET build is required.
 

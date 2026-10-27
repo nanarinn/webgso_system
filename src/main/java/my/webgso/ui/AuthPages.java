@@ -21,37 +21,17 @@ final class AuthPages {
   }
 
   static String login(PageContext c) {
-    var icon =
-        el(
-                "svg",
-                el("circle")
-                    .attr("cx", 36)
-                    .attr("cy", 10)
-                    .attr("r", 4)
-                    .attr("fill", "currentColor")
-                    .attr("opacity", ".65"),
-                el("path")
-                    .attr(
-                        "d",
-                        "M12 15h23l4 18H8l4-18Zm3 0-2 18m11-18v18m8-18 3 18M11 21h25M9 27h29M23"
-                            + " 33v7m-8 0h17")
-                    .attr("stroke", "currentColor")
-                    .attr("stroke-width", 2)
-                    .attr("stroke-linecap", "round")
-                    .attr("stroke-linejoin", "round"))
-            .attr("viewBox", "0 0 48 48")
-            .attr("fill", "none");
     var brand =
         el(
                 "a",
-                el("span", icon).cls("auth-brand-icon").attr("aria-hidden", "true"),
-                el(
-                    "span",
-                    el("strong", "GRID SYSTEM OPERATOR"),
-                    el("small", "SOLAR DATA MANAGEMENT")))
+                el("img")
+                    .attr("src", Branding.LOGO)
+                    .attr("alt", Branding.LOGO_DESCRIPTION)
+                    .cls("auth-brand-logo"),
+                el("small", "SOLAR DATA MANAGEMENT"))
             .cls("auth-brand")
             .attr("href", "/login")
-            .attr("aria-label", "Grid System Operator home");
+            .attr("aria-label", "GSO home");
     var story =
         el(
                 "section",
@@ -207,8 +187,8 @@ final class AuthPages {
                 "main",
                 el("img")
                     .cls("brand-logo")
-                    .attr("src", "/single-buyer-logo.png")
-                    .attr("alt", "Single Buyer"),
+                    .attr("src", Branding.LOGO)
+                    .attr("alt", Branding.LOGO_DESCRIPTION),
                 el("p", "Authorised access").cls("section-label"),
                 el("h1", "Create a local account"),
                 el("p", "Your account will remain pending until an administrator approves access."),
@@ -224,7 +204,7 @@ final class AuthPages {
         "",
         el(
                 "main",
-                el("p", "Single Buyer LSS Repository").cls("section-label"),
+                el("p", Branding.REPOSITORY).cls("section-label"),
                 el("h1", "Request could not be completed"),
                 el("p", c.text("message")).attr("role", "alert"),
                 action("Return to repository", "/", true),
