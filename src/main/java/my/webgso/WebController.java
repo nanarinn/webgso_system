@@ -608,8 +608,20 @@ public class WebController {
       @RequestParam String dataType,
       Authentication auth,
       RedirectAttributes flash) {
-    collection.test(id, dataType, principal(auth).username());
-    flash.addFlashAttribute("message", "The API returned readable measurements.");
+    String actor = principal(auth).username();
+    try {
+      collection.test(id, dataType, actor);
+      flash.addFlashAttribute("apiTestTitle", "Connection successful");
+      flash.addFlashAttribute("apiTestMessage", "The API returned readable measurements.");
+    } catch (NoSuchElementException e) {
+      flash.addFlashAttribute("apiTestTitle", "Plant not found");
+      flash.addFlashAttribute(
+          "apiTestMessage",
+          "No plant matches this ID. Check the Plant ID in the table and try again.");
+    } catch (IllegalArgumentException e) {
+      flash.addFlashAttribute("apiTestTitle", "Connection test failed");
+      flash.addFlashAttribute("apiTestMessage", e.getMessage());
+    }
     return "redirect:/admin/lss-plants";
   }
 

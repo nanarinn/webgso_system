@@ -191,6 +191,52 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void missingPlantTestReturnsPopupOnPlantList() throws Exception {
+    var result =
+        mvc.perform(
+                post("/admin/plants/test")
+                    .with(authentication(adminAuth))
+                    .with(csrf())
+                    .param("testPlantId", "2147483647")
+                    .param("dataType", "Rolling 24 Hour"))
+            .andExpect(redirectedUrl("/admin/lss-plants"))
+            .andExpect(flash().attribute("apiTestTitle", "Plant not found"))
+            .andReturn();
+    mvc.perform(
+            get("/admin/lss-plants")
+                .with(authentication(adminAuth))
+                .flashAttrs(result.getFlashMap()))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.containsString("class=\"api-test-popup\" open=\"open\"")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("method=\"dialog\"")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Check the Plant ID")));
+  }
+
+  @Test
+  void failedPlantTestReturnsPopupAndKeepsFailureStatus() throws Exception {
+    var plant = new LssPlant();
+    plant.plantId = "POPUP-FAIL";
+    plant.name = "Popup test";
+    plant.ddqApiEndpoint = "https://example.test/popup";
+    db.insert(plant);
+    when(client.fetch(plant.ddqApiEndpoint))
+        .thenThrow(new IllegalArgumentException("API host could not be resolved."));
+    mvc.perform(
+            post("/admin/plants/" + plant.id + "/test")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("dataType", "Rolling 24 Hour"))
+        .andExpect(redirectedUrl("/admin/lss-plants"))
+        .andExpect(flash().attribute("apiTestTitle", "Connection test failed"))
+        .andExpect(flash().attribute("apiTestMessage", "API host could not be resolved."));
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().apiConnectionStatus)
+        .isEqualTo("Failed");
+  }
+
+  @Test
   void javaPlantTestFormWorksWithoutBrowserScript() throws Exception {
     var plant = new LssPlant();
     plant.plantId = "JAVA-UI-TEST";
