@@ -48,22 +48,7 @@ final class AdminPages {
                 editable && !resource.path().equals("/admin/anomalies")
                     ? action("Add record", resource.path() + "/edit", true)
                     : null),
-            tabs,
-            el(
-                    "article",
-                    el(
-                            "form",
-                            el("label", "Search records").attr("for", "search"),
-                            input("q", "text", c.text("q"))
-                                .attr("id", "search")
-                                .attr("maxlength", 100),
-                            button("Search", false),
-                            link("Clear", resource.path()))
-                        .cls("java-search")
-                        .attr("method", "get"),
-                    table(headers, rows, "No records found."),
-                    OperationsPages.pagination(c, "Record pages", "q"))
-                .cls("panel"));
+            tabs);
     if (resource.path().equals("/admin/lss-plants"))
       page.add(
           el(
@@ -90,6 +75,20 @@ final class AdminPages {
                               "Rolling 24 Hour")),
                       button("Test connection", false)))
               .cls("panel java-panel"));
+    page.add(
+        el(
+                "article",
+                el(
+                        "form",
+                        el("label", "Search records").attr("for", "search"),
+                        input("q", "text", c.text("q")).attr("id", "search").attr("maxlength", 100),
+                        button("Search", false),
+                        link("Clear", resource.path()))
+                    .cls("java-search")
+                    .attr("method", "get"),
+                table(headers, rows, "No records found."),
+                OperationsPages.pagination(c, "Record pages", "q"))
+            .cls("panel"));
     return page;
   }
 
