@@ -74,26 +74,20 @@ public final class JavaPages {
 
   private static Element shell(PageContext c, Element content) {
     Accounts.Principal account = c.value("account");
-    var nav =
+    var workspaceNav =
         el(
-                "div",
-                el("p", "Workspace").cls("nav-section-title"),
-                el(
-                    "nav",
-                    navigation(c, "◫ Overview", "/"),
-                    navigation(c, "↗ DDQ Analytics", "/ddq-analytics"),
-                    navigation(c, "☀ MMF Analytics", "/mmf-analytics"),
-                    navigation(c, "▤ On-Demand Analysis", "/on-demand-analysis"),
-                    navigation(c, "⇣ Collection Management", "/collection-management")))
-            .cls("nav-body");
+            "nav",
+            navigation(c, "◫ Overview", "/"),
+            navigation(c, "↗ DDQ Analytics", "/ddq-analytics"),
+            navigation(c, "☀ MMF Analytics", "/mmf-analytics"),
+            navigation(c, "▤ On-Demand Analysis", "/on-demand-analysis"),
+            navigation(c, "⇣ Collection Management", "/collection-management"));
+    var nav =
+        el("div", el("p", "Workspace").cls("nav-section-title"), workspaceNav).cls("nav-body");
     if (c.yes("isAdmin")) {
-      var adminNav = el("nav");
       for (Resources.Definition item : c.<Resources.Definition>list("navigation"))
-        adminNav.add(navigation(c, item.title(), item.path()));
-      adminNav.add(navigation(c, "Admin Accounts", "/admin/users"));
-      nav.add(
-          el("div", el("p", "Administration").cls("nav-section-title"), adminNav)
-              .cls("admin-navigation"));
+        workspaceNav.add(navigation(c, item.title(), item.path()));
+      workspaceNav.add(navigation(c, "Admin Accounts", "/admin/users"));
     }
     nav.add(
         el("div").cls("nav-spacer"),
