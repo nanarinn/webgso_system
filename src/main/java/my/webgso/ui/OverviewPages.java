@@ -7,7 +7,7 @@ import java.util.*;
 import my.webgso.Models.*;
 import my.webgso.ui.Html.Element;
 
-/** Staff dashboard and Super Administrator console, composed in Java. */
+/** Repository dashboard and Admin console, composed in Java. */
 final class OverviewPages {
   private OverviewPages() {}
 
@@ -67,7 +67,7 @@ final class OverviewPages {
                         el("h1", "Administration"),
                         el(
                             "p",
-                            "Manage visibility across staff accounts and registered API"
+                            "Manage visibility across Admin accounts and registered API"
                                 + " services.")),
                     el(
                             "div",

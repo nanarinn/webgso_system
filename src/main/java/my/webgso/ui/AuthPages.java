@@ -190,8 +190,10 @@ final class AuthPages {
                     .attr("src", Branding.LOGO)
                     .attr("alt", Branding.LOGO_DESCRIPTION),
                 el("p", "Authorised access").cls("section-label"),
-                el("h1", "Create a local account"),
-                el("p", "Your account will remain pending until an administrator approves access."),
+                el("h1", "Create an Admin account"),
+                el(
+                    "p",
+                    "Your Admin account will remain pending until another Admin approves access."),
                 form)
             .cls("registration-shell"),
         false,

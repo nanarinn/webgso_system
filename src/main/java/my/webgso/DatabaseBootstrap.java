@@ -56,10 +56,10 @@ public class DatabaseBootstrap implements ApplicationRunner {
               "WHERE \"NormalizedUserName\"=?",
               username.toUpperCase(Locale.ROOT))
           .isEmpty()) {
-        var admin = accounts.register(username, email, "Repository Administrator", password);
+        var admin = accounts.register(username, email, "GSO Admin", password);
         admin.accessStatus = "Approved";
         db.update(admin);
-        accounts.setRole(admin.id, "SuperAdministrator");
+        accounts.setRole(admin.id, Accounts.ADMIN);
       }
     }
     if (!demo || db.count(LssPlant.class) > 0) return;

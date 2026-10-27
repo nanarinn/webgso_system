@@ -89,7 +89,7 @@ public final class JavaPages {
       var adminNav = el("nav");
       for (Resources.Definition item : c.<Resources.Definition>list("navigation"))
         adminNav.add(navigation(c, item.title(), item.path()));
-      adminNav.add(navigation(c, "User Management", "/admin/users"));
+      adminNav.add(navigation(c, "Admin Accounts", "/admin/users"));
       nav.add(
           el("div", el("p", "Administration").cls("nav-section-title"), adminNav)
               .cls("admin-navigation"));

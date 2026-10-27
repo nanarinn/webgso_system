@@ -34,8 +34,8 @@ class ApplicationIntegrationTests {
   @Autowired ReportService reports;
   @MockitoBean PlantApiClient client;
   @MockitoBean ManualBatchService batches;
-  ApplicationUser admin, staff;
-  Authentication adminAuth, staffAuth;
+  ApplicationUser admin, otherAdmin;
+  Authentication adminAuth, otherAdminAuth;
 
   @BeforeAll
   void users() {
@@ -43,14 +43,15 @@ class ApplicationIntegrationTests {
         accounts.register("test.admin", "admin@example.test", "Test Admin", "StrongPassword123!");
     admin.accessStatus = "Approved";
     db.update(admin);
-    accounts.setRole(admin.id, "SuperAdministrator");
+    accounts.setRole(admin.id, "Admin");
     adminAuth = accounts.token(admin);
-    staff =
-        accounts.register("test.staff", "staff@example.test", "Test Staff", "StrongPassword123!");
-    staff.accessStatus = "Approved";
-    db.update(staff);
-    accounts.setRole(staff.id, "Staff");
-    staffAuth = accounts.token(staff);
+    otherAdmin =
+        accounts.register(
+            "test.otherAdmin", "otherAdmin@example.test", "Other Admin", "StrongPassword123!");
+    otherAdmin.accessStatus = "Approved";
+    db.update(otherAdmin);
+    accounts.setRole(otherAdmin.id, "Admin");
+    otherAdminAuth = accounts.token(otherAdmin);
   }
 
   @BeforeEach
@@ -84,16 +85,16 @@ class ApplicationIntegrationTests {
       if (!resource.editable().isEmpty() && resource.type() != DataAnomaly.class)
         mvc.perform(get(resource.path() + "/edit").with(authentication(adminAuth)))
             .andExpect(status().isOk());
-      mvc.perform(get(resource.path()).with(authentication(staffAuth)))
-          .andExpect(status().isForbidden());
+      mvc.perform(get(resource.path()).with(authentication(otherAdminAuth)))
+          .andExpect(status().isOk());
     }
-    mvc.perform(post("/collections/run").with(authentication(staffAuth)))
+    mvc.perform(post("/collections/run").with(authentication(otherAdminAuth)))
         .andExpect(status().isForbidden());
   }
 
   @Test
   @org.springframework.transaction.annotation.Transactional
-  void superAdminOverviewUsesSavedTestResultsAndKeepsStaffOverview() throws Exception {
+  void adminOverviewUsesSavedTestResultsForEveryAdmin() throws Exception {
     var passed = new LssPlant();
     passed.plantId = "OVERVIEW-PASS";
     passed.name = "Overview passed API";
@@ -121,14 +122,10 @@ class ApplicationIntegrationTests {
     assertThat(activity)
         .isNotEmpty()
         .allSatisfy(row -> assertThat(row.get("tone")).isEqualTo("failed"));
-    mvc.perform(get("/").with(authentication(staffAuth)))
+    mvc.perform(get("/").with(authentication(otherAdminAuth)))
         .andExpect(status().isOk())
-        .andExpect(view().name("dashboard"))
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("Review signups"))));
+        .andExpect(view().name("admin-overview"))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Review signups")));
   }
 
   @Test
@@ -136,7 +133,7 @@ class ApplicationIntegrationTests {
     var batch = new ManualBatchService.Batch("user:" + admin.id);
     batch.items.put(1, new ManualBatchService.Item(1, "Queued plant", "Queued", "Waiting", null));
     when(batches.get(batch.id, "user:" + admin.id)).thenReturn(batch);
-    when(batches.get(batch.id, "user:" + staff.id))
+    when(batches.get(batch.id, "user:" + otherAdmin.id))
         .thenThrow(
             new org.springframework.security.access.AccessDeniedException(
                 "This batch belongs to another user"));
@@ -153,7 +150,9 @@ class ApplicationIntegrationTests {
                 .string(
                     org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString("http-equiv=\"refresh\""))));
-    mvc.perform(get("/collections/batches/" + batch.id + "/status").with(authentication(staffAuth)))
+    mvc.perform(
+            get("/collections/batches/" + batch.id + "/status")
+                .with(authentication(otherAdminAuth)))
         .andExpect(status().isForbidden());
     batch.items.put(1, new ManualBatchService.Item(1, "Queued plant", "Completed", "Saved", 1L));
     mvc.perform(get("/collections/batches/" + batch.id + "/status").with(authentication(adminAuth)))
@@ -192,7 +191,7 @@ class ApplicationIntegrationTests {
   }
 
   @Test
-  void javaPlantTestFormWorksWithoutBrowserScriptAndRejectsStaff() throws Exception {
+  void javaPlantTestFormWorksWithoutBrowserScript() throws Exception {
     var plant = new LssPlant();
     plant.plantId = "JAVA-UI-TEST";
     plant.name = "Java UI API test";
@@ -204,11 +203,11 @@ class ApplicationIntegrationTests {
                 200, "application/json", "{\"timestamp\":\"2026-10-20T00:00:00\",\"power\":10}"));
     mvc.perform(
             post("/admin/plants/test")
-                .with(authentication(staffAuth))
+                .with(authentication(otherAdminAuth))
                 .with(csrf())
                 .param("testPlantId", plant.id.toString())
                 .param("dataType", "Rolling 24 Hour"))
-        .andExpect(status().isForbidden());
+        .andExpect(redirectedUrl("/admin/lss-plants"));
     mvc.perform(
             post("/admin/plants/test")
                 .with(authentication(adminAuth))
@@ -228,7 +227,7 @@ class ApplicationIntegrationTests {
                 .with(csrf())
                 .param("username", name)
                 .param("email", name + "@example.test")
-                .param("displayName", "New Staff")
+                .param("displayName", "New Admin")
                 .param("password", "StrongPassword123!")
                 .param("confirmPassword", "StrongPassword123!"))
         .andExpect(redirectedUrl("/login?registered=pending"));
@@ -239,7 +238,7 @@ class ApplicationIntegrationTests {
                 .param("password", "StrongPassword123!"))
         .andExpect(redirectedUrl("/login?error=true"));
     var target = db.list(ApplicationUser.class, "WHERE \"UserName\"=?", name).getFirst();
-    accounts.review(adminAuth, target.id, "Approved", "Staff", "Approved for integration check");
+    accounts.review(adminAuth, target.id, "Approved", "Admin", "Approved for integration check");
     mvc.perform(
             post("/account/login")
                 .with(csrf())
@@ -249,7 +248,7 @@ class ApplicationIntegrationTests {
   }
 
   @Test
-  void administratorsCannotEscalatePrivilegesAndRevokedAccountsLoseTheirSession() throws Exception {
+  void adminApprovalsUseOneRoleAndRevokedAccountsLoseTheirSession() throws Exception {
     var reviewer =
         accounts.register(
             "reviewer." + System.nanoTime(),
@@ -258,30 +257,105 @@ class ApplicationIntegrationTests {
             "StrongPassword123!");
     reviewer.accessStatus = "Approved";
     db.update(reviewer);
-    accounts.setRole(reviewer.id, "Administrator");
+    accounts.setRole(reviewer.id, "Admin");
     assertThatThrownBy(
             () ->
                 accounts.review(
-                    accounts.token(reviewer), admin.id, "Inactive", "Staff", "Not allowed"))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
-    assertThatThrownBy(
-            () ->
-                accounts.review(
-                    accounts.token(reviewer), staff.id, "Approved", "Administrator", "Not allowed"))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+                    accounts.token(reviewer), reviewer.id, "Inactive", "Admin", "Not allowed"))
+        .isInstanceOf(IllegalArgumentException.class);
     var target =
         accounts.register(
             "revoke." + System.nanoTime(),
             "revoke." + System.nanoTime() + "@example.test",
-            "Temporary Staff",
+            "Temporary Admin",
             "StrongPassword123!");
-    target.accessStatus = "Approved";
-    db.update(target);
-    accounts.setRole(target.id, "Staff");
+    mvc.perform(
+            post("/admin/users/" + target.id + "/review")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("decision", "Approved")
+                .param("role", "Staff"))
+        .andExpect(status().isBadRequest());
+    assertThat(db.find(ApplicationUser.class, target.id).orElseThrow().accessStatus)
+        .isEqualTo("Pending");
+    mvc.perform(
+            post("/admin/users/" + target.id + "/review")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("decision", "Approved"))
+        .andExpect(redirectedUrl("/admin/users"));
+    assertThat(accounts.roles(target.id)).containsExactly(Accounts.ADMIN);
+    target = db.find(ApplicationUser.class, target.id).orElseThrow();
     var oldAuth = accounts.token(target);
-    accounts.review(adminAuth, target.id, "Inactive", "Staff", "Access ended");
+    accounts.review(adminAuth, target.id, "Inactive", "Admin", "Access ended");
     mvc.perform(get("/api/status").with(authentication(oldAuth)))
         .andExpect(status().isUnauthorized());
+    String page =
+        mvc.perform(get("/admin/users").with(authentication(adminAuth)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(page)
+        .contains("Admin Accounts")
+        .doesNotContain("SuperAdministrator", "Super Admin", "Staff", "name=\"role\"");
+  }
+
+  @Test
+  @org.springframework.transaction.annotation.Transactional
+  void existingRoleAssignmentsAreReadAsAdminWithoutRewritingAccounts() {
+    for (String previous : List.of("Staff", "Administrator", "SuperAdministrator")) {
+      var legacy =
+          accounts.register(
+              "legacy." + previous,
+              previous + "@example.test",
+              "Existing Admin",
+              "StrongPassword123!");
+      legacy.accessStatus = "Approved";
+      db.update(legacy);
+      String roleId = UUID.randomUUID().toString();
+      db.jdbc()
+          .update(
+              "INSERT INTO \"AspNetRoles\""
+                  + " (\"Id\",\"Name\",\"NormalizedName\",\"ConcurrencyStamp\") VALUES (?,?,?,?)",
+              roleId,
+              previous,
+              previous.toUpperCase(Locale.ROOT),
+              UUID.randomUUID().toString());
+      db.jdbc()
+          .update(
+              "INSERT INTO \"AspNetUserRoles\" (\"UserId\",\"RoleId\") VALUES (?,?)",
+              legacy.id,
+              roleId);
+      assertThat(accounts.roles(legacy.id)).containsExactly(Accounts.ADMIN);
+      assertThat(accounts.token(legacy).getAuthorities())
+          .extracting("authority")
+          .containsExactly("ROLE_Admin");
+      assertThat(
+              db.jdbc()
+                  .queryForObject(
+                      "SELECT \"RoleId\" FROM \"AspNetUserRoles\" WHERE \"UserId\"=?",
+                      String.class,
+                      legacy.id))
+          .isEqualTo(roleId);
+      assertThatThrownBy(() -> accounts.setRole(legacy.id, previous))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+  }
+
+  @Test
+  void approvedAccountWithoutAdminAssignmentCannotAccessProtectedPages() throws Exception {
+    var unassigned =
+        accounts.register(
+            "unassigned.admin", "unassigned@example.test", "Unassigned", "StrongPassword123!");
+    unassigned.accessStatus = "Approved";
+    db.update(unassigned);
+    var auth = accounts.token(unassigned);
+    mvc.perform(get("/").with(authentication(auth))).andExpect(status().isForbidden());
+    mvc.perform(get("/admin/users").with(authentication(auth))).andExpect(status().isForbidden());
+    assertThatThrownBy(
+            () -> accounts.review(auth, otherAdmin.id, "Inactive", Accounts.ADMIN, "Denied"))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
   }
 
   @Test
@@ -335,28 +409,35 @@ class ApplicationIntegrationTests {
         .thenReturn(new PlantApiClient.Response(200, "application/json", payload));
     var job =
         collection.collect(
-            plant.id, "Rolling 24 Hour", now, false, "test.staff", null, "INTEGRATION-1", 0);
+            plant.id, "Rolling 24 Hour", now, false, "test.otherAdmin", null, "INTEGRATION-1", 0);
     assertThat(job.status).isEqualTo("Completed");
     assertThat(db.list(RawApiResponse.class, "WHERE \"CollectionJobId\"=?", job.id)).hasSize(1);
     assertThat(db.list(DataAnomaly.class, "WHERE \"CollectionJobId\"=?", job.id)).hasSize(1);
     assertThat(
             collection.collect(
-                    plant.id, "Rolling 24 Hour", now, false, "test.staff", null, "INTEGRATION-1", 0)
+                    plant.id,
+                    "Rolling 24 Hour",
+                    now,
+                    false,
+                    "test.otherAdmin",
+                    null,
+                    "INTEGRATION-1",
+                    0)
                 .id)
         .isEqualTo(job.id);
     verify(client, times(1)).fetch(anyString());
     assertThatThrownBy(
             () ->
                 collection.collect(
-                    plant.id, "Rolling 24 Hour", now, false, "test.staff", null, null, 0))
+                    plant.id, "Rolling 24 Hour", now, false, "test.otherAdmin", null, null, 0))
         .isInstanceOf(IllegalArgumentException.class);
-    mvc.perform(get("/collections/" + job.id).with(authentication(staffAuth)))
+    mvc.perform(get("/collections/" + job.id).with(authentication(otherAdminAuth)))
         .andExpect(status().isOk());
     mvc.perform(
             get("/ddq-analytics")
                 .param("from", now.toString())
                 .param("to", now.plusDays(1).toString())
-                .with(authentication(staffAuth)))
+                .with(authentication(otherAdminAuth)))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("70.000000")));
     var report =
@@ -368,15 +449,15 @@ class ApplicationIntegrationTests {
             null,
             null,
             "Integration report",
-            "user:" + staff.id);
+            "user:" + otherAdmin.id);
     assertThat(report.generationStatus).isEqualTo("Completed");
     assertThat(report.recordCount).isEqualTo(2);
     assertThat(report.anomalyCount).isEqualTo(2);
-    var download = reports.download(report.id, "user:" + staff.id, "xlsx");
+    var download = reports.download(report.id, "user:" + otherAdmin.id, "xlsx");
     try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(download.data()))) {
       assertThat(workbook.getSheetAt(0).getRow(5).getCell(5).getNumericCellValue()).isEqualTo(50.0);
     }
-    mvc.perform(get("/reports/" + report.id + "/download").with(authentication(staffAuth)))
+    mvc.perform(get("/reports/" + report.id + "/download").with(authentication(otherAdminAuth)))
         .andExpect(status().isOk())
         .andExpect(
             header()
@@ -388,11 +469,11 @@ class ApplicationIntegrationTests {
     mvc.perform(
             get("/reports/" + report.id + "/download")
                 .param("format", "anomalies.csv")
-                .with(authentication(staffAuth)))
+                .with(authentication(otherAdminAuth)))
         .andExpect(status().isOk())
         .andExpect(
             content().string(org.hamcrest.Matchers.containsString("Registered plant capacity")));
-    mvc.perform(get("/on-demand-analysis").with(authentication(staffAuth)))
+    mvc.perform(get("/on-demand-analysis").with(authentication(otherAdminAuth)))
         .andExpect(status().isOk());
   }
 
@@ -411,7 +492,7 @@ class ApplicationIntegrationTests {
             "Day Ahead",
             LocalDateTime.now(Policies.LOCAL).withSecond(0).withNano(0),
             false,
-            "test.staff",
+            "test.otherAdmin",
             null,
             "FAILURE-CHECK",
             0);
@@ -445,7 +526,7 @@ class ApplicationIntegrationTests {
                 "Day Ahead",
                 submission,
                 false,
-                "test.staff",
+                "test.otherAdmin",
                 null,
                 "CONCURRENT-CHECK",
                 0);
@@ -486,13 +567,13 @@ class ApplicationIntegrationTests {
     report.reportType = "On-Demand";
     report.dataType = "DDQ";
     report.dataSelection = "Day Ahead";
-    report.requestedBy = "user:" + staff.id;
+    report.requestedBy = "user:" + otherAdmin.id;
     report.submissionDate = job.submissionDateTime;
     report.intervalMinutes = 30;
     report.description = "Historical report";
     report.generationStatus = "Completed";
     db.insert(report);
-    var file = reports.download(report.id, "user:" + staff.id, "xlsx");
+    var file = reports.download(report.id, "user:" + otherAdmin.id, "xlsx");
     try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(file.data()))) {
       assertThat(workbook.getNumberOfSheets()).isEqualTo(1);
     }

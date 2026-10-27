@@ -65,11 +65,7 @@ public class WebController {
     model.addAttribute(
         "isAdmin",
         auth != null
-            && auth.getAuthorities().stream()
-                .anyMatch(
-                    a ->
-                        Set.of("ROLE_Administrator", "ROLE_SuperAdministrator")
-                            .contains(a.getAuthority())));
+            && auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_Admin")));
     if (auth != null && auth.getPrincipal() instanceof Accounts.Principal p) {
       model.addAttribute("account", p);
       model.addAttribute(
@@ -112,8 +108,7 @@ public class WebController {
   public String dashboard(
       Model model, Authentication auth, @RequestParam(defaultValue = "all") String apiStatus) {
     model.addAttribute("title", "Overview");
-    if (auth.getAuthorities().stream()
-        .anyMatch(a -> a.getAuthority().equals("ROLE_SuperAdministrator"))) {
+    if (auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_Admin"))) {
       var apiPlants =
           db.list(LssPlant.class, "ORDER BY \"LastApiTestAt\" DESC NULLS LAST, \"Name\"");
       model.addAttribute("apiCount", apiPlants.size());
@@ -629,7 +624,7 @@ public class WebController {
 
   @GetMapping("/admin/users")
   public String users(Model model) {
-    model.addAttribute("title", "User Management");
+    model.addAttribute("title", "Admin Accounts");
     model.addAttribute(
         "users", db.list(ApplicationUser.class, "ORDER BY \"AccessRequestedAt\" DESC LIMIT 500"));
     var roles = new HashMap<String, String>();
@@ -643,7 +638,7 @@ public class WebController {
   public String review(
       @PathVariable String id,
       @RequestParam String decision,
-      @RequestParam String role,
+      @RequestParam(defaultValue = "Admin") String role,
       @RequestParam(defaultValue = "") String note,
       Authentication auth,
       RedirectAttributes flash) {

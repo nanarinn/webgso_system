@@ -13,6 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class Accounts implements AuthenticationProvider {
+  public static final String ADMIN = "Admin";
+  // Read former assignments for existing accounts without rewriting the shared database.
+  private static final Set<String> COMPATIBLE_ADMIN_ROLES =
+      Set.of(ADMIN, "Staff", "Administrator", "SuperAdministrator");
+
   public record Principal(String id, String username, String displayName, String stamp)
       implements java.io.Serializable {}
 
@@ -24,19 +29,27 @@ public class Accounts implements AuthenticationProvider {
   }
 
   public List<String> roles(String userId) {
-    return db.jdbc()
-        .queryForList(
-            "SELECT r.\"Name\" FROM \"AspNetRoles\" r JOIN \"AspNetUserRoles\" ur ON"
-                + " r.\"Id\"=ur.\"RoleId\" WHERE ur.\"UserId\"=?",
-            String.class,
-            userId);
+    var assigned =
+        db.jdbc()
+            .queryForList(
+                "SELECT r.\"Name\" FROM \"AspNetRoles\" r JOIN \"AspNetUserRoles\" ur ON"
+                    + " r.\"Id\"=ur.\"RoleId\" WHERE ur.\"UserId\"=?",
+                String.class,
+                userId);
+    return assigned.stream().anyMatch(COMPATIBLE_ADMIN_ROLES::contains)
+        ? List.of(ADMIN)
+        : List.of();
   }
 
   public Authentication token(ApplicationUser user) {
     return UsernamePasswordAuthenticationToken.authenticated(
-        new Principal(user.id, user.userName, user.displayName, user.securityStamp),
+        new Principal(user.id, user.userName, displayName(user.displayName), user.securityStamp),
         null,
         roles(user.id).stream().map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList());
+  }
+
+  public static String displayName(String name) {
+    return "Demo Super Admin".equals(name) ? "Demo Admin" : name;
   }
 
   @Override
@@ -120,14 +133,9 @@ public class Accounts implements AuthenticationProvider {
     user.accessRequestedAt = OffsetDateTime.now(ZoneOffset.UTC);
     db.insert(user);
     audit(name, "Access requested", "User", user.id, "Pending", "Local account registration");
-    var admins =
-        db.jdbc()
-            .queryForList(
-                "SELECT ur.\"UserId\" FROM \"AspNetUserRoles\" ur JOIN \"AspNetRoles\" r ON"
-                    + " r.\"Id\"=ur.\"RoleId\" WHERE r.\"Name\"='SuperAdministrator'",
-                String.class);
-    for (String admin : admins)
-      notify(admin, user.id, "Access request", displayName + " requested repository access.");
+    for (var admin : db.list(ApplicationUser.class, "WHERE \"AccessStatus\"='Approved'"))
+      if (roles(admin.id).contains(ADMIN))
+        notify(admin.id, user.id, "Access request", displayName + " requested repository access.");
     return user;
   }
 
@@ -135,25 +143,17 @@ public class Accounts implements AuthenticationProvider {
   public void review(
       Authentication actor, String targetId, String decision, String requestedRole, String note) {
     Principal reviewer = (Principal) actor.getPrincipal();
+    if (!actor.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_" + ADMIN)))
+      throw new AccessDeniedException("Admin access is required.");
     var target =
         db.list(ApplicationUser.class, "WHERE \"Id\"=? FOR UPDATE", targetId).stream()
             .findFirst()
             .orElseThrow();
     if (targetId.equals(reviewer.id))
-      throw new IllegalArgumentException("Ask another Super Admin to review your account.");
+      throw new IllegalArgumentException("Ask another Admin to review your account.");
     if (!Set.of("Approved", "Rejected", "Inactive").contains(decision)
-        || !Set.of("Staff", "Administrator", "SuperAdministrator").contains(requestedRole))
+        || !ADMIN.equals(requestedRole))
       throw new IllegalArgumentException("Invalid access decision");
-    boolean superAdmin =
-        actor.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_SuperAdministrator"));
-    var targetRoles = roles(targetId);
-    if (!superAdmin
-        && (!actor.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_Administrator"))
-            || targetRoles.stream()
-                .anyMatch(r -> r.equals("Administrator") || r.equals("SuperAdministrator"))
-            || !requestedRole.equals("Staff")))
-      throw new AccessDeniedException(
-          "Only a Super Admin can grant or change administrator access.");
     target.accessStatus = decision;
     target.accessReviewedAt = OffsetDateTime.now(ZoneOffset.UTC);
     target.accessReviewedBy = reviewer.username;
@@ -170,6 +170,8 @@ public class Accounts implements AuthenticationProvider {
   }
 
   public void setRole(String id, String role) {
+    if (!ADMIN.equals(role))
+      throw new IllegalArgumentException("Admin is the only supported role.");
     var ids =
         db.jdbc()
             .queryForList(

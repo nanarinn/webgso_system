@@ -151,28 +151,23 @@ final class AdminPages {
                               option("Rejected", "Reject", "Approved"),
                               option("Inactive", "Deactivate", "Approved"))
                           .attr("name", "decision")),
-                  field(
-                      "Role",
-                      select(
-                          "role",
-                          List.of("Staff", "Administrator", "SuperAdministrator"),
-                          "Staff")),
                   field("Review note", input("note", "text", null).attr("maxlength", 1000)),
                   button("Save review", false));
       rows.add(
           row(
-              el("strong", user.displayName).add(el("small", user.userName).cls("java-block")),
+              el("strong", Accounts.displayName(user.displayName))
+                  .add(el("small", user.userName).cls("java-block")),
               user.email,
               user.accessStatus,
-              roles.get(user.id),
+              roles.get(user.id).isBlank() ? "Pending approval" : Accounts.ADMIN,
               review));
     }
     return el(
         "section",
         heading(
             "Access control",
-            "User Management",
-            "Review access requests and assign approved roles."),
+            "Admin Accounts",
+            "Review access requests and manage Admin accounts."),
         el(
                 "article",
                 table(

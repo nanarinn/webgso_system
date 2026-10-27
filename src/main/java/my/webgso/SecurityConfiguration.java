@@ -32,9 +32,9 @@ public class SecurityConfiguration {
                         "/error")
                     .permitAll()
                     .requestMatchers("/admin/**", "/api/admin/**")
-                    .hasAnyRole("Administrator", "SuperAdministrator")
+                    .hasRole("Admin")
                     .anyRequest()
-                    .authenticated())
+                    .hasRole("Admin"))
         .formLogin(
             form ->
                 form.loginPage("/login")

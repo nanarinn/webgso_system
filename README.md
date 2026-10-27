@@ -36,7 +36,7 @@ Set environment variables before starting the service. [.env.example](.env.examp
 | `WEBGSO_WORKERS_ENABLED` | Enable automated workers after stopping the former service |
 | `WEBGSO_API_PRIVATE_HOSTS` | Explicit comma-separated private API host allowlist |
 | `WEBGSO_API_HTTP_HOSTS` | Explicit HTTP host exceptions |
-| `WEBGSO_ADMIN_USERNAME`, `WEBGSO_ADMIN_EMAIL`, `WEBGSO_ADMIN_PASSWORD` | Create a first Super Admin only when the username does not exist |
+| `WEBGSO_ADMIN_USERNAME`, `WEBGSO_ADMIN_EMAIL`, `WEBGSO_ADMIN_PASSWORD` | Create a first Admin only when the username does not exist |
 
 The launcher uses the `local` profile, which explicitly permits loopback API fixtures. Use `run-java.ps1 -Production` or run the JAR directly for production defaults. Production plant APIs require HTTPS and public destinations unless explicitly allowlisted. DNS is checked at connection time, redirects are rejected, and payload sizes are capped.
 
@@ -59,7 +59,7 @@ This explicit profile uses synthetic data in an in-memory H2 database, separate 
 - Collection schedules using timezone, interval/day/month or Spring cron controls.
 - On-demand Excel/CSV reports, anomaly/substitution exports, previous-day fallback, capacity capping and zero fallback. Downloads enforce ownership. Legacy report selections can be regenerated.
 - Report schedules, recipients and delivery monitoring through SMTP or Microsoft Graph.
-- Registration, approval/rejection/deactivation, role restrictions, notifications, lockout and 15-minute idle sessions.
+- A single Admin account type, registration approval/rejection/deactivation, notifications, lockout and 15-minute idle sessions. Existing role assignments are read as Admin for compatibility; former role choices are not offered. New registrations remain pending until another Admin approves them, and report/batch ownership remains enforced between Admin accounts.
 - Audit logs, configured validation rules and anomaly resolution.
 
 Workers are disabled by default during cutover, preventing simultaneous collection or delivery by two runtimes. Enable `WEBGSO_WORKERS_ENABLED=true` after stopping the old runtime. Real email additionally requires `WEBGSO_MAIL_ENABLED=true` and a configured sender/service. Automated tests send no real email.
