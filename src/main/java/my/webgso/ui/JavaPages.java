@@ -124,7 +124,7 @@ public final class JavaPages {
                             .cls("brand-logo")
                             .attr("src", Branding.LOGO)
                             .attr("alt", Branding.LOGO_DESCRIPTION),
-                        el("span", el("small", "LSS Repository")))
+                        el("span", el("small", "GSO Web Services")))
                     .cls("brand-lockup sidebar-brand"),
                 input("navigation", "checkbox", "on")
                     .attr("id", "mobile-nav")
