@@ -161,12 +161,36 @@
 .api-test-popup form { display: flex; justify-content: flex-end; margin-top: 24px; }
 .plant-api-list { min-width: 0; }
 .app-content .plant-api-count-button { padding: 8px 12px; border: 1px solid #c9dbca; border-radius: 8px; background: #edf5e5; color: #245b40; font-size: 12px; font-weight: 700; white-space: nowrap; }
-.plant-api-popup:popover-open { position: fixed; inset: 0; margin: auto; width: min(660px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; padding: 26px; border: 1px solid #dce5df; border-radius: 16px; background: #fff; color: #193e33; box-shadow: 0 20px 70px #103d3033; white-space: normal; }
-.plant-api-popup::backdrop { background: #103d3073; }
-.plant-api-popup h2 { margin: 0 0 8px; font-size: 23px; }
-.plant-api-popup-name { margin: 0 0 22px; color: #64786c; }
-.plant-api-popup > button { display: block; margin: 20px 0 0 auto; }
-.plant-api-popup .plant-api-scroll { max-height: 340px; }
+.plant-api-popup:popover-open { position: fixed; inset: 0; margin: auto; width: min(800px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 0; border: 1px solid #dce5df; border-radius: 20px; background: #fff; color: #193e33; box-shadow: 0 28px 100px #103d3040; white-space: normal; }
+.plant-api-popup::backdrop { background: #123d3059; backdrop-filter: blur(3px); }
+.plant-api-popup-header { display: flex; align-items: center; gap: 16px; padding: 26px 28px; background: #f2f7ef; border-bottom: 1px solid #dce7d8; }
+.plant-api-popup-icon { display: grid; place-items: center; width: 48px; height: 48px; flex-shrink: 0; border-radius: 14px; background: #dceccf; color: #245b40; font-size: 26px; }
+.plant-api-eyebrow { margin: 0 0 5px; font-size: 10px; letter-spacing: .15em; font-weight: 700; color: #6a826e; }
+.plant-api-popup h2 { margin: 0; font-size: 24px; font-weight: 700; }
+.plant-api-popup-name { margin: 7px 0 0; color: #617669; font-size: 13px; }
+.app-content .plant-api-popup-dismiss { margin-left: auto; align-self: flex-start; min-height: 32px; width: 32px; padding: 0; border: 1px solid #d6e2d2; border-radius: 50%; background: #fff; color: #486653; font-size: 23px; line-height: 1; cursor: pointer; }
+.plant-api-popup-toolbar { padding: 20px 28px 16px; }
+.plant-api-total { display: inline-block; padding: 6px 11px; border-radius: 30px; color: #356347; background: #edf5e7; font-size: 11px; font-weight: 700; }
+.plant-api-popup .plant-api-heading { margin: 0 28px; padding: 10px 14px; border: 0; background: #f5f7f3; border-radius: 8px 8px 0 0; }
+.plant-api-popup :is(.plant-api-heading, .plant-api-item) { grid-template-columns: 150px minmax(0,1fr); gap: 20px; }
+.plant-api-popup .plant-api-scroll { max-height: min(420px, 45dvh); margin: 0 28px; padding: 0; }
+.plant-api-popup .plant-api-item { padding: 15px 14px; }
+.plant-api-popup .plant-api-item:nth-child(even) { background: #fafcf8; }
+.plant-api-popup .plant-api-item strong { font-size: 12px; }
+.plant-api-popup .plant-api-item span { font-size: 12px; color: #4d6258; }
+.plant-api-popup-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 28px; margin-top: 14px; border-top: 1px solid #e5ebe1; background: #fcfdfa; }
+.plant-api-popup-footer > span { color: #7a8b7c; font-size: 11px; }
+.app-content .plant-api-popup-footer button { min-width: 96px; min-height: 40px; border: 0; border-radius: 9px; background: #184f3c; color: #fff; padding: 10px 20px; font-size: 13px; font-weight: 700; }
+@media (max-width: 600px) {
+  .plant-api-popup-header { padding: 20px; gap: 12px; }
+  .plant-api-popup-icon { width: 36px; height: 36px; border-radius: 10px; font-size: 22px; }
+  .plant-api-popup h2 { font-size: 21px; }
+  .plant-api-popup-toolbar { padding: 16px 20px; }
+  .plant-api-popup .plant-api-heading { display: none; }
+  .plant-api-popup .plant-api-scroll { margin: 0 20px; }
+  .plant-api-popup .plant-api-item { grid-template-columns: minmax(0,1fr); gap: 6px; padding: 14px 0; }
+  .plant-api-popup-footer { padding: 16px 20px; }
+}
 .app-content .java-table-wrap[data-plant-table="true"] table { width: 100%; min-width: 760px; table-layout: fixed; }
 .app-content .java-table-wrap[data-plant-table="true"] :is(th, td) { padding-left: 8px; padding-right: 8px; min-width: 0; overflow-wrap: anywhere; }
 .app-content .java-table-wrap[data-plant-table="true"] th:nth-child(1) { width: 6%; }

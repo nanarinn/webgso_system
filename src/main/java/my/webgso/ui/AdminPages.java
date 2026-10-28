@@ -101,21 +101,47 @@ final class AdminPages {
               .cls("plant-api-count-button"),
           el(
                   "div",
-                  el("h2", "API connections").attr("id", apiPopup + "-title"),
-                  el("p", plant.get("name") + " · " + plant.get("plantId"))
-                      .cls("plant-api-popup-name"),
+                  el(
+                          "header",
+                          el("span", "↗").cls("plant-api-popup-icon").attr("aria-hidden", "true"),
+                          el(
+                              "div",
+                              el("p", "PLANT CONNECTIONS").cls("plant-api-eyebrow"),
+                              el("h2", "API connections").attr("id", apiPopup + "-title"),
+                              el("p", plant.get("name") + " · Plant ID " + plant.get("plantId"))
+                                  .cls("plant-api-popup-name")),
+                          el("button", "×")
+                              .attr("type", "button")
+                              .attr("popovertarget", apiPopup)
+                              .attr("popovertargetaction", "hide")
+                              .attr("aria-label", "Close API connections")
+                              .cls("plant-api-popup-dismiss"))
+                      .cls("plant-api-popup-header"),
+                  el(
+                          "div",
+                          el(
+                                  "span",
+                                  apiRows.size()
+                                      + " configured "
+                                      + (apiRows.size() == 1 ? "API" : "APIs"))
+                              .cls("plant-api-total"))
+                      .cls("plant-api-popup-toolbar"),
                   el("div", el("span", "Dataset"), el("span", "API URL")).cls("plant-api-heading"),
                   el("div", apiRows)
                       .cls("plant-api-scroll")
                       .attr("tabindex", "0")
                       .attr("role", "region")
                       .attr("aria-label", "API connections for " + plant.get("name")),
-                  el("button", "Close")
-                      .attr("type", "button")
-                      .attr("popovertarget", apiPopup)
-                      .attr("popovertargetaction", "hide")
-                      .flag("autofocus", true)
-                      .cls("secondary-action"))
+                  el(
+                          "footer",
+                          el("span", "API endpoints for this plant"),
+                          el("button", "Done")
+                              .attr("type", "button")
+                              .attr("popovertarget", apiPopup)
+                              .attr("popovertargetaction", "hide")
+                              .flag("autofocus", true)
+                              .cls("primary-action"))
+                      .cls("plant-api-popup-footer"))
               .attr("id", apiPopup)
               .attr("popover", "auto")
               .attr("role", "dialog")
