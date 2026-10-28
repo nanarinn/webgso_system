@@ -159,3 +159,16 @@
 .api-test-popup h2 { margin: 12px 0; font-size: 25px; }
 .api-test-popup p { overflow-wrap: anywhere; }
 .api-test-popup form { display: flex; justify-content: flex-end; margin-top: 24px; }
+.plant-api-list { min-width: 200px; max-width: 340px; display: grid; gap: 10px; }
+.plant-api-item { display: grid; gap: 3px; }
+.plant-api-item strong { font-size: 11px; color: #5c7267; }
+.plant-api-item span { overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; }
+.plant-api-empty { color: #6a7b70; }
+.plant-status { display: inline-flex; border-radius: 30px; padding: 6px 12px; font-size: 12px; font-weight: 700; }
+.plant-active { background: #e0efce; color: #205637; }
+.plant-inactive { background: #edf0eb; color: #647063; }
+.plant-row-actions { display: grid; gap: 10px; min-width: 165px; }
+.plant-row-actions > a { text-align: center; }
+.app-content .plant-test-form { display: grid; gap: 8px; margin: 0; }
+.app-content .plant-test-form select { width: 100%; min-width: 0; font-size: 12px; padding: 9px; }
+.app-content .plant-row-actions :is(button, .secondary-action) { min-height: 38px; padding: 8px 14px; font-size: 12px; }

@@ -14,13 +14,30 @@ final class AdminPages {
 
   static Element resource(PageContext c) {
     Resources.Definition resource = c.value("resource");
+    boolean plants = resource.type() == LssPlant.class;
     boolean editable = !resource.editable().isEmpty();
     var columns = c.<Map<String, String>>list("columns");
     var headers = new ArrayList<String>(List.of("ID"));
-    columns.forEach(column -> headers.add(column.get("label")));
+    for (var column : columns) headers.add(column.get("label"));
     if (editable) headers.add("Action");
+    if (plants)
+      headers =
+          new ArrayList<>(
+              List.of(
+                  "ID",
+                  "Plant ID",
+                  "Plant Name",
+                  "State",
+                  "Capacity (MW)",
+                  "API",
+                  "Status",
+                  "Actions"));
     var rows = new ArrayList<Element>();
     for (Map<String, Object> record : c.<Map<String, Object>>list("rows")) {
+      if (plants) {
+        rows.add(plantRow(c, record));
+        continue;
+      }
       var values = new ArrayList<Object>();
       values.add(record.get("id"));
       columns.forEach(column -> values.add(record.get(column.get("name"))));
@@ -49,32 +66,6 @@ final class AdminPages {
                     ? action("Add record", resource.path() + "/edit", true)
                     : null),
             tabs);
-    if (resource.path().equals("/admin/lss-plants"))
-      page.add(
-          el(
-                  "article",
-                  el("h2", "Test a configured API"),
-                  c.post(
-                      "/admin/plants/test",
-                      "java-filters",
-                      field(
-                          "Plant ID (numeric)",
-                          input("testPlantId", "number", null)
-                              .attr("min", 1)
-                              .flag("required", true)),
-                      field(
-                          "Dataset",
-                          select(
-                              "dataType",
-                              List.of(
-                                  "Rolling 24 Hour",
-                                  "Day Ahead",
-                                  "Week Ahead",
-                                  "4 Month Ahead",
-                                  "MMF"),
-                              "Rolling 24 Hour")),
-                      button("Test connection", false)))
-              .cls("panel java-panel"));
     page.add(
         el(
                 "article",
@@ -90,6 +81,55 @@ final class AdminPages {
                 OperationsPages.pagination(c, "Record pages", "q"))
             .cls("panel"));
     return page;
+  }
+
+  private static Element plantRow(PageContext c, Map<String, Object> plant) {
+    var endpoints = el("div").cls("plant-api-list");
+    int endpointCount = 0;
+    endpointCount += addPlantApi(endpoints, "DDQ", plant.get("ddqApiEndpoint"));
+    endpointCount += addPlantApi(endpoints, "MMF", plant.get("mmfApiEndpoint"));
+    Map<Integer, List<PlantApiConfiguration>> configured = c.value("plantApis");
+    for (var api : configured.getOrDefault(((Number) plant.get("id")).intValue(), List.of()))
+      endpointCount += addPlantApi(endpoints, api.dataType, api.apiLink);
+    if (endpointCount == 0) endpoints.add(el("span", "Not configured").cls("plant-api-empty"));
+    boolean active = Boolean.TRUE.equals(plant.get("isActive"));
+    var actions =
+        el(
+                "div",
+                action("Edit", url("/admin/lss-plants/edit", Map.of("id", plant.get("id"))), false),
+                c.post(
+                    "/admin/plants/" + plant.get("id") + "/test",
+                    "plant-test-form",
+                    select(
+                            "dataType",
+                            List.of(
+                                "Rolling 24 Hour",
+                                "Day Ahead",
+                                "Week Ahead",
+                                "4 Month Ahead",
+                                "MMF"),
+                            "Rolling 24 Hour")
+                        .attr("aria-label", "Test API dataset for " + plant.get("name")),
+                    button("Test API", false)))
+            .cls("plant-row-actions");
+    return row(
+        plant.get("id"),
+        plant.get("plantId"),
+        plant.get("name"),
+        plant.get("state"),
+        plant.get("capacityMw"),
+        endpoints,
+        el("span", active ? "Active" : "Inactive")
+            .cls("plant-status " + (active ? "plant-active" : "plant-inactive")),
+        actions);
+  }
+
+  private static int addPlantApi(Element container, String label, Object endpoint) {
+    if (endpoint != null && !endpoint.toString().isBlank()) {
+      container.add(el("div", el("strong", label), el("span", endpoint)).cls("plant-api-item"));
+      return 1;
+    }
+    return 0;
   }
 
   static Element edit(PageContext c) {

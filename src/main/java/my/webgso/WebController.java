@@ -504,6 +504,21 @@ public class WebController {
             .map(n -> Map.of("name", n, "label", Resources.label(n)))
             .toList());
     model.addAttribute("rows", table);
+    if (resource.type() == LssPlant.class) {
+      var plantApis = new HashMap<Integer, List<PlantApiConfiguration>>();
+      if (!records.isEmpty()) {
+        var ids = records.stream().map(record -> ((LssPlant) record).id).toList();
+        for (var api :
+            db.list(
+                PlantApiConfiguration.class,
+                "WHERE \"PlantId\" IN ("
+                    + String.join(",", Collections.nCopies(ids.size(), "?"))
+                    + ") ORDER BY \"Id\"",
+                ids.toArray()))
+          plantApis.computeIfAbsent(api.plantId, ignored -> new ArrayList<>()).add(api);
+      }
+      model.addAttribute("plantApis", plantApis);
+    }
     model.addAttribute("q", q);
     model.addAttribute("page", safePage);
     model.addAttribute("total", total);

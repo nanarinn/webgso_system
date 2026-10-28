@@ -191,6 +191,49 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  @org.springframework.transaction.annotation.Transactional
+  void plantTableShowsEndpointsStatusAndPerPlantTestActions() throws Exception {
+    var plant = new LssPlant();
+    plant.plantId = "TABLE-API";
+    plant.name = "Table plant";
+    plant.ddqApiEndpoint = "https://example.test/ddq";
+    plant.mmfApiEndpoint = "https://example.test/mmf";
+    plant.isActive = true;
+    db.insert(plant);
+    var override = new PlantApiConfiguration();
+    override.plantId = plant.id;
+    override.apiType = "DDQ";
+    override.dataType = "Day Ahead";
+    override.apiLink = "https://example.test/day-ahead";
+    db.insert(override);
+    var inactive = new LssPlant();
+    inactive.plantId = "TABLE-OFF";
+    inactive.name = "Inactive table plant";
+    inactive.isActive = false;
+    db.insert(inactive);
+    String html =
+        mvc.perform(get("/admin/lss-plants").with(authentication(adminAuth)).param("q", "TABLE-"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html)
+        .contains(
+            "Plant Name",
+            "Capacity (MW)",
+            "https://example.test/ddq",
+            "https://example.test/mmf",
+            "https://example.test/day-ahead",
+            "plant-active\">Active",
+            "plant-inactive\">Inactive",
+            "Not configured",
+            "Test API",
+            "action=\"/admin/plants/" + plant.id + "/test\"",
+            "name=\"_csrf\"")
+        .doesNotContain("Test a configured API", "API connection status", "Is active");
+  }
+
+  @Test
   void missingPlantTestReturnsPopupOnPlantList() throws Exception {
     var result =
         mvc.perform(
