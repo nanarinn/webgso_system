@@ -58,7 +58,7 @@ class ConfiguredApiTests {
   }
 
   @Test
-  void rowDefaultsToItsSavedDatasetAndOmitsUnconfiguredDatasets() throws Exception {
+  void rowShowsSavedDatasetNamesAndTestsWithoutDropdown() throws Exception {
     String html =
         mvc.perform(get("/admin/lss-plants").param("q", plant.plantId).with(authentication(auth)))
             .andExpect(status().isOk())
@@ -72,8 +72,9 @@ class ConfiguredApiTests {
             .matcher(html);
     assertThat(form.find()).isTrue();
     assertThat(form.group(1))
-        .contains("value=\"Day Ahead\"", "selected=\"selected\"")
-        .doesNotContain("value=\"Rolling 24 Hour\"", "value=\"MMF\"");
+        .contains("value=\"Day Ahead\"", "type=\"hidden\"")
+        .doesNotContain("<select", "value=\"Rolling 24 Hour\"", "value=\"MMF\"");
+    assertThat(html).contains("plant-api-dataset-button\">Day Ahead</button>");
   }
 
   @Test

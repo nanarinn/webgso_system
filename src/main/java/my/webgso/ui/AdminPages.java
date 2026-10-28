@@ -126,19 +126,22 @@ final class AdminPages {
   private static Element plantRow(PageContext c, Map<String, Object> plant) {
     var endpoints = el("div").cls("plant-api-list");
     var apiRows = new ArrayList<Element>();
-    addPlantApi(apiRows, "DDQ", plant.get("ddqApiEndpoint"));
-    addPlantApi(apiRows, "MMF", plant.get("mmfApiEndpoint"));
+    var apiNames = new LinkedHashSet<String>();
+    addPlantApi(apiRows, apiNames, c, plant, "DDQ", plant.get("ddqApiEndpoint"));
+    addPlantApi(apiRows, apiNames, c, plant, "MMF", plant.get("mmfApiEndpoint"));
     Map<Integer, List<PlantApiConfiguration>> configured = c.value("plantApis");
     for (var api : configured.getOrDefault(((Number) plant.get("id")).intValue(), List.of()))
-      addPlantApi(apiRows, api.dataType, api.apiLink);
+      addPlantApi(apiRows, apiNames, c, plant, api.dataType, api.apiLink);
+    String apiPopup = "plant-apis-" + plant.get("id");
     if (apiRows.isEmpty()) endpoints.add(el("span", "Not configured").cls("plant-api-empty"));
     else {
-      String apiPopup = "plant-apis-" + plant.get("id");
+      for (String name : apiNames)
+        endpoints.add(
+            el("button", name)
+                .attr("type", "button")
+                .attr("popovertarget", apiPopup)
+                .cls("plant-api-dataset-button"));
       endpoints.add(
-          el("button", apiRows.size() + (apiRows.size() == 1 ? " API" : " APIs"))
-              .attr("type", "button")
-              .attr("popovertarget", apiPopup)
-              .cls("plant-api-count-button"),
           el(
                   "div",
                   el(
@@ -166,7 +169,8 @@ final class AdminPages {
                                       + (apiRows.size() == 1 ? "API" : "APIs"))
                               .cls("plant-api-total"))
                       .cls("plant-api-popup-toolbar"),
-                  el("div", el("span", "Dataset"), el("span", "API URL")).cls("plant-api-heading"),
+                  el("div", el("span", "Dataset"), el("span", "API URL"), el("span", "Action"))
+                      .cls("plant-api-heading"),
                   el("div", apiRows)
                       .cls("plant-api-scroll")
                       .attr("tabindex", "0")
@@ -189,27 +193,16 @@ final class AdminPages {
               .cls("plant-api-popup"));
     }
     boolean active = Boolean.TRUE.equals(plant.get("isActive"));
-    var availableTests = new LinkedHashSet<String>();
-    if (plant.get("ddqApiEndpoint") != null && !plant.get("ddqApiEndpoint").toString().isBlank())
-      availableTests.addAll(Policies.DDQ_TYPES);
-    if (plant.get("mmfApiEndpoint") != null && !plant.get("mmfApiEndpoint").toString().isBlank())
-      availableTests.add("MMF");
-    for (var api : configured.getOrDefault(((Number) plant.get("id")).intValue(), List.of()))
-      if (api.apiLink != null && !api.apiLink.isBlank()) availableTests.add(api.dataType);
-    var testTypes =
-        availableTests.isEmpty() ? List.of("No API configured") : List.copyOf(availableTests);
     String deletePopup = "delete-plant-" + plant.get("id");
     var actions =
         el(
                 "div",
                 action("Edit", url("/admin/lss-plants/edit", Map.of("id", plant.get("id"))), false),
-                c.post(
-                    "/admin/plants/" + plant.get("id") + "/test",
-                    "plant-test-form",
-                    select("dataType", testTypes, testTypes.getFirst())
-                        .flag("disabled", availableTests.isEmpty())
-                        .attr("aria-label", "Test API dataset for " + plant.get("name")),
-                    button("Test API", false).flag("disabled", availableTests.isEmpty())),
+                el("button", "Test API")
+                    .attr("type", "button")
+                    .attr("popovertarget", apiPopup)
+                    .flag("disabled", apiRows.isEmpty())
+                    .cls("secondary-action"),
                 el("button", "Delete")
                     .attr("type", "button")
                     .attr("popovertarget", deletePopup)
@@ -263,10 +256,26 @@ final class AdminPages {
         actions);
   }
 
-  private static void addPlantApi(List<Element> container, String label, Object endpoint) {
+  private static void addPlantApi(
+      List<Element> container,
+      Set<String> names,
+      PageContext c,
+      Map<String, Object> plant,
+      String label,
+      Object endpoint) {
     if (endpoint != null && !endpoint.toString().isBlank()) {
+      names.add(label);
       container.add(
-          el("div", el("strong", label), el("span", endpoint).attr("title", endpoint))
+          el(
+                  "div",
+                  el("strong", label),
+                  el("span", endpoint).attr("title", endpoint),
+                  c.post(
+                      "/admin/plants/" + plant.get("id") + "/test",
+                      "plant-inline-api-test",
+                      input("dataType", "hidden", label.equals("DDQ") ? "Rolling 24 Hour" : label),
+                      button("Test API", false)
+                          .attr("aria-label", "Test " + label + " API for " + plant.get("name"))))
               .cls("plant-api-item"));
     }
   }
