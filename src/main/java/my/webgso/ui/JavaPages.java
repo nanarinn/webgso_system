@@ -158,7 +158,7 @@ public final class JavaPages {
     var topbar =
         el(
                 "header",
-                el("div", el("span"), " Secure repository").cls("environment-badge"),
+                el("div", el("span"), " GSO Web Services").cls("environment-badge"),
                 el(
                         "div",
                         el(
