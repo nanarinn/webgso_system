@@ -62,9 +62,9 @@ final class AdminPages {
                 "Administration",
                 c.text("title"),
                 null,
-                editable && !resource.path().equals("/admin/anomalies")
-                    ? action("Add record", resource.path() + "/edit", true)
-                    : null),
+                resource.path().equals("/admin/anomalies")
+                    ? action("← Back to Data Quality", "/admin/data-quality", false)
+                    : editable ? action("Add record", resource.path() + "/edit", true) : null),
             tabs);
     page.add(
         el(
