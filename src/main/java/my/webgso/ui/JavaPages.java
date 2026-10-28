@@ -29,6 +29,7 @@ public final class JavaPages {
           case "resource" -> AdminPages.resource(c);
           case "edit" -> AdminPages.edit(c);
           case "users" -> AdminPages.users(c);
+          case "profile" -> ProfilePages.profile(c);
           default -> throw new IllegalArgumentException("Unknown page");
         };
     return document(c.text("title"), "", shell(c, content), false, false);
@@ -59,7 +60,7 @@ public final class JavaPages {
                 "/styles/interface.css",
                 "/styles/java.css",
                 "/styles/workspace-theme.css?v=4",
-                "/styles/workspace-panels.css?v=14");
+                "/styles/workspace-panels.css?v=15");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
       head.add(el("script").attr("src", "/scripts/plant-status.js?v=1").flag("defer", true));
@@ -89,7 +90,7 @@ public final class JavaPages {
     if (c.yes("isAdmin")) {
       for (Resources.Definition item : c.<Resources.Definition>list("navigation"))
         workspaceNav.add(navigation(c, item.title(), item.path()));
-      workspaceNav.add(navigation(c, "Admin Accounts", "/admin/users"));
+      workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
     }
     nav.add(
         el("div").cls("nav-spacer"),

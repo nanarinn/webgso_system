@@ -22,6 +22,7 @@ public class WebController {
   private final ReadingService readings;
   private final ReportService reports;
   private final ManualBatchService batches;
+  private final ProfileService profileService;
 
   public WebController(
       Store db,
@@ -30,7 +31,8 @@ public class WebController {
       CollectionService collection,
       ReadingService readings,
       ReportService reports,
-      ManualBatchService batches) {
+      ManualBatchService batches,
+      ProfileService profileService) {
     this.db = db;
     this.accounts = accounts;
     this.admin = admin;
@@ -38,6 +40,7 @@ public class WebController {
     this.readings = readings;
     this.reports = reports;
     this.batches = batches;
+    this.profileService = profileService;
   }
 
   static Accounts.Principal principal(Authentication auth) {
@@ -647,6 +650,50 @@ public class WebController {
       Authentication auth,
       RedirectAttributes flash) {
     return testPlant(testPlantId, dataType, auth, flash);
+  }
+
+  @GetMapping("/account/profile")
+  public String profile(Model model, Authentication auth) {
+    var user = db.find(ApplicationUser.class, principal(auth).id()).orElseThrow();
+    model.addAttribute("title", "My Profile");
+    model.addAttribute("profile", user);
+    if (!model.containsAttribute("profileForm"))
+      model.addAttribute(
+          "profileForm",
+          Map.of(
+              "displayName",
+              Accounts.displayName(user.displayName),
+              "username",
+              user.userName,
+              "email",
+              user.email,
+              "phone",
+              Objects.toString(user.phoneNumber, "")));
+    return "profile";
+  }
+
+  @PostMapping("/account/profile")
+  public String saveProfile(
+      @RequestParam String displayName,
+      @RequestParam String username,
+      @RequestParam String email,
+      @RequestParam(defaultValue = "") String phone,
+      Authentication auth,
+      RedirectAttributes flash) {
+    try {
+      profileService.update(principal(auth).id(), displayName, username, email, phone);
+      flash.addFlashAttribute("message", "Your profile has been updated.");
+    } catch (IllegalArgumentException | org.springframework.dao.DataIntegrityViolationException e) {
+      flash.addFlashAttribute(
+          "profileError",
+          e instanceof IllegalArgumentException
+              ? e.getMessage()
+              : "That username or email is already in use.");
+      flash.addFlashAttribute(
+          "profileForm",
+          Map.of("displayName", displayName, "username", username, "email", email, "phone", phone));
+    }
+    return "redirect:/account/profile";
   }
 
   @GetMapping("/admin/users")
