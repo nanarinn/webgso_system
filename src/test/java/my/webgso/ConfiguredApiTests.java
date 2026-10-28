@@ -75,6 +75,9 @@ class ConfiguredApiTests {
         .contains("value=\"Day Ahead\"", "type=\"hidden\"")
         .doesNotContain("<select", "value=\"Rolling 24 Hour\"", "value=\"MMF\"");
     assertThat(html).contains("plant-api-dataset-button\">Day Ahead</button>");
+    assertThat(html)
+        .contains("plant-table-api-test", "Test Day Ahead API for Saved API plant")
+        .doesNotContain("<th>Status</th>", "plant-status-toggle", "/status\"");
   }
 
   @Test

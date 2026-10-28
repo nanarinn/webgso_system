@@ -60,10 +60,8 @@ public final class JavaPages {
                 "/styles/interface.css",
                 "/styles/java.css",
                 "/styles/workspace-theme.css?v=4",
-                "/styles/workspace-panels.css?v=15");
+                "/styles/workspace-panels.css?v=16");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
-    if (!login)
-      head.add(el("script").attr("src", "/scripts/plant-status.js?v=1").flag("defer", true));
     if (refresh) head.add(el("meta").attr("http-equiv", "refresh").attr("content", "5"));
     return "<!doctype html>"
         + el("html", head, el("body", content).cls(bodyClass)).attr("lang", "en").render();

@@ -23,15 +23,7 @@ final class AdminPages {
     if (plants)
       headers =
           new ArrayList<>(
-              List.of(
-                  "ID",
-                  "Plant ID",
-                  "Plant Name",
-                  "State",
-                  "Capacity (MW)",
-                  "API",
-                  "Status",
-                  "Actions"));
+              List.of("ID", "Plant ID", "Plant Name", "State", "Capacity (MW)", "API", "Actions"));
     var rows = new ArrayList<Element>();
     for (Map<String, Object> record : c.<Map<String, Object>>list("rows")) {
       if (plants) {
@@ -137,10 +129,19 @@ final class AdminPages {
     else {
       for (String name : apiNames)
         endpoints.add(
-            el("button", name)
-                .attr("type", "button")
-                .attr("popovertarget", apiPopup)
-                .cls("plant-api-dataset-button"));
+            el(
+                    "div",
+                    el("button", name)
+                        .attr("type", "button")
+                        .attr("popovertarget", apiPopup)
+                        .cls("plant-api-dataset-button"),
+                    c.post(
+                        "/admin/plants/" + plant.get("id") + "/test",
+                        "plant-table-api-test",
+                        input("dataType", "hidden", name.equals("DDQ") ? "Rolling 24 Hour" : name),
+                        button("Test", false)
+                            .attr("aria-label", "Test " + name + " API for " + plant.get("name"))))
+                .cls("plant-api-table-item"));
       endpoints.add(
           el(
                   "div",
@@ -192,17 +193,11 @@ final class AdminPages {
               .attr("aria-labelledby", apiPopup + "-title")
               .cls("plant-api-popup"));
     }
-    boolean active = Boolean.TRUE.equals(plant.get("isActive"));
     String deletePopup = "delete-plant-" + plant.get("id");
     var actions =
         el(
                 "div",
                 action("Edit", url("/admin/lss-plants/edit", Map.of("id", plant.get("id"))), false),
-                el("button", "Test API")
-                    .attr("type", "button")
-                    .attr("popovertarget", apiPopup)
-                    .flag("disabled", apiRows.isEmpty())
-                    .cls("secondary-action"),
                 el("button", "Delete")
                     .attr("type", "button")
                     .attr("popovertarget", deletePopup)
@@ -239,26 +234,6 @@ final class AdminPages {
         plant.get("state"),
         plant.get("capacityMw"),
         endpoints,
-        c.post(
-                "/admin/plants/" + plant.get("id") + "/status",
-                "plant-status-toggle",
-                input("status", "hidden", active ? "Inactive" : "Active"),
-                el("button", active ? "Active" : "Inactive")
-                    .attr("type", "submit")
-                    .attr("aria-pressed", active)
-                    .attr("title", "Click to set " + (active ? "Inactive" : "Active"))
-                    .attr(
-                        "aria-label",
-                        (active ? "Active" : "Inactive")
-                            + " — click to "
-                            + (active ? "deactivate " : "activate ")
-                            + plant.get("name"))
-                    .cls("plant-status " + (active ? "plant-active" : "plant-inactive")),
-                el("span", "")
-                    .cls("plant-status-feedback")
-                    .attr("role", "status")
-                    .attr("aria-live", "polite"))
-            .attr("data-plant-name", plant.get("name")),
         actions);
   }
 
