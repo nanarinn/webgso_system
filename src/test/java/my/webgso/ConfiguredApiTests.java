@@ -246,7 +246,13 @@ class ConfiguredApiTests {
             .getResponse()
             .getContentAsString();
     assertThat(html)
-        .contains("configured.admin", "Success", "Failed", "123 ms", "42 ms", "401", "200");
+        .contains("configured.admin", "Success", "123 ms", "200")
+        .containsOnlyOnce(plant.name);
+    assertThat(
+            testHistory.allHistory(0).stream()
+                .filter(test -> test.plantId() == plant.id && test.dataset().equals("Day Ahead")))
+        .hasSize(1)
+        .allMatch(test -> test.outcome().equals("Success"));
     String table =
         mvc.perform(get("/admin/lss-plants").param("q", plant.plantId).with(authentication(auth)))
             .andExpect(status().isOk())
@@ -286,10 +292,15 @@ class ConfiguredApiTests {
   }
 
   @Test
-  void historyPaginatesWithoutLosingOlderTests() throws Exception {
-    for (int i = 0; i < 26; i++)
+  void historyPaginatesDistinctApisWithoutLosingOlderResults() throws Exception {
+    for (int i = 0; i < 26; i++) {
+      var other = new LssPlant();
+      other.plantId = "HISTORY-PAGE-" + i;
+      other.name = "History page plant " + i;
+      db.insert(other);
       testHistory.save(
-          plant.id, "Day Ahead", "configured.admin", true, null, System.nanoTime(), "Result " + i);
+          other.id, "Day Ahead", "configured.admin", true, null, System.nanoTime(), "Result " + i);
+    }
     String nextPage =
         mvc.perform(
                 get("/admin/api-test-history")

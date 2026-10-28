@@ -90,11 +90,17 @@ public class ApiTestHistoryService {
   }
 
   public List<Entry> allHistory(int page) {
-    return query("ORDER BY \"Id\" DESC LIMIT 25 OFFSET ?", page * 25);
+    return query(
+        "WHERE \"Id\" IN (SELECT MAX(\"Id\") FROM \"ApiTestHistory\" GROUP BY"
+            + " \"PlantId\",\"Dataset\") ORDER BY \"Id\" DESC LIMIT 25 OFFSET ?",
+        page * 25);
   }
 
   public long countAll() {
-    return jdbc.queryForObject("SELECT COUNT(*) FROM \"ApiTestHistory\"", Long.class);
+    return jdbc.queryForObject(
+        "SELECT COUNT(*) FROM (SELECT \"PlantId\",\"Dataset\" FROM \"ApiTestHistory\" GROUP BY"
+            + " \"PlantId\",\"Dataset\") latest",
+        Long.class);
   }
 
   private List<Entry> query(String predicate, Object... args) {

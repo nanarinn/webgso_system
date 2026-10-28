@@ -43,14 +43,14 @@ final class ApiHistoryPage {
         heading(
             "API testing",
             "API test history",
-            "All tested APIs across all plants.",
+            "Latest test result for each API across all plants.",
             action("Back to Plant Config", "/admin/lss-plants", false)),
         el(
                 "article",
                 el(
                         "p",
-                        "All saved API tests, newest first. Times use Malaysia Standard Time"
-                            + " (UTC+8).")
+                        "One row per plant and API. Retesting updates the displayed result. Times"
+                            + " use Malaysia Standard Time (UTC+8).")
                     .cls("api-history-note"),
                 table(
                     List.of(
