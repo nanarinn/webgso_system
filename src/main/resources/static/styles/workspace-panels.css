@@ -166,13 +166,15 @@
 .plant-api-empty { color: #6a7b70; }
 .plant-status { display: inline-flex; border-radius: 30px; padding: 6px 12px; font-size: 12px; font-weight: 700; }
 .plant-active { background: #e0efce; color: #205637; }
-.plant-inactive { background: #edf0eb; color: #647063; }
+.plant-inactive { background: #fde5e3; color: #a12424; }
 .plant-row-actions { display: grid; gap: 10px; min-width: 165px; }
 .plant-row-actions > a { text-align: center; }
 .app-content .plant-test-form { display: grid; gap: 8px; margin: 0; }
 .app-content .plant-test-form select { width: 100%; min-width: 0; font-size: 12px; padding: 9px; }
 .app-content .plant-row-actions :is(button, .secondary-action) { min-height: 38px; padding: 8px 14px; font-size: 12px; }
-.plant-status-control { display: grid; gap: 10px; justify-items: start; min-width: 125px; }
-.app-content .plant-status-form { display: grid; gap: 8px; margin: 0; width: 100%; }
-.app-content .plant-status-form select { width: 100%; min-width: 0; padding: 9px; font-size: 12px; }
-.app-content .plant-status-form button { min-height: 38px; padding: 8px 12px; font-size: 12px; }
+.app-content .plant-status-toggle { margin: 0; }
+.app-content .plant-status-toggle button { border: 1px solid transparent; min-height: 38px; padding: 8px 14px; cursor: pointer; box-shadow: none; }
+.app-content .plant-status-toggle .plant-active { background: #e0efce; color: #205637; }
+.app-content .plant-status-toggle .plant-inactive { background: #fde5e3; color: #a12424; }
+.app-content .plant-status-toggle button:hover { filter: brightness(.95); }
+.app-content .plant-status-toggle button:focus-visible { outline: 3px solid #7ba987; outline-offset: 3px; }
