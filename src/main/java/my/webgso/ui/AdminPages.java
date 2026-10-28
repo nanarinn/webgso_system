@@ -149,6 +149,15 @@ final class AdminPages {
               .cls("plant-api-popup"));
     }
     boolean active = Boolean.TRUE.equals(plant.get("isActive"));
+    var availableTests = new LinkedHashSet<String>();
+    if (plant.get("ddqApiEndpoint") != null && !plant.get("ddqApiEndpoint").toString().isBlank())
+      availableTests.addAll(Policies.DDQ_TYPES);
+    if (plant.get("mmfApiEndpoint") != null && !plant.get("mmfApiEndpoint").toString().isBlank())
+      availableTests.add("MMF");
+    for (var api : configured.getOrDefault(((Number) plant.get("id")).intValue(), List.of()))
+      if (api.apiLink != null && !api.apiLink.isBlank()) availableTests.add(api.dataType);
+    var testTypes =
+        availableTests.isEmpty() ? List.of("No API configured") : List.copyOf(availableTests);
     String deletePopup = "delete-plant-" + plant.get("id");
     var actions =
         el(
@@ -157,21 +166,14 @@ final class AdminPages {
                 c.post(
                     "/admin/plants/" + plant.get("id") + "/test",
                     "plant-test-form",
-                    select(
-                            "dataType",
-                            List.of(
+                    select("dataType", testTypes, testTypes.getFirst())
+                        .flag("disabled", availableTests.isEmpty())
+                        .attr("aria-label", "Test API dataset for " + plant.get("name")),
+                    button("Test API", false).flag("disabled", availableTests.isEmpty())),
                 el("button", "Delete")
                     .attr("type", "button")
                     .attr("popovertarget", deletePopup)
                     .cls("plant-delete-button"),
-                                "Rolling 24 Hour",
-                                "Day Ahead",
-                                "Week Ahead",
-                                "4 Month Ahead",
-                                "MMF"),
-                            "Rolling 24 Hour")
-                        .attr("aria-label", "Test API dataset for " + plant.get("name")),
-                    button("Test API", false)),
                 el(
                         "div",
                         el("h2", "Delete plant?").attr("id", deletePopup + "-title"),

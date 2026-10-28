@@ -244,6 +244,11 @@ public class CollectionService {
         links.isEmpty()
             ? (apiType.equals("MMF") ? plant.mmfApiEndpoint : plant.ddqApiEndpoint)
             : links.getFirst().apiLink;
+    if (url == null || url.isBlank())
+      throw new IllegalArgumentException(
+          "No API URL is configured for "
+              + type
+              + ". Choose a saved dataset or add its API URL in Edit.");
     try {
       var response = api.fetch(url);
       var parsed =
