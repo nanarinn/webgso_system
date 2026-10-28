@@ -43,6 +43,51 @@ class PlantStatusTests {
   }
 
   @Test
+  void inlineToggleReturnsJsonWithoutRedirectAndPersistsBothWays() throws Exception {
+    for (String next : new String[] {"Inactive", "Active"}) {
+      mvc.perform(
+              post("/admin/plants/" + plant.id + "/status/inline")
+                  .with(authentication(auth))
+                  .with(csrf())
+                  .param("status", next)
+                  .accept("application/json"))
+          .andExpect(status().isOk())
+          .andExpect(content().contentTypeCompatibleWith("application/json"))
+          .andExpect(header().doesNotExist("Location"))
+          .andExpect(jsonPath("$.status").value(next))
+          .andExpect(jsonPath("$.nextStatus").value(next.equals("Active") ? "Inactive" : "Active"));
+      assertThat(db.find(LssPlant.class, plant.id).orElseThrow().isActive)
+          .isEqualTo(next.equals("Active"));
+    }
+  }
+
+  @Test
+  void inlineToggleStillRequiresCsrfAndValidStatus() throws Exception {
+    String path = "/admin/plants/" + plant.id + "/status/inline";
+    mvc.perform(
+            post(path)
+                .with(authentication(auth))
+                .param("status", "Inactive")
+                .accept("application/json"))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            post(path)
+                .with(authentication(auth))
+                .with(csrf())
+                .param("status", "other")
+                .accept("application/json"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            post("/admin/plants/2147483647/status/inline")
+                .with(authentication(auth))
+                .with(csrf())
+                .param("status", "Inactive")
+                .accept("application/json"))
+        .andExpect(status().isBadRequest());
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().isActive).isTrue();
+  }
+
+  @Test
   void togglesBothWaysWithoutChangingOtherFields() throws Exception {
     for (String status : new String[] {"Inactive", "Active"}) {
       mvc.perform(

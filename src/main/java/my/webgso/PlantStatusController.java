@@ -1,5 +1,6 @@
 package my.webgso;
 
+import java.util.Map;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,21 @@ public class PlantStatusController {
       @RequestParam String status,
       Authentication auth,
       RedirectAttributes flash) {
+    updateStatus(id, status, auth);
+    flash.addFlashAttribute("message", "Plant status saved: " + status + ".");
+    return "redirect:/admin/lss-plants";
+  }
+
+  @PostMapping(value = "/admin/plants/{id}/status/inline", produces = "application/json")
+  @ResponseBody
+  @Transactional
+  public Map<String, String> updateInline(
+      @PathVariable int id, @RequestParam String status, Authentication auth) {
+    updateStatus(id, status, auth);
+    return Map.of("status", status, "nextStatus", status.equals("Active") ? "Inactive" : "Active");
+  }
+
+  private void updateStatus(int id, String status, Authentication auth) {
     if (!status.equals("Active") && !status.equals("Inactive"))
       throw new IllegalArgumentException("Choose Active or Inactive.");
     int changed =
@@ -39,7 +55,5 @@ public class PlantStatusController {
         Integer.toString(id),
         "Success",
         status);
-    flash.addFlashAttribute("message", "Plant status saved: " + status + ".");
-    return "redirect:/admin/lss-plants";
   }
 }

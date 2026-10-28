@@ -240,3 +240,6 @@
 .app-content .plant-delete-confirmation button { width: auto; min-width: 96px; }
 .schedule-row-actions { display: grid; gap: 10px; min-width: 100px; }
 .schedule-row-actions > a { text-align: center; padding: 6px; }
+.plant-status-feedback { display: block; min-height: 14px; margin-top: 4px; font-size: 10px; line-height: 1.4; color: #64786c; }
+.plant-status-feedback.has-error { color: #a12424; }
+.app-content .plant-status-toggle button:disabled { opacity: .6; cursor: progress; }

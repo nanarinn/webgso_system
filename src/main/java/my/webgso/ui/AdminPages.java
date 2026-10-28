@@ -240,19 +240,25 @@ final class AdminPages {
         plant.get("capacityMw"),
         endpoints,
         c.post(
-            "/admin/plants/" + plant.get("id") + "/status",
-            "plant-status-toggle",
-            input("status", "hidden", active ? "Inactive" : "Active"),
-            el("button", active ? "Active" : "Inactive")
-                .attr("type", "submit")
-                .attr("title", "Click to set " + (active ? "Inactive" : "Active"))
-                .attr(
-                    "aria-label",
-                    (active ? "Active" : "Inactive")
-                        + " — click to "
-                        + (active ? "deactivate " : "activate ")
-                        + plant.get("name"))
-                .cls("plant-status " + (active ? "plant-active" : "plant-inactive"))),
+                "/admin/plants/" + plant.get("id") + "/status",
+                "plant-status-toggle",
+                input("status", "hidden", active ? "Inactive" : "Active"),
+                el("button", active ? "Active" : "Inactive")
+                    .attr("type", "submit")
+                    .attr("aria-pressed", active)
+                    .attr("title", "Click to set " + (active ? "Inactive" : "Active"))
+                    .attr(
+                        "aria-label",
+                        (active ? "Active" : "Inactive")
+                            + " — click to "
+                            + (active ? "deactivate " : "activate ")
+                            + plant.get("name"))
+                    .cls("plant-status " + (active ? "plant-active" : "plant-inactive")),
+                el("span", "")
+                    .cls("plant-status-feedback")
+                    .attr("role", "status")
+                    .attr("aria-live", "polite"))
+            .attr("data-plant-name", plant.get("name")),
         actions);
   }
 
