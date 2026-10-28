@@ -110,7 +110,22 @@ final class AdminPages {
                                 "MMF"),
                             "Rolling 24 Hour")
                         .attr("aria-label", "Test API dataset for " + plant.get("name")),
-                    button("Test API", false)))
+                    button("Test API", false)),
+                el(
+                        "details",
+                        el("summary", "Delete").cls("plant-delete-button"),
+                        c.post(
+                            "/admin/plants/" + plant.get("id") + "/delete",
+                            "plant-delete-confirmation",
+                            input("confirmation", "hidden", "delete"),
+                            el("strong", "Delete " + plant.get("name") + "?"),
+                            el(
+                                "p",
+                                "Its API links and collection schedules will also be removed. This"
+                                    + " cannot be undone."),
+                            button("Confirm delete", false).cls("plant-delete-button"),
+                            link("Cancel", "/admin/lss-plants")))
+                    .cls("plant-delete-panel"))
             .cls("plant-row-actions");
     return row(
         plant.get("id"),
