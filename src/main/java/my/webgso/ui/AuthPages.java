@@ -83,7 +83,7 @@ final class AuthPages {
     if (c.parameter("error"))
       access.add(
           alert(
-              "Sign-in failed. Check your username/email, password and account approval. If your"
+              "Sign-in failed. Check your email, password and account approval. If your"
                   + " account is locked, try again after 15 minutes.",
               "error"));
     if (c.parameter("registered"))
@@ -93,7 +93,7 @@ final class AuthPages {
               "success"));
     if (c.parameter("reason")) access.add(alert("Your session ended. Sign in to continue.", ""));
     if (c.parameter("logout")) access.add(alert("You have signed out successfully.", "success"));
-    var identifier = authField("Username or email", "identifier", "text", "username");
+    var identifier = authField("Email", "identifier", "email", "username");
     // Controls retain their native browser validation, password-manager support and keyboard
     // behavior.
     access.add(
