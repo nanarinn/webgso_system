@@ -119,8 +119,17 @@ final class AdminPages {
         plant.get("state"),
         plant.get("capacityMw"),
         endpoints,
-        el("span", active ? "Active" : "Inactive")
-            .cls("plant-status " + (active ? "plant-active" : "plant-inactive")),
+        el(
+                "div",
+                el("span", active ? "Active" : "Inactive")
+                    .cls("plant-status " + (active ? "plant-active" : "plant-inactive")),
+                c.post(
+                    "/admin/plants/" + plant.get("id") + "/status",
+                    "plant-status-form",
+                    select("status", List.of("Active", "Inactive"), active ? "Active" : "Inactive")
+                        .attr("aria-label", "Status for " + plant.get("name")),
+                    button("Save status", false)))
+            .cls("plant-status-control"),
         actions);
   }
 

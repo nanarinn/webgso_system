@@ -172,3 +172,7 @@
 .app-content .plant-test-form { display: grid; gap: 8px; margin: 0; }
 .app-content .plant-test-form select { width: 100%; min-width: 0; font-size: 12px; padding: 9px; }
 .app-content .plant-row-actions :is(button, .secondary-action) { min-height: 38px; padding: 8px 14px; font-size: 12px; }
+.plant-status-control { display: grid; gap: 10px; justify-items: start; min-width: 125px; }
+.app-content .plant-status-form { display: grid; gap: 8px; margin: 0; width: 100%; }
+.app-content .plant-status-form select { width: 100%; min-width: 0; padding: 9px; font-size: 12px; }
+.app-content .plant-status-form button { min-height: 38px; padding: 8px 12px; font-size: 12px; }
