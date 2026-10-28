@@ -447,7 +447,6 @@ public class WebController {
     "/admin/report-recipients",
     "/admin/data-quality",
     "/admin/anomalies",
-    "/admin/audit-logs",
     "/admin/delivery-monitor"
   })
   public String resource(

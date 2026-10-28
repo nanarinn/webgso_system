@@ -63,12 +63,6 @@ public final class Resources {
               "status",
               "collectionJobId,dataType,fieldName,originalValue,reason,status,detectedAt"),
           def(
-              "/admin/audit-logs",
-              "Audit Logs",
-              AuditEvent.class,
-              "",
-              "occurredAt,actor,action,entityType,entityReference,result,detail"),
-          def(
               "/admin/delivery-monitor",
               "Delivery Monitor",
               ReportDeliveryAttempt.class,
