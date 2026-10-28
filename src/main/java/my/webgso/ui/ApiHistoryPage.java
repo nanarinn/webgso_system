@@ -38,9 +38,10 @@ final class ApiHistoryPage {
                   plant != null
                       ? c.post(
                           "/admin/api-test-history/retest",
-                          "api-retest-form api-failed-retest",
+                          "api-retest-form api-failed-retest plant-inline-api-test",
                           input("plantId", "hidden", test.plantId()),
                           input("dataType", "hidden", test.dataset()),
+                          input("page", "hidden", c.number("page")),
                           button("Test API again", true))
                       : null),
               test.httpStatus() == null ? "No response" : test.httpStatus(),

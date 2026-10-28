@@ -632,11 +632,20 @@ public class WebController {
       @RequestParam String dataType,
       Authentication auth,
       RedirectAttributes flash) {
+    addApiTestResult(id, dataType, auth, flash, false);
+    return "redirect:/admin/lss-plants";
+  }
+
+  private void addApiTestResult(
+      int id, String dataType, Authentication auth, RedirectAttributes flash, boolean retest) {
     String actor = principal(auth).username();
     long started = System.nanoTime();
     flash.addFlashAttribute("apiTestDataset", dataType);
     try {
-      var result = collection.testWithAnomalies(id, dataType, actor);
+      var result =
+          retest
+              ? collection.retestWithAnomalies(id, dataType, actor)
+              : collection.testWithAnomalies(id, dataType, actor);
       ApiTestDetails.add(flash, result.response());
       flash.addFlashAttribute(
           "apiTestTitle",
@@ -669,7 +678,6 @@ public class WebController {
     } finally {
       flash.addFlashAttribute("apiTestDurationMillis", (System.nanoTime() - started) / 1_000_000);
     }
-    return "redirect:/admin/lss-plants";
   }
 
   @PostMapping("/admin/plants/test")
@@ -702,10 +710,13 @@ public class WebController {
 
   @PostMapping("/admin/api-test-history/retest")
   public String retestApi(
-      @RequestParam int plantId, @RequestParam String dataType, Authentication auth) {
-    var job =
-        apiRetests.startSingle(principal(auth).id(), principal(auth).username(), plantId, dataType);
-    return "redirect:/admin/api-test-history/checks/" + job.id;
+      @RequestParam int plantId,
+      @RequestParam String dataType,
+      @RequestParam(defaultValue = "0") int page,
+      Authentication auth,
+      RedirectAttributes flash) {
+    addApiTestResult(plantId, dataType, auth, flash, true);
+    return "redirect:/admin/api-test-history?page=" + Math.clamp(page, 0, 100000);
   }
 
   @GetMapping("/admin/api-test-history/checks/{id}")

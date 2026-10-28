@@ -442,4 +442,73 @@ class ConfiguredApiTests {
         .contains("Test API again", "value=\"MMF\"");
     verifyNoInteractions(client);
   }
+
+  @Test
+  void historyRetestReturnsResultPopupAndKeepsHistoryPage() throws Exception {
+    testHistory.save(plant.id, "Day Ahead", "admin", true, null, System.nanoTime(), "Previous");
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "{\"timestamp\":\"2026-10-28T00:00:00\",\"power\":10}",
+                25))
+        .thenThrow(
+            new PlantApiClient.Failure(
+                "HTTP 503: unavailable",
+                new PlantApiClient.Response(503, "text/plain", "unavailable", 40)));
+    var success =
+        mvc.perform(
+                post("/admin/api-test-history/retest")
+                    .with(authentication(auth))
+                    .with(csrf())
+                    .param("plantId", String.valueOf(plant.id))
+                    .param("dataType", "Day Ahead")
+                    .param("page", "1"))
+            .andExpect(redirectedUrl("/admin/api-test-history?page=1"))
+            .andExpect(flash().attribute("apiTestTitle", "Connection successful"))
+            .andExpect(flash().attribute("apiTestHttpStatus", 200))
+            .andReturn();
+    String html =
+        mvc.perform(
+                get("/admin/api-test-history")
+                    .param("page", "1")
+                    .with(authentication(auth))
+                    .flashAttrs(success.getFlashMap()))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html)
+        .contains(
+            "<dialog",
+            "api-test-popup",
+            "Connection successful",
+            "method=\"dialog\"",
+            ">OK</button>");
+    var failed =
+        mvc.perform(
+                post("/admin/api-test-history/retest")
+                    .with(authentication(auth))
+                    .with(csrf())
+                    .param("plantId", String.valueOf(plant.id))
+                    .param("dataType", "Day Ahead"))
+            .andExpect(redirectedUrl("/admin/api-test-history?page=0"))
+            .andExpect(flash().attribute("apiTestTitle", "Connection test failed"))
+            .andExpect(flash().attribute("apiTestHttpStatus", 503))
+            .andReturn();
+    String failureHtml =
+        mvc.perform(
+                get("/admin/api-test-history")
+                    .with(authentication(auth))
+                    .flashAttrs(failed.getFlashMap()))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(failureHtml).contains("api-test-popup", "HTTP 503: unavailable", "Test API again");
+    assertThat(testHistory.allHistory(0).stream().filter(item -> item.plantId() == plant.id))
+        .hasSize(1);
+    verify(client, times(2)).fetch("https://example.test/day-ahead");
+  }
 }
