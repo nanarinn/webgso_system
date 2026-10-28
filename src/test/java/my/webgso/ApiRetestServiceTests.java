@@ -76,7 +76,7 @@ class ApiRetestServiceTests {
 
   @Test
   @Timeout(5)
-  void failedRetestChecksOnlySelectedApi() throws Exception {
+  void individualRetestChecksOnlySelectedApiForFailedAndSuccessfulResults() throws Exception {
     var plant = new LssPlant();
     plant.id = 1;
     plant.name = "Plant A";
@@ -102,17 +102,22 @@ class ApiRetestServiceTests {
                 ApiTestHistoryService.key(1, "Day Ahead"),
                 saved(2, 1, "Day Ahead")));
     when(collection.retestWithAnomalies(1, "MMF", "admin")).thenReturn(success());
+    when(collection.retestWithAnomalies(1, "Day Ahead", "admin")).thenReturn(success());
     var service = new ApiRetestService(db, history, collection);
     try {
-      var job = service.startFailed("owner", "admin", 1, "MMF");
+      var job = service.startSingle("owner", "admin", 1, "MMF");
       complete(job);
       assertThat(job.items).hasSize(1);
       assertThat(job.items.getFirst().status()).isEqualTo("Success");
       verify(collection).retestWithAnomalies(1, "MMF", "admin");
       verifyNoMoreInteractions(collection);
-      assertThatThrownBy(() -> service.startFailed("owner", "admin", 1, "Day Ahead"))
-          .isInstanceOf(IllegalArgumentException.class);
-      assertThatThrownBy(() -> service.startFailed("owner", "admin", 999, "MMF"))
+      var successfulApiJob = service.startSingle("owner", "admin", 1, "Day Ahead");
+      complete(successfulApiJob);
+      assertThat(successfulApiJob.items).hasSize(1);
+      assertThat(successfulApiJob.items.getFirst().dataset()).isEqualTo("Day Ahead");
+      verify(collection).retestWithAnomalies(1, "Day Ahead", "admin");
+      verifyNoMoreInteractions(collection);
+      assertThatThrownBy(() -> service.startSingle("owner", "admin", 999, "MMF"))
           .isInstanceOf(IllegalArgumentException.class);
     } finally {
       service.close();

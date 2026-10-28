@@ -701,10 +701,10 @@ public class WebController {
   }
 
   @PostMapping("/admin/api-test-history/retest")
-  public String retestFailedApi(
+  public String retestApi(
       @RequestParam int plantId, @RequestParam String dataType, Authentication auth) {
     var job =
-        apiRetests.startFailed(principal(auth).id(), principal(auth).username(), plantId, dataType);
+        apiRetests.startSingle(principal(auth).id(), principal(auth).username(), plantId, dataType);
     return "redirect:/admin/api-test-history/checks/" + job.id;
   }
 

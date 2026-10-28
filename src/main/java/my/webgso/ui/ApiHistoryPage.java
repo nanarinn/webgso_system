@@ -35,13 +35,13 @@ final class ApiHistoryPage {
                               + (test.outcome().equals("Success")
                                   ? "api-test-success"
                                   : "api-test-failed")),
-                  plant != null && "Failed".equals(test.outcome())
+                  plant != null
                       ? c.post(
                           "/admin/api-test-history/retest",
                           "api-retest-form api-failed-retest",
                           input("plantId", "hidden", test.plantId()),
                           input("dataType", "hidden", test.dataset()),
-                          button("Retest API", true))
+                          button("Test API again", true))
                       : null),
               test.httpStatus() == null ? "No response" : test.httpStatus(),
               test.responseMillis() == null ? "—" : test.responseMillis() + " ms",

@@ -46,11 +46,9 @@ public class ApiRetestService {
     return start(owner, actor, null, null);
   }
 
-  public synchronized Job startFailed(String owner, String actor, int plantId, String dataset) {
+  public synchronized Job startSingle(String owner, String actor, int plantId, String dataset) {
     var last = history.latest().get(ApiTestHistoryService.key(plantId, dataset));
-    if (last == null || !"Failed".equals(last.outcome()))
-      throw new IllegalArgumentException(
-          "Only APIs with a failed latest result can be retested here.");
+    if (last == null) throw new IllegalArgumentException("This API has no saved test to recheck.");
     return start(owner, actor, plantId, dataset);
   }
 

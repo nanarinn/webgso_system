@@ -418,7 +418,7 @@ class ConfiguredApiTests {
   }
 
   @Test
-  void historyOffersRetestForFailedApiOnly() throws Exception {
+  void historyOffersTestAgainForSuccessAndFailedApis() throws Exception {
     testHistory.save(plant.id, "Day Ahead", "admin", false, null, System.nanoTime(), "Timeout");
     testHistory.save(plant.id, "MMF", "admin", true, null, System.nanoTime(), "Passed");
     String html =
@@ -427,7 +427,7 @@ class ConfiguredApiTests {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat(html).contains("Retest API", "/admin/api-test-history/retest");
+    assertThat(html).contains("Test API again", "/admin/api-test-history/retest");
     var ownRows =
         Pattern.compile("<tr>.*?</tr>", Pattern.DOTALL)
             .matcher(html)
@@ -437,9 +437,9 @@ class ConfiguredApiTests {
             .toList();
     assertThat(ownRows).hasSize(2);
     assertThat(ownRows.stream().filter(row -> row.contains("Failed")).findFirst().orElseThrow())
-        .contains("Retest API", "value=\"Day Ahead\"");
+        .contains("Test API again", "value=\"Day Ahead\"");
     assertThat(ownRows.stream().filter(row -> row.contains("Success")).findFirst().orElseThrow())
-        .doesNotContain("Retest API");
+        .contains("Test API again", "value=\"MMF\"");
     verifyNoInteractions(client);
   }
 }
