@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 public class ApiAnomalyService {
   public record Report(
       long id,
+      int plantId,
       String plantCode,
       String plantName,
       String dataset,
@@ -83,6 +84,13 @@ public class ApiAnomalyService {
     return query("WHERE \"Id\"=?", id).stream().findFirst();
   }
 
+  public Map<Integer, Report> latestByPlant() {
+    var latest = new LinkedHashMap<Integer, Report>();
+    query("WHERE \"Id\" IN (SELECT MAX(\"Id\") FROM \"ApiValidationReports\" GROUP BY \"PlantId\")")
+        .forEach(report -> latest.put(report.plantId(), report));
+    return latest;
+  }
+
   private List<Report> query(String suffix, Object... args) {
     return jdbc.query(
         "SELECT * FROM \"ApiValidationReports\" " + suffix,
@@ -95,6 +103,7 @@ public class ApiAnomalyService {
           }
           return new Report(
               rs.getLong("Id"),
+              rs.getInt("PlantId"),
               rs.getString("PlantCode"),
               rs.getString("PlantName"),
               rs.getString("Dataset"),

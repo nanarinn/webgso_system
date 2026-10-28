@@ -171,4 +171,21 @@ class ConfiguredApiTests {
         .andExpect(status().isForbidden());
     verifyNoInteractions(client);
   }
+
+  @Test
+  void anomalyOverviewIncludesUntestedAndInactivePlantsWithoutCallingApis() throws Exception {
+    var second = new LssPlant();
+    second.plantId = "UNTESTED-INACTIVE";
+    second.name = "Untested inactive plant";
+    second.isActive = false;
+    db.insert(second);
+    String html =
+        mvc.perform(get("/admin/anomaly-reports").with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html).contains("All plants", plant.name, second.name, "Not tested");
+    verifyNoInteractions(client);
+  }
 }

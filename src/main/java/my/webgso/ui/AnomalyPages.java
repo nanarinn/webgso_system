@@ -5,6 +5,7 @@ import static my.webgso.ui.PageContext.*;
 
 import java.util.*;
 import my.webgso.ApiAnomalyService.Report;
+import my.webgso.Models.LssPlant;
 import my.webgso.ui.Html.Element;
 
 final class AnomalyPages {
@@ -26,6 +27,48 @@ final class AnomalyPages {
                     action("Collection anomalies", "/admin/anomalies", false),
                     action("Validation rules", "/admin/data-quality", false))
                 .cls("anomaly-navigation"));
+    var plants = new ArrayList<Element>();
+    Map<Integer, Report> latest = c.value("plantLatestReports");
+    for (LssPlant plant : c.<LssPlant>list("anomalyPlants")) {
+      var report = latest.get(plant.id);
+      plants.add(
+          row(
+              plant.plantId,
+              el("strong", plant.name),
+              report == null ? "—" : report.dataset(),
+              report == null
+                  ? "Not tested"
+                  : date(
+                      report.testedAt().atZoneSameInstant(java.time.ZoneId.of("Asia/Kuala_Lumpur")),
+                      "dd MMM yyyy, HH:mm"),
+              report == null
+                  ? "Not tested"
+                  : report.rules() == 0 ? "Not validated" : report.issueCount() + " anomalies",
+              report == null
+                  ? action("Test API", "/admin/lss-plants", false)
+                  : action(
+                      "View report", "/admin/anomaly-reports?reportId=" + report.id(), false)));
+    }
+    page.add(
+        el(
+                "article",
+                el("h2", "All plants"),
+                el(
+                        "p",
+                        "All registered plants, including those not tested yet. Results show the"
+                            + " latest saved API test for each plant.")
+                    .cls("anomaly-note"),
+                table(
+                    List.of(
+                        "Plant ID",
+                        "Plant",
+                        "Latest API tested",
+                        "Last tested (MYT)",
+                        "Result",
+                        "Details"),
+                    plants,
+                    "No plants registered yet."))
+            .cls("panel anomaly-report"));
     if (c.yes("reportNotFound"))
       page.add(
           el("p", "Report not found. Select a saved test below.")

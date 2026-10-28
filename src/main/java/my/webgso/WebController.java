@@ -672,13 +672,18 @@ public class WebController {
       jakarta.servlet.http.HttpServletResponse response,
       @RequestParam(required = false) Long reportId) {
     var recent = anomalyReports.recent();
-    var selected = reportId == null ? recent.stream().findFirst() : anomalyReports.find(reportId);
+    var selected =
+        reportId == null
+            ? Optional.<ApiAnomalyService.Report>empty()
+            : anomalyReports.find(reportId);
     if (reportId != null && selected.isEmpty()) {
       response.setStatus(404);
       model.addAttribute("reportNotFound", true);
     }
     model.addAttribute("title", "Anomalies");
     model.addAttribute("validationReports", recent);
+    model.addAttribute("anomalyPlants", db.list(LssPlant.class, "ORDER BY \"Name\", \"PlantId\""));
+    model.addAttribute("plantLatestReports", anomalyReports.latestByPlant());
     selected.ifPresent(value -> model.addAttribute("validationReport", value));
     return "anomaly-reports";
   }
