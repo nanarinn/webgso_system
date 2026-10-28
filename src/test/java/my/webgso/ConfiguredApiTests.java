@@ -338,7 +338,7 @@ class ConfiguredApiTests {
                     .with(csrf())
                     .param("dataType", "Day Ahead"))
             .andExpect(redirectedUrl("/admin/lss-plants"))
-            .andExpect(flash().attribute("apiTestTitle", "API sudah diuji"))
+            .andExpect(flash().attribute("apiTestTitle", "API already tested"))
             .andExpect(flash().attribute("apiTestAlreadyTested", true))
             .andReturn();
     String html =
@@ -351,7 +351,7 @@ class ConfiguredApiTests {
             .getResponse()
             .getContentAsString();
     assertThat(html)
-        .contains("API sudah diuji", "Ujian semula tidak dibenarkan")
+        .contains("API already tested", "Retesting is not allowed")
         .doesNotContain("HTTP status", "Preview response");
     assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(1);
     verify(client, times(1)).fetch("https://example.test/day-ahead");
