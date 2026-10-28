@@ -16,6 +16,7 @@ public class CollectionService {
   private final PlantApiClient api;
   private final PayloadTranslator translator;
   private final ValidationService validation;
+  private final ApiAnomalyService anomalyReports;
   private final TransactionTemplate transaction;
 
   public CollectionService(
@@ -24,12 +25,14 @@ public class CollectionService {
       PlantApiClient api,
       PayloadTranslator translator,
       ValidationService validation,
+      ApiAnomalyService anomalyReports,
       PlatformTransactionManager manager) {
     this.db = db;
     this.accounts = accounts;
     this.api = api;
     this.translator = translator;
     this.validation = validation;
+    this.anomalyReports = anomalyReports;
     transaction = new TransactionTemplate(manager);
   }
 
@@ -231,6 +234,13 @@ public class CollectionService {
   }
 
   public PlantApiClient.Response test(int id, String dataType, String actor) {
+    return testWithAnomalies(id, dataType, actor).response();
+  }
+
+  public record ApiTestResult(
+      PlantApiClient.Response response, long reportId, int readings, int issues, int rules) {}
+
+  public ApiTestResult testWithAnomalies(int id, String dataType, String actor) {
     var plant = db.find(LssPlant.class, id).orElseThrow();
     String type = Policies.canonical(dataType), apiType = type.equals("MMF") ? "MMF" : "DDQ";
     var links =
@@ -263,14 +273,21 @@ public class CollectionService {
               15);
       if (parsed.readings().isEmpty())
         throw new IllegalArgumentException("The API did not return readable measurements.");
+      var issues =
+          validation.evaluate(parsed.readings(), apiType, plant.capacityMw, parsed.issues());
+      int ruleCount =
+          (int) validation.rules().stream().filter(rule -> rule.dataType.equals(apiType)).count();
+      long reportId = anomalyReports.save(plant, type, parsed.readings().size(), ruleCount, issues);
       plant.apiConnectionStatus = "Connected";
-      plant.lastApiTestMessage = parsed.readings().size() + " readable value(s)";
+      plant.lastApiTestMessage =
+          parsed.readings().size() + " readable value(s); " + issues.size() + " anomaly/anomalies";
       plant.lastApiTestSource = apiType;
       plant.lastApiTestAt = OffsetDateTime.now(ZoneOffset.UTC);
       db.update(plant);
       accounts.audit(
           actor, "API test", "Plant", plant.plantId, "Success", plant.lastApiTestMessage);
-      return response;
+      return new ApiTestResult(
+          response, reportId, parsed.readings().size(), issues.size(), ruleCount);
     } catch (RuntimeException e) {
       plant.apiConnectionStatus = "Failed";
       plant.lastApiTestMessage = e.getMessage();

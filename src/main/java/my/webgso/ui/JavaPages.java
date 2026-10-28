@@ -30,6 +30,7 @@ public final class JavaPages {
           case "edit" -> AdminPages.edit(c);
           case "users" -> AdminPages.users(c);
           case "profile" -> ProfilePages.profile(c);
+          case "anomaly-reports" -> AnomalyPages.reports(c);
           default -> throw new IllegalArgumentException("Unknown page");
         };
     return document(c.text("title"), "", shell(c, content), false, false);
@@ -60,7 +61,7 @@ public final class JavaPages {
                 "/styles/interface.css",
                 "/styles/java.css",
                 "/styles/workspace-theme.css?v=4",
-                "/styles/workspace-panels.css?v=17");
+                "/styles/workspace-panels.css?v=18");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
       head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));
@@ -106,6 +107,7 @@ public final class JavaPages {
       for (Resources.Definition item : c.<Resources.Definition>list("navigation"))
         workspaceNav.add(navigation(c, item.title(), item.path()));
       workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
+      workspaceNav.add(navigation(c, "Anomalies", "/admin/anomaly-reports"));
     }
     nav.add(
         el("div").cls("nav-spacer"),
@@ -192,6 +194,12 @@ public final class JavaPages {
                     el("p", "API connection test").cls("section-label"),
                     el("h2", c.text("apiTestTitle")).attr("id", "api-test-title"),
                     el("p", c.text("apiTestMessage")).attr("id", "api-test-message"),
+                    c.model().get("apiTestReportId") == null
+                        ? null
+                        : action(
+                            "View anomaly report",
+                            "/admin/anomaly-reports?reportId=" + c.number("apiTestReportId"),
+                            false),
                     el(
                             "form",
                             el("button", "OK")

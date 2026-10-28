@@ -23,6 +23,7 @@ public class WebController {
   private final ReportService reports;
   private final ManualBatchService batches;
   private final ProfileService profileService;
+  private final ApiAnomalyService anomalyReports;
 
   public WebController(
       Store db,
@@ -32,7 +33,8 @@ public class WebController {
       ReadingService readings,
       ReportService reports,
       ManualBatchService batches,
-      ProfileService profileService) {
+      ProfileService profileService,
+      ApiAnomalyService anomalyReports) {
     this.db = db;
     this.accounts = accounts;
     this.admin = admin;
@@ -41,6 +43,7 @@ public class WebController {
     this.reports = reports;
     this.batches = batches;
     this.profileService = profileService;
+    this.anomalyReports = anomalyReports;
   }
 
   static Accounts.Principal principal(Authentication auth) {
@@ -628,9 +631,20 @@ public class WebController {
       RedirectAttributes flash) {
     String actor = principal(auth).username();
     try {
-      collection.test(id, dataType, actor);
-      flash.addFlashAttribute("apiTestTitle", "Connection successful");
-      flash.addFlashAttribute("apiTestMessage", "The API returned readable measurements.");
+      var result = collection.testWithAnomalies(id, dataType, actor);
+      flash.addFlashAttribute(
+          "apiTestTitle",
+          result.issues() > 0 ? "Connected — anomalies detected" : "Connection successful");
+      flash.addFlashAttribute(
+          "apiTestMessage",
+          result.readings()
+              + " readable measurements; "
+              + result.issues()
+              + " anomalies detected. "
+              + (result.rules() == 0
+                  ? "No active validation rules are configured for this data type."
+                  : "Checked against " + result.rules() + " active validation rules."));
+      flash.addFlashAttribute("apiTestReportId", result.reportId());
     } catch (NoSuchElementException e) {
       flash.addFlashAttribute("apiTestTitle", "Plant not found");
       flash.addFlashAttribute(
@@ -650,6 +664,23 @@ public class WebController {
       Authentication auth,
       RedirectAttributes flash) {
     return testPlant(testPlantId, dataType, auth, flash);
+  }
+
+  @GetMapping("/admin/anomaly-reports")
+  public String anomalyReports(
+      Model model,
+      jakarta.servlet.http.HttpServletResponse response,
+      @RequestParam(required = false) Long reportId) {
+    var recent = anomalyReports.recent();
+    var selected = reportId == null ? recent.stream().findFirst() : anomalyReports.find(reportId);
+    if (reportId != null && selected.isEmpty()) {
+      response.setStatus(404);
+      model.addAttribute("reportNotFound", true);
+    }
+    model.addAttribute("title", "Anomalies");
+    model.addAttribute("validationReports", recent);
+    selected.ifPresent(value -> model.addAttribute("validationReport", value));
+    return "anomaly-reports";
   }
 
   @GetMapping("/account/profile")
