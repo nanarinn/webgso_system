@@ -700,6 +700,14 @@ public class WebController {
     return "redirect:/admin/api-test-history/checks/" + job.id;
   }
 
+  @PostMapping("/admin/api-test-history/retest")
+  public String retestFailedApi(
+      @RequestParam int plantId, @RequestParam String dataType, Authentication auth) {
+    var job =
+        apiRetests.startFailed(principal(auth).id(), principal(auth).username(), plantId, dataType);
+    return "redirect:/admin/api-test-history/checks/" + job.id;
+  }
+
   @GetMapping("/admin/api-test-history/checks/{id}")
   public String apiRetestProgress(@PathVariable String id, Authentication auth, Model model) {
     model.addAttribute("title", "API check progress");

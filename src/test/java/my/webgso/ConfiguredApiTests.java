@@ -398,10 +398,48 @@ class ConfiguredApiTests {
 
   @Test
   void testAllRequiresAuthenticationAndCsrf() throws Exception {
+    mvc.perform(
+            post("/admin/api-test-history/retest")
+                .with(authentication(auth))
+                .param("plantId", "1")
+                .param("dataType", "MMF"))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            post("/admin/api-test-history/retest")
+                .with(csrf())
+                .param("plantId", "1")
+                .param("dataType", "MMF"))
+        .andExpect(status().is3xxRedirection());
     mvc.perform(post("/admin/api-test-history/test-all").with(authentication(auth)))
         .andExpect(status().isForbidden());
     mvc.perform(post("/admin/api-test-history/test-all").with(csrf()))
         .andExpect(status().is3xxRedirection());
+    verifyNoInteractions(client);
+  }
+
+  @Test
+  void historyOffersRetestForFailedApiOnly() throws Exception {
+    testHistory.save(plant.id, "Day Ahead", "admin", false, null, System.nanoTime(), "Timeout");
+    testHistory.save(plant.id, "MMF", "admin", true, null, System.nanoTime(), "Passed");
+    String html =
+        mvc.perform(get("/admin/api-test-history").with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html).contains("Retest API", "/admin/api-test-history/retest");
+    var ownRows =
+        Pattern.compile("<tr>.*?</tr>", Pattern.DOTALL)
+            .matcher(html)
+            .results()
+            .map(java.util.regex.MatchResult::group)
+            .filter(row -> row.contains("Saved API plant"))
+            .toList();
+    assertThat(ownRows).hasSize(2);
+    assertThat(ownRows.stream().filter(row -> row.contains("Failed")).findFirst().orElseThrow())
+        .contains("Retest API", "value=\"Day Ahead\"");
+    assertThat(ownRows.stream().filter(row -> row.contains("Success")).findFirst().orElseThrow())
+        .doesNotContain("Retest API");
     verifyNoInteractions(client);
   }
 }

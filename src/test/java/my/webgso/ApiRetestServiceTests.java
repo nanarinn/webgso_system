@@ -76,6 +76,51 @@ class ApiRetestServiceTests {
 
   @Test
   @Timeout(5)
+  void failedRetestChecksOnlySelectedApi() throws Exception {
+    var plant = new LssPlant();
+    plant.id = 1;
+    plant.name = "Plant A";
+    var previous = saved(1, 1, "MMF");
+    var failed =
+        new ApiTestHistoryService.Entry(
+            previous.id(),
+            1,
+            "MMF",
+            previous.testedAt(),
+            "admin",
+            "Failed",
+            503,
+            5L,
+            10L,
+            "Unavailable");
+    when(db.list(LssPlant.class, "")).thenReturn(List.of(plant));
+    when(history.latest())
+        .thenReturn(
+            Map.of(
+                ApiTestHistoryService.key(1, "MMF"),
+                failed,
+                ApiTestHistoryService.key(1, "Day Ahead"),
+                saved(2, 1, "Day Ahead")));
+    when(collection.retestWithAnomalies(1, "MMF", "admin")).thenReturn(success());
+    var service = new ApiRetestService(db, history, collection);
+    try {
+      var job = service.startFailed("owner", "admin", 1, "MMF");
+      complete(job);
+      assertThat(job.items).hasSize(1);
+      assertThat(job.items.getFirst().status()).isEqualTo("Success");
+      verify(collection).retestWithAnomalies(1, "MMF", "admin");
+      verifyNoMoreInteractions(collection);
+      assertThatThrownBy(() -> service.startFailed("owner", "admin", 1, "Day Ahead"))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThatThrownBy(() -> service.startFailed("owner", "admin", 999, "MMF"))
+          .isInstanceOf(IllegalArgumentException.class);
+    } finally {
+      service.close();
+    }
+  }
+
+  @Test
+  @Timeout(5)
   void duplicateClicksReuseRunningJobAndOtherAccountsCannotReadIt() throws Exception {
     var plant = new LssPlant();
     plant.id = 1;

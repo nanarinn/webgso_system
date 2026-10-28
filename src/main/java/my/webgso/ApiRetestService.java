@@ -43,6 +43,18 @@ public class ApiRetestService {
   }
 
   public synchronized Job start(String owner, String actor) {
+    return start(owner, actor, null, null);
+  }
+
+  public synchronized Job startFailed(String owner, String actor, int plantId, String dataset) {
+    var last = history.latest().get(ApiTestHistoryService.key(plantId, dataset));
+    if (last == null || !"Failed".equals(last.outcome()))
+      throw new IllegalArgumentException(
+          "Only APIs with a failed latest result can be retested here.");
+    return start(owner, actor, plantId, dataset);
+  }
+
+  private Job start(String owner, String actor, Integer plantId, String dataset) {
     for (var existing : jobs.values())
       if (!existing.complete) {
         if (existing.owner.equals(owner)) return existing;
@@ -55,6 +67,10 @@ public class ApiRetestService {
     var items =
         history.latest().values().stream()
             .filter(test -> plants.containsKey(test.plantId()))
+            .filter(
+                test ->
+                    plantId == null
+                        || (test.plantId() == plantId && test.dataset().equals(dataset)))
             .sorted(
                 Comparator.comparingInt(ApiTestHistoryService.Entry::plantId)
                     .thenComparing(ApiTestHistoryService.Entry::dataset))
