@@ -22,7 +22,7 @@ public final class Resources {
       List.of(
           def(
               "/admin/lss-plants",
-              "LSS Plant Config",
+              "Plant Config",
               LssPlant.class,
               "plantId,name,state,capacityMw,ddqApiEndpoint,mmfApiEndpoint,isActive",
               "plantId,name,state,capacityMw,ddqApiEndpoint,mmfApiEndpoint,isActive"),

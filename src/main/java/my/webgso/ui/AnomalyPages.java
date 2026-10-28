@@ -130,7 +130,7 @@ final class AnomalyPages {
                         "Anomalies",
                         "Details"),
                     history,
-                    "No API tests yet. Open LSS Plant Config and press Test beside an API."))
+                    "No API tests yet. Open Plant Config and press Test beside an API."))
             .cls("panel anomaly-report"));
   }
 
