@@ -100,7 +100,7 @@ public final class JavaPages {
                 el(
                     "span",
                     el("strong", Branding.NAME),
-                    el("small", "Large Scale Solar Repository")))
+                    el("small", "Web Services")))
             .cls("sidebar-status"),
         el(
                 "footer",
