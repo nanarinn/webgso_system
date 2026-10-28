@@ -50,6 +50,10 @@ public class PlantApiClient {
   }
 
   public URI validate(String url) {
+    if (url == null || url.isBlank())
+      throw new IllegalArgumentException(
+          "No API URL is configured. Edit this plant and add an API URL before testing. HTTP is"
+              + " supported for hosts enabled in server configuration.");
     URI uri;
     try {
       uri = URI.create(url);

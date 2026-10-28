@@ -48,6 +48,23 @@ class PasswordAndNetworkTests {
   }
 
   @Test
+  void localHttpApiHostsAreAllowedAndMissingUrlsHaveClearMessage() {
+    var client =
+        new PlantApiClient(
+            "localhost,127.0.0.1,::1", "localhost,127.0.0.1,::1,43.216.231.199", 1024);
+    assertThat(client.validate("http://localhost:8000/BDNS/live/mmf").getScheme())
+        .isEqualTo("http");
+    assertThat(client.validate("http://43.216.231.199/kmpr/data").getHost())
+        .isEqualTo("43.216.231.199");
+    assertThatThrownBy(() -> client.validate("http://169.254.169.254/metadata"))
+        .isInstanceOf(IllegalArgumentException.class);
+    for (String missing : Arrays.asList(null, "", " "))
+      assertThatThrownBy(() -> client.validate(missing))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("No API URL is configured");
+  }
+
+  @Test
   void internalDestinationsRequireExplicitAllowlisting() throws Exception {
     for (String value :
         List.of(
