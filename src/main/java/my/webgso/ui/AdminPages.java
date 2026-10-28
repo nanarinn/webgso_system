@@ -85,13 +85,26 @@ final class AdminPages {
 
   private static Element plantRow(PageContext c, Map<String, Object> plant) {
     var endpoints = el("div").cls("plant-api-list");
-    int endpointCount = 0;
-    endpointCount += addPlantApi(endpoints, "DDQ", plant.get("ddqApiEndpoint"));
-    endpointCount += addPlantApi(endpoints, "MMF", plant.get("mmfApiEndpoint"));
+    var apiCards = new ArrayList<Element>();
+    addPlantApi(apiCards, "DDQ", plant.get("ddqApiEndpoint"));
+    addPlantApi(apiCards, "MMF", plant.get("mmfApiEndpoint"));
     Map<Integer, List<PlantApiConfiguration>> configured = c.value("plantApis");
     for (var api : configured.getOrDefault(((Number) plant.get("id")).intValue(), List.of()))
-      endpointCount += addPlantApi(endpoints, api.dataType, api.apiLink);
-    if (endpointCount == 0) endpoints.add(el("span", "Not configured").cls("plant-api-empty"));
+      addPlantApi(apiCards, api.dataType, api.apiLink);
+    if (apiCards.isEmpty()) endpoints.add(el("span", "Not configured").cls("plant-api-empty"));
+    else {
+      endpoints.add(
+          el("span", apiCards.size() + (apiCards.size() == 1 ? " API" : " APIs"))
+              .cls("plant-api-count"),
+          apiCards.subList(0, Math.min(2, apiCards.size())));
+      if (apiCards.size() > 2)
+        endpoints.add(
+            el(
+                    "details",
+                    el("summary", "View all " + apiCards.size() + " APIs"),
+                    el("div", apiCards.subList(2, apiCards.size())).cls("plant-api-more-list"))
+                .cls("plant-api-more"));
+    }
     boolean active = Boolean.TRUE.equals(plant.get("isActive"));
     String deletePopup = "delete-plant-" + plant.get("id");
     var actions =
@@ -165,12 +178,12 @@ final class AdminPages {
         actions);
   }
 
-  private static int addPlantApi(Element container, String label, Object endpoint) {
+  private static void addPlantApi(List<Element> container, String label, Object endpoint) {
     if (endpoint != null && !endpoint.toString().isBlank()) {
-      container.add(el("div", el("strong", label), el("span", endpoint)).cls("plant-api-item"));
-      return 1;
+      container.add(
+          el("div", el("strong", label), el("span", endpoint).attr("title", endpoint))
+              .cls("plant-api-item"));
     }
-    return 0;
   }
 
   static Element edit(PageContext c) {
