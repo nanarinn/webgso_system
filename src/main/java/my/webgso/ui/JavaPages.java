@@ -60,11 +60,28 @@ public final class JavaPages {
                 "/styles/interface.css",
                 "/styles/java.css",
                 "/styles/workspace-theme.css?v=4",
-                "/styles/workspace-panels.css?v=16");
+                "/styles/workspace-panels.css?v=17");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
+    if (!login)
+      head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));
     if (refresh) head.add(el("meta").attr("http-equiv", "refresh").attr("content", "5"));
     return "<!doctype html>"
-        + el("html", head, el("body", content).cls(bodyClass)).attr("lang", "en").render();
+        + el("html", head, el("body", content, login ? null : apiLoading()).cls(bodyClass))
+            .attr("lang", "en")
+            .render();
+  }
+
+  private static Element apiLoading() {
+    return el(
+            "dialog",
+            el("span").cls("api-loading-spinner").attr("aria-hidden", "true"),
+            el("h2", "Testing API…").attr("id", "api-loading-title"),
+            el("p", "Please wait while we test the selected API.")
+                .attr("id", "api-loading-message"))
+        .attr("id", "api-loading")
+        .cls("api-loading")
+        .attr("aria-labelledby", "api-loading-title")
+        .attr("aria-describedby", "api-loading-message");
   }
 
   private static Element navigation(PageContext c, String title, String href) {
@@ -95,10 +112,7 @@ public final class JavaPages {
         el(
                 "div",
                 el("span").cls("status-light"),
-                el(
-                    "span",
-                    el("strong", Branding.NAME),
-                    el("small", "Web Services")))
+                el("span", el("strong", Branding.NAME), el("small", "Web Services")))
             .cls("sidebar-status"),
         el(
                 "footer",
