@@ -16,16 +16,20 @@ final class ApiTestPopup {
             el("p", "API connection test · " + c.text("apiTestDataset")).cls("section-label"),
             el("h2", c.text("apiTestTitle")).attr("id", "api-test-title"),
             el("p", c.text("apiTestMessage")).attr("id", "api-test-message"),
-            el(
-                    "div",
-                    metric(
-                        "HTTP status", hasResponse ? c.text("apiTestHttpStatus") : "No response"),
-                    metric(
-                        hasResponse ? "Response time" : "Test duration",
-                        c.text(hasResponse ? "apiTestResponseMillis" : "apiTestDurationMillis")
-                            + " ms"),
-                    metric("Response size", hasResponse ? c.text("apiTestBytes") + " bytes" : "—"))
-                .cls("api-test-metrics"));
+            c.yes("apiTestAlreadyTested")
+                ? null
+                : el(
+                        "div",
+                        metric(
+                            "HTTP status",
+                            hasResponse ? c.text("apiTestHttpStatus") : "No response"),
+                        metric(
+                            hasResponse ? "Response time" : "Test duration",
+                            c.text(hasResponse ? "apiTestResponseMillis" : "apiTestDurationMillis")
+                                + " ms"),
+                        metric(
+                            "Response size", hasResponse ? c.text("apiTestBytes") + " bytes" : "—"))
+                    .cls("api-test-metrics"));
     if (hasResponse)
       popup.add(
           el("p", "Content type: " + c.text("apiTestContentType")).cls("api-test-type"),

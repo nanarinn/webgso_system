@@ -647,6 +647,10 @@ public class WebController {
               + (result.rules() == 0
                   ? "No active validation rules are configured for this data type."
                   : "Checked against " + result.rules() + " active validation rules."));
+    } catch (ApiTestHistoryService.AlreadyTested e) {
+      flash.addFlashAttribute("apiTestTitle", "API sudah diuji");
+      flash.addFlashAttribute("apiTestMessage", e.getMessage());
+      flash.addFlashAttribute("apiTestAlreadyTested", true);
     } catch (NoSuchElementException e) {
       flash.addFlashAttribute("apiTestTitle", "Plant not found");
       flash.addFlashAttribute(

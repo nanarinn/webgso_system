@@ -11,3 +11,9 @@ CREATE TABLE IF NOT EXISTS "ApiTestHistory" (
  "Message" text NOT NULL
 );
 CREATE INDEX IF NOT EXISTS "IX_ApiTestHistory_Plant_Dataset_Id" ON "ApiTestHistory" ("PlantId","Dataset","Id");
+CREATE TABLE IF NOT EXISTS "ApiTestClaims" (
+ "PlantId" integer NOT NULL,
+ "Dataset" text NOT NULL,
+ "StartedAt" timestamp with time zone NOT NULL,
+ PRIMARY KEY ("PlantId","Dataset")
+);

@@ -247,6 +247,14 @@ public class CollectionService {
     long started = System.nanoTime();
     var plant = db.find(LssPlant.class, id).orElseThrow();
     String type = Policies.canonical(dataType), apiType = type.equals("MMF") ? "MMF" : "DDQ";
+    boolean claimed =
+        Boolean.TRUE.equals(
+            transaction.execute(
+                status -> {
+                  db.list(LssPlant.class, "WHERE \"Id\"=? FOR UPDATE", id);
+                  return testHistory.claim(id, type);
+                }));
+    if (!claimed) throw new ApiTestHistoryService.AlreadyTested();
     var links =
         db.list(
             PlantApiConfiguration.class,

@@ -41,6 +41,31 @@ public class ApiTestHistoryService {
     return plantId + ":" + Policies.canonical(dataset);
   }
 
+  // Called while holding the plant row lock, before making any outbound request.
+  public boolean claim(int plantId, String dataset) {
+    if (count(plantId, dataset) > 0
+        || jdbc.queryForObject(
+                "SELECT COUNT(*) FROM \"ApiTestClaims\" WHERE \"PlantId\"=? AND \"Dataset\"=?",
+                Long.class,
+                plantId,
+                dataset)
+            > 0) return false;
+    jdbc.update(
+        "INSERT INTO \"ApiTestClaims\" (\"PlantId\",\"Dataset\",\"StartedAt\") VALUES (?,?,?)",
+        plantId,
+        dataset,
+        OffsetDateTime.now(ZoneOffset.UTC));
+    return true;
+  }
+
+  public static final class AlreadyTested extends IllegalArgumentException {
+    public AlreadyTested() {
+      super(
+          "API ini sudah diuji atau sedang diuji. Ujian semula tidak dibenarkan. Keputusan yang"
+              + " disimpan boleh dilihat dalam API test history.");
+    }
+  }
+
   public void save(
       int plantId,
       String dataset,

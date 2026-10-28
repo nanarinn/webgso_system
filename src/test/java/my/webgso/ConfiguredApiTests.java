@@ -217,7 +217,7 @@ class ConfiguredApiTests {
   }
 
   @Test
-  void historyStoresFailedAndSuccessfulTestsWithLatestStatusAndNoExtraApiCalls() throws Exception {
+  void failedFirstTestAlsoBlocksFurtherApiRequests() throws Exception {
     when(client.fetch("https://example.test/day-ahead"))
         .thenThrow(
             new PlantApiClient.Failure(
@@ -231,11 +231,12 @@ class ConfiguredApiTests {
                 123));
     assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "configured.admin"))
         .isInstanceOf(PlantApiClient.Failure.class);
-    collection.test(plant.id, "Day Ahead", "configured.admin");
-    assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(2);
+    assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "configured.admin"))
+        .isInstanceOf(ApiTestHistoryService.AlreadyTested.class);
+    assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(1);
     var latest = testHistory.latest().get(ApiTestHistoryService.key(plant.id, "Day Ahead"));
-    assertThat(latest.outcome()).isEqualTo("Success");
-    assertThat(latest.responseMillis()).isEqualTo(123L);
+    assertThat(latest.outcome()).isEqualTo("Failed");
+    assertThat(latest.responseMillis()).isEqualTo(42L);
     String html =
         mvc.perform(
                 get("/admin/api-test-history")
@@ -246,21 +247,21 @@ class ConfiguredApiTests {
             .getResponse()
             .getContentAsString();
     assertThat(html)
-        .contains("configured.admin", "Success", "123 ms", "200")
+        .contains("configured.admin", "Failed", "42 ms", "401")
         .containsOnlyOnce(plant.name);
     assertThat(
             testHistory.allHistory(0).stream()
                 .filter(test -> test.plantId() == plant.id && test.dataset().equals("Day Ahead")))
         .hasSize(1)
-        .allMatch(test -> test.outcome().equals("Success"));
+        .allMatch(test -> test.outcome().equals("Failed"));
     String table =
         mvc.perform(get("/admin/lss-plants").param("q", plant.plantId).with(authentication(auth)))
             .andExpect(status().isOk())
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat(table).contains("api-test-success", "API test history");
-    verify(client, times(2)).fetch("https://example.test/day-ahead");
+    assertThat(table).contains("api-test-failed", "API test history");
+    verify(client, times(1)).fetch("https://example.test/day-ahead");
   }
 
   @Test
@@ -312,6 +313,57 @@ class ConfiguredApiTests {
             .getResponse()
             .getContentAsString();
     assertThat(nextPage).contains("Result 0", "Previous", "Page 2").doesNotContain("Result 25");
+    verifyNoInteractions(client);
+  }
+
+  @Test
+  void repeatedTestShowsAlreadyTestedPopupAndDoesNotCallApiOrAddHistory() throws Exception {
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "{\"timestamp\":\"2026-10-28T00:00:00\",\"power\":10}",
+                123));
+    mvc.perform(
+            post("/admin/plants/" + plant.id + "/test")
+                .with(authentication(auth))
+                .with(csrf())
+                .param("dataType", "Day Ahead"))
+        .andExpect(flash().attribute("apiTestHttpStatus", 200));
+    var repeated =
+        mvc.perform(
+                post("/admin/plants/" + plant.id + "/test")
+                    .with(authentication(auth))
+                    .with(csrf())
+                    .param("dataType", "Day Ahead"))
+            .andExpect(redirectedUrl("/admin/lss-plants"))
+            .andExpect(flash().attribute("apiTestTitle", "API sudah diuji"))
+            .andExpect(flash().attribute("apiTestAlreadyTested", true))
+            .andReturn();
+    String html =
+        mvc.perform(
+                get("/admin/lss-plants")
+                    .with(authentication(auth))
+                    .flashAttrs(repeated.getFlashMap()))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html)
+        .contains("API sudah diuji", "Ujian semula tidak dibenarkan")
+        .doesNotContain("HTTP status", "Preview response");
+    assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(1);
+    verify(client, times(1)).fetch("https://example.test/day-ahead");
+  }
+
+  @Test
+  void testsSavedBeforeOneTimePolicyAreAlsoBlocked() {
+    testHistory.save(
+        plant.id, "Day Ahead", "previous.admin", true, null, System.nanoTime(), "Existing test");
+    assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "configured.admin"))
+        .isInstanceOf(ApiTestHistoryService.AlreadyTested.class);
+    assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(1);
     verifyNoInteractions(client);
   }
 }

@@ -49,8 +49,8 @@ final class ApiHistoryPage {
                 "article",
                 el(
                         "p",
-                        "One row per plant and API. Retesting updates the displayed result. Times"
-                            + " use Malaysia Standard Time (UTC+8).")
+                        "One saved result per plant and API. Each API can be tested once only."
+                            + " Times use Malaysia Standard Time (UTC+8).")
                     .cls("api-history-note"),
                 table(
                     List.of(
