@@ -17,6 +17,7 @@ public class CollectionService {
   private final PayloadTranslator translator;
   private final ValidationService validation;
   private final ApiAnomalyService anomalyReports;
+  private final ApiTestHistoryService testHistory;
   private final TransactionTemplate transaction;
 
   public CollectionService(
@@ -26,6 +27,7 @@ public class CollectionService {
       PayloadTranslator translator,
       ValidationService validation,
       ApiAnomalyService anomalyReports,
+      ApiTestHistoryService testHistory,
       PlatformTransactionManager manager) {
     this.db = db;
     this.accounts = accounts;
@@ -33,6 +35,7 @@ public class CollectionService {
     this.translator = translator;
     this.validation = validation;
     this.anomalyReports = anomalyReports;
+    this.testHistory = testHistory;
     transaction = new TransactionTemplate(manager);
   }
 
@@ -241,6 +244,7 @@ public class CollectionService {
       PlantApiClient.Response response, long reportId, int readings, int issues, int rules) {}
 
   public ApiTestResult testWithAnomalies(int id, String dataType, String actor) {
+    long started = System.nanoTime();
     var plant = db.find(LssPlant.class, id).orElseThrow();
     String type = Policies.canonical(dataType), apiType = type.equals("MMF") ? "MMF" : "DDQ";
     var links =
@@ -254,11 +258,14 @@ public class CollectionService {
         links.isEmpty()
             ? (apiType.equals("MMF") ? plant.mmfApiEndpoint : plant.ddqApiEndpoint)
             : links.getFirst().apiLink;
-    if (url == null || url.isBlank())
+    if (url == null || url.isBlank()) {
+      testHistory.save(
+          id, type, actor, false, null, started, "No API URL is configured for " + type + ".");
       throw new IllegalArgumentException(
           "No API URL is configured for "
               + type
               + ". Choose a saved dataset or add its API URL in Edit.");
+    }
     PlantApiClient.Response response = null;
     try {
       response = api.fetch(url);
@@ -287,9 +294,18 @@ public class CollectionService {
       db.update(plant);
       accounts.audit(
           actor, "API test", "Plant", plant.plantId, "Success", plant.lastApiTestMessage);
+      testHistory.save(id, type, actor, true, response, started, plant.lastApiTestMessage);
       return new ApiTestResult(
           response, reportId, parsed.readings().size(), issues.size(), ruleCount);
     } catch (RuntimeException e) {
+      testHistory.save(
+          id,
+          type,
+          actor,
+          false,
+          e instanceof PlantApiClient.Failure failure ? failure.response() : response,
+          started,
+          e.getMessage());
       plant.apiConnectionStatus = "Failed";
       plant.lastApiTestMessage = e.getMessage();
       plant.lastApiTestAt = OffsetDateTime.now(ZoneOffset.UTC);

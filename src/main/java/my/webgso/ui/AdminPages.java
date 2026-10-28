@@ -127,21 +127,65 @@ final class AdminPages {
     String apiPopup = "plant-apis-" + plant.get("id");
     if (apiRows.isEmpty()) endpoints.add(el("span", "Not configured").cls("plant-api-empty"));
     else {
-      for (String name : apiNames)
+      Map<String, ApiTestHistoryService.Entry> latestTests = c.value("latestApiTests");
+      for (String name : apiNames) {
+        String dataset = name.equals("DDQ") ? "Rolling 24 Hour" : name;
+        var last =
+            latestTests == null
+                ? null
+                : latestTests.get(
+                    ApiTestHistoryService.key(((Number) plant.get("id")).intValue(), dataset));
         endpoints.add(
             el(
                     "div",
-                    el("button", name)
-                        .attr("type", "button")
-                        .attr("popovertarget", apiPopup)
-                        .cls("plant-api-dataset-button"),
-                    c.post(
-                        "/admin/plants/" + plant.get("id") + "/test",
-                        "plant-table-api-test",
-                        input("dataType", "hidden", name.equals("DDQ") ? "Rolling 24 Hour" : name),
-                        button("Test", false)
-                            .attr("aria-label", "Test " + name + " API for " + plant.get("name"))))
+                    el(
+                            "div",
+                            el("button", name)
+                                .attr("type", "button")
+                                .attr("popovertarget", apiPopup)
+                                .cls("plant-api-dataset-button"),
+                            el("span", last == null ? "Not tested" : last.outcome())
+                                .attr(
+                                    "title",
+                                    last == null
+                                        ? "No tests recorded"
+                                        : "Last tested "
+                                            + date(
+                                                last.testedAt()
+                                                    .atZoneSameInstant(
+                                                        java.time.ZoneId.of("Asia/Kuala_Lumpur")),
+                                                "dd MMM yyyy, HH:mm:ss")
+                                            + " MYT")
+                                .cls(
+                                    "api-last-result "
+                                        + (last == null
+                                            ? "api-test-untested"
+                                            : last.outcome().equals("Success")
+                                                ? "api-test-success"
+                                                : "api-test-failed")))
+                        .cls("plant-api-name-result"),
+                    el(
+                            "div",
+                            c.post(
+                                "/admin/plants/" + plant.get("id") + "/test",
+                                "plant-table-api-test",
+                                input("dataType", "hidden", dataset),
+                                button("Test", false)
+                                    .attr(
+                                        "aria-label",
+                                        "Test " + name + " API for " + plant.get("name"))),
+                            action(
+                                    "History",
+                                    url(
+                                        "/admin/plants/" + plant.get("id") + "/test-history",
+                                        Map.of("dataType", dataset)),
+                                    false)
+                                .attr(
+                                    "aria-label",
+                                    "History for " + name + " API for " + plant.get("name")))
+                        .cls("plant-api-controls"))
                 .cls("plant-api-table-item"));
+      }
       endpoints.add(
           el(
                   "div",

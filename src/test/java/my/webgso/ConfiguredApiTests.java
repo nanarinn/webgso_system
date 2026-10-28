@@ -28,6 +28,7 @@ class ConfiguredApiTests {
   @Autowired Accounts accounts;
   @Autowired CollectionService collection;
   @Autowired ApiAnomalyService anomalyReports;
+  @Autowired ApiTestHistoryService testHistory;
   @MockitoBean PlantApiClient client;
   LssPlant plant;
   Authentication auth;
@@ -213,5 +214,87 @@ class ConfiguredApiTests {
             .andExpect(flash().attribute("apiTestPreviewTruncated", true))
             .andReturn();
     assertThat((String) result.getFlashMap().get("apiTestPreview")).hasSize(12000);
+  }
+
+  @Test
+  void historyStoresFailedAndSuccessfulTestsWithLatestStatusAndNoExtraApiCalls() throws Exception {
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenThrow(
+            new PlantApiClient.Failure(
+                "HTTP 401: Authentication required.",
+                new PlantApiClient.Response(401, "application/json", "{}", 42)))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "{\"timestamp\":\"2026-10-28T00:00:00\",\"power\":10}",
+                123));
+    assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "configured.admin"))
+        .isInstanceOf(PlantApiClient.Failure.class);
+    collection.test(plant.id, "Day Ahead", "configured.admin");
+    assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(2);
+    var latest = testHistory.latest().get(ApiTestHistoryService.key(plant.id, "Day Ahead"));
+    assertThat(latest.outcome()).isEqualTo("Success");
+    assertThat(latest.responseMillis()).isEqualTo(123L);
+    String html =
+        mvc.perform(
+                get("/admin/plants/" + plant.id + "/test-history")
+                    .param("dataType", "Day Ahead")
+                    .with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html)
+        .contains("configured.admin", "Success", "Failed", "123 ms", "42 ms", "401", "200");
+    String table =
+        mvc.perform(get("/admin/lss-plants").param("q", plant.plantId).with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(table).contains("api-test-success", "History for Day Ahead API");
+    verify(client, times(2)).fetch("https://example.test/day-ahead");
+  }
+
+  @Test
+  void historyIsSeparatedByDatasetAndRequiresSignIn() throws Exception {
+    long started = System.nanoTime();
+    testHistory.save(plant.id, "MMF", "another.admin", false, null, started, "MMF failed");
+    assertThat(testHistory.count(plant.id, "Day Ahead")).isZero();
+    String page =
+        mvc.perform(
+                get("/admin/plants/" + plant.id + "/test-history")
+                    .param("dataType", "Day Ahead")
+                    .with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(page)
+        .contains("No tests recorded for this API yet")
+        .doesNotContain("MMF failed", "another.admin");
+    mvc.perform(get("/admin/plants/" + plant.id + "/test-history").param("dataType", "MMF"))
+        .andExpect(status().is3xxRedirection());
+    verifyNoInteractions(client);
+  }
+
+  @Test
+  void historyPaginatesWithoutLosingOlderTests() throws Exception {
+    for (int i = 0; i < 26; i++)
+      testHistory.save(
+          plant.id, "Day Ahead", "configured.admin", true, null, System.nanoTime(), "Result " + i);
+    String nextPage =
+        mvc.perform(
+                get("/admin/plants/" + plant.id + "/test-history")
+                    .param("dataType", "Day Ahead")
+                    .param("page", "1")
+                    .with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(nextPage).contains("Result 0", "Previous", "Page 2").doesNotContain("Result 25");
+    verifyNoInteractions(client);
   }
 }

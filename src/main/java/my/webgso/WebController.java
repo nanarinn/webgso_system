@@ -23,6 +23,7 @@ public class WebController {
   private final ReportService reports;
   private final ManualBatchService batches;
   private final ProfileService profileService;
+  private final ApiTestHistoryService testHistory;
 
   public WebController(
       Store db,
@@ -32,7 +33,8 @@ public class WebController {
       ReadingService readings,
       ReportService reports,
       ManualBatchService batches,
-      ProfileService profileService) {
+      ProfileService profileService,
+      ApiTestHistoryService testHistory) {
     this.db = db;
     this.accounts = accounts;
     this.admin = admin;
@@ -41,6 +43,7 @@ public class WebController {
     this.reports = reports;
     this.batches = batches;
     this.profileService = profileService;
+    this.testHistory = testHistory;
   }
 
   static Accounts.Principal principal(Authentication auth) {
@@ -520,6 +523,7 @@ public class WebController {
           plantApis.computeIfAbsent(api.plantId, ignored -> new ArrayList<>()).add(api);
       }
       model.addAttribute("plantApis", plantApis);
+      model.addAttribute("latestApiTests", testHistory.latest());
     }
     model.addAttribute("q", q);
     model.addAttribute("page", safePage);
@@ -668,6 +672,26 @@ public class WebController {
       Authentication auth,
       RedirectAttributes flash) {
     return testPlant(testPlantId, dataType, auth, flash);
+  }
+
+  @GetMapping("/admin/plants/{id}/test-history")
+  public String apiTestHistory(
+      @PathVariable int id,
+      @RequestParam String dataType,
+      @RequestParam(defaultValue = "0") int page,
+      Model model) {
+    var plant =
+        db.find(LssPlant.class, id)
+            .orElseThrow(() -> new IllegalArgumentException("Plant not found"));
+    String dataset = Policies.canonical(dataType);
+    int safePage = Math.clamp(page, 0, 100000);
+    model.addAttribute("title", "API test history");
+    model.addAttribute("historyPlant", plant);
+    model.addAttribute("dataType", dataset);
+    model.addAttribute("testHistory", testHistory.history(id, dataset, safePage));
+    model.addAttribute("total", testHistory.count(id, dataset));
+    model.addAttribute("page", safePage);
+    return "api-history";
   }
 
   @GetMapping("/admin/anomaly-reports")
