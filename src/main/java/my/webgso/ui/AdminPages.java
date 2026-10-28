@@ -93,6 +93,7 @@ final class AdminPages {
       endpointCount += addPlantApi(endpoints, api.dataType, api.apiLink);
     if (endpointCount == 0) endpoints.add(el("span", "Not configured").cls("plant-api-empty"));
     boolean active = Boolean.TRUE.equals(plant.get("isActive"));
+    String deletePopup = "delete-plant-" + plant.get("id");
     var actions =
         el(
                 "div",
@@ -103,6 +104,10 @@ final class AdminPages {
                     select(
                             "dataType",
                             List.of(
+                el("button", "Delete")
+                    .attr("type", "button")
+                    .attr("popovertarget", deletePopup)
+                    .cls("plant-delete-button"),
                                 "Rolling 24 Hour",
                                 "Day Ahead",
                                 "Week Ahead",
@@ -112,20 +117,29 @@ final class AdminPages {
                         .attr("aria-label", "Test API dataset for " + plant.get("name")),
                     button("Test API", false)),
                 el(
-                        "details",
-                        el("summary", "Delete").cls("plant-delete-button"),
+                        "div",
+                        el("h2", "Delete plant?").attr("id", deletePopup + "-title"),
+                        el("p", "Are you sure you want to delete this plant?")
+                            .attr("id", deletePopup + "-message"),
+                        el("strong", plant.get("name") + " (" + plant.get("plantId") + ")")
+                            .cls("plant-delete-name"),
                         c.post(
                             "/admin/plants/" + plant.get("id") + "/delete",
                             "plant-delete-confirmation",
                             input("confirmation", "hidden", "delete"),
-                            el("strong", "Delete " + plant.get("name") + "?"),
-                            el(
-                                "p",
-                                "Its API links and collection schedules will also be removed. This"
-                                    + " cannot be undone."),
-                            button("Confirm delete", false).cls("plant-delete-button"),
-                            link("Cancel", "/admin/lss-plants")))
-                    .cls("plant-delete-panel"))
+                            el("button", "Cancel")
+                                .attr("type", "button")
+                                .attr("popovertarget", deletePopup)
+                                .attr("popovertargetaction", "hide")
+                                .flag("autofocus", true)
+                                .cls("secondary-action"),
+                            button("Delete", false).cls("plant-delete-button")))
+                    .attr("popover", "auto")
+                    .attr("id", deletePopup)
+                    .attr("role", "alertdialog")
+                    .attr("aria-labelledby", deletePopup + "-title")
+                    .attr("aria-describedby", deletePopup + "-message")
+                    .cls("plant-delete-popup"))
             .cls("plant-row-actions");
     return row(
         plant.get("id"),

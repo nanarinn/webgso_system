@@ -178,10 +178,12 @@
 .app-content .plant-status-toggle .plant-inactive { background: #fde5e3; color: #a12424; }
 .app-content .plant-status-toggle button:hover { filter: brightness(.95); }
 .app-content .plant-status-toggle button:focus-visible { outline: 3px solid #7ba987; outline-offset: 3px; }
-.plant-delete-panel > summary { cursor: pointer; text-align: center; list-style: none; }
-.plant-delete-panel > summary::-webkit-details-marker { display: none; }
 .app-content .plant-delete-button { display: block; width: 100%; padding: 9px 14px; border: 1px solid #edc5c2; border-radius: 9px; background: #fff1ef; color: #a12424; font-size: 12px; font-weight: 700; }
 .app-content .plant-delete-button:hover { background: #fbdedb; }
-.app-content .plant-delete-confirmation { display: grid; gap: 12px; margin-top: 10px; padding: 14px; border: 1px solid #edc5c2; border-radius: 9px; background: #fff8f7; max-width: 230px; white-space: normal; }
-.plant-delete-confirmation strong { font-size: 13px; overflow-wrap: anywhere; }
-.plant-delete-confirmation p { margin: 0; font-size: 12px; line-height: 1.5; }
+.plant-delete-popup:popover-open { position: fixed; inset: 0; margin: auto; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; padding: 28px; border: 1px solid #dce5df; border-radius: 18px; background: #fff; color: #193e33; box-shadow: 0 20px 70px #103d3033; white-space: normal; text-align: left; }
+.plant-delete-popup::backdrop { background: #103d3073; }
+.plant-delete-popup h2 { margin: 0 0 16px; font-size: 24px; }
+.plant-delete-popup p { margin: 0 0 14px; font-size: 15px; line-height: 1.6; }
+.plant-delete-name { display: block; overflow-wrap: anywhere; }
+.app-content .plant-delete-confirmation { display: flex; justify-content: flex-end; gap: 12px; margin: 24px 0 0; }
+.app-content .plant-delete-confirmation button { width: auto; min-width: 96px; }
