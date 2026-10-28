@@ -175,7 +175,7 @@ final class AuthPages {
                 input("confirmPassword", "password", null)
                     .attr("autocomplete", "new-password")
                     .flag("required", true)),
-            button("Request access", true),
+            button("Create account", true),
             link("Back to sign in", "/login"));
     return JavaPages.document(
         "Create an account",
