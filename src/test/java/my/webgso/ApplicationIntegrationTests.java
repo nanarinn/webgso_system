@@ -111,7 +111,7 @@ class ApplicationIntegrationTests {
         .andExpect(view().name("admin-overview"))
         .andExpect(model().attribute("apiCount", (int) db.count(LssPlant.class)))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("22 Oct 2026, 07:15 MYT")))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Review signups")));
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Admin accounts")));
     var filtered =
         mvc.perform(get("/").param("apiStatus", "failed").with(authentication(adminAuth)))
             .andExpect(status().isOk())
@@ -125,7 +125,7 @@ class ApplicationIntegrationTests {
     mvc.perform(get("/").with(authentication(otherAdminAuth)))
         .andExpect(status().isOk())
         .andExpect(view().name("admin-overview"))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Review signups")));
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Admin accounts")));
   }
 
   @Test
@@ -309,31 +309,34 @@ class ApplicationIntegrationTests {
   }
 
   @Test
-  void registrationRemainsPendingAndCannotSignInUntilReviewed() throws Exception {
-    String name = "pending." + System.nanoTime();
+  void registrationCanSignInImmediatelyWithoutApproval() throws Exception {
+    String name = "new." + System.nanoTime();
+    String email = name + "@example.test";
     mvc.perform(
             post("/account/register")
                 .with(csrf())
                 .param("username", name)
-                .param("email", name + "@example.test")
+                .param("email", email)
                 .param("displayName", "New Admin")
                 .param("password", "StrongPassword123!")
                 .param("confirmPassword", "StrongPassword123!"))
-        .andExpect(redirectedUrl("/login?registered=pending"));
-    mvc.perform(
-            post("/account/login")
-                .with(csrf())
-                .param("identifier", name)
-                .param("password", "StrongPassword123!"))
-        .andExpect(redirectedUrl("/login?error=true"));
+        .andExpect(redirectedUrl("/login?registered=success"));
     var target = db.list(ApplicationUser.class, "WHERE \"UserName\"=?", name).getFirst();
-    accounts.review(adminAuth, target.id, "Approved", "Admin", "Approved for integration check");
+    assertThat(target.accessStatus).isEqualTo("Approved");
+    assertThat(accounts.roles(target.id)).containsExactly(Accounts.ADMIN);
     mvc.perform(
             post("/account/login")
                 .with(csrf())
-                .param("identifier", name)
+                .param("identifier", email)
                 .param("password", "StrongPassword123!"))
         .andExpect(redirectedUrl("/"));
+    String html =
+        mvc.perform(get("/login").param("registered", "success"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html).contains("You can sign in now.").doesNotContain("must approve");
   }
 
   @Test
@@ -366,7 +369,7 @@ class ApplicationIntegrationTests {
                 .param("role", "Staff"))
         .andExpect(status().isBadRequest());
     assertThat(db.find(ApplicationUser.class, target.id).orElseThrow().accessStatus)
-        .isEqualTo("Pending");
+        .isEqualTo("Approved");
     mvc.perform(
             post("/admin/users/" + target.id + "/review")
                 .with(authentication(adminAuth))
@@ -400,6 +403,7 @@ class ApplicationIntegrationTests {
               previous + "@example.test",
               "Existing Admin",
               "StrongPassword123!");
+      db.jdbc().update("DELETE FROM \"AspNetUserRoles\" WHERE \"UserId\"=?", legacy.id);
       legacy.accessStatus = "Approved";
       db.update(legacy);
       String roleId = UUID.randomUUID().toString();
@@ -437,6 +441,7 @@ class ApplicationIntegrationTests {
     var unassigned =
         accounts.register(
             "unassigned.admin", "unassigned@example.test", "Unassigned", "StrongPassword123!");
+    db.jdbc().update("DELETE FROM \"AspNetUserRoles\" WHERE \"UserId\"=?", unassigned.id);
     unassigned.accessStatus = "Approved";
     db.update(unassigned);
     var auth = accounts.token(unassigned);

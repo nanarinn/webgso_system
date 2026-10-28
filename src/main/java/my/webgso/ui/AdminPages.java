@@ -312,34 +312,29 @@ final class AdminPages {
                   "/admin/users/" + user.id + "/review",
                   "java-user-review",
                   field(
-                      "Decision",
+                      "Account status",
                       el(
                               "select",
-                              option("Approved", "Approve", "Approved"),
-                              option("Rejected", "Reject", "Approved"),
-                              option("Inactive", "Deactivate", "Approved"))
+                              option("Approved", "Active", user.accessStatus),
+                              option("Inactive", "Inactive", user.accessStatus))
                           .attr("name", "decision")),
-                  field("Review note", input("note", "text", null).attr("maxlength", 1000)),
-                  button("Save review", false));
+                  button("Save status", false));
       rows.add(
           row(
               el("strong", Accounts.displayName(user.displayName))
                   .add(el("small", user.userName).cls("java-block")),
               user.email,
-              user.accessStatus,
-              roles.get(user.id).isBlank() ? "Pending approval" : Accounts.ADMIN,
+              "Approved".equals(user.accessStatus) ? "Active" : "Inactive",
+              roles.get(user.id).isBlank() ? "Unassigned" : Accounts.ADMIN,
               review));
     }
     return el(
         "section",
-        heading(
-            "Access control",
-            "Admin Accounts",
-            "Review access requests and manage Admin accounts."),
+        heading("Access control", "Admin Accounts", "Manage Admin accounts and account status."),
         el(
                 "article",
                 table(
-                    List.of("User", "Email", "Status", "Current role", "Review access"),
+                    List.of("User", "Email", "Status", "Current role", "Manage status"),
                     rows,
                     "No users found."))
             .cls("panel"));

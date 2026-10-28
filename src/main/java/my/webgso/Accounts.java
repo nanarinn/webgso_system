@@ -79,7 +79,7 @@ public class Accounts implements AuthenticationProvider {
       throw new BadCredentialsException("Invalid credentials");
     }
     if (!"Approved".equals(user.accessStatus))
-      throw new DisabledException("Access has not been approved");
+      throw new DisabledException("This account is inactive");
     user.accessFailedCount = 0;
     user.lockoutEnd = null;
     if (passwords.upgradeEncoding(user.passwordHash))
@@ -131,11 +131,10 @@ public class Accounts implements AuthenticationProvider {
     user.securityStamp = UUID.randomUUID().toString();
     user.concurrencyStamp = UUID.randomUUID().toString();
     user.accessRequestedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    user.accessStatus = "Approved";
     db.insert(user);
-    audit(name, "Access requested", "User", user.id, "Pending", "Local account registration");
-    for (var admin : db.list(ApplicationUser.class, "WHERE \"AccessStatus\"='Approved'"))
-      if (roles(admin.id).contains(ADMIN))
-        notify(admin.id, user.id, "Access request", displayName + " requested repository access.");
+    setRole(user.id, ADMIN);
+    audit(name, "Account created", "User", user.id, "Success", "Local account registration");
     return user;
   }
 

@@ -30,7 +30,7 @@ final class ProfilePages {
                     el("dt", "Username"),
                     el("dd", user.userName),
                     el("dt", "Account status"),
-                    el("dd", user.accessStatus),
+                    el("dd", "Approved".equals(user.accessStatus) ? "Active" : "Inactive"),
                     el("dt", "Joined"),
                     el("dd", date(user.accessRequestedAt, "dd MMM yyyy"))))
             .cls("panel profile-summary");

@@ -83,14 +83,11 @@ final class AuthPages {
     if (c.parameter("error"))
       access.add(
           alert(
-              "Sign-in failed. Check your email, password and account approval. If your"
+              "Sign-in failed. Check your email, password and account status. If your"
                   + " account is locked, try again after 15 minutes.",
               "error"));
     if (c.parameter("registered"))
-      access.add(
-          alert(
-              "Account created. An administrator must approve your access before you can sign in.",
-              "success"));
+      access.add(alert("Account created successfully. You can sign in now.", "success"));
     if (c.parameter("reason")) access.add(alert("Your session ended. Sign in to continue.", ""));
     if (c.parameter("logout")) access.add(alert("You have signed out successfully.", "success"));
     var identifier = authField("Email", "identifier", "email", "username");
@@ -191,9 +188,7 @@ final class AuthPages {
                     .attr("alt", Branding.LOGO_DESCRIPTION),
                 el("p", "Authorised access").cls("section-label"),
                 el("h1", "Create an Admin account"),
-                el(
-                    "p",
-                    "Your Admin account will remain pending until another Admin approves access."),
+                el("p", "Create your Admin account and sign in immediately."),
                 form)
             .cls("registration-shell"),
         false,

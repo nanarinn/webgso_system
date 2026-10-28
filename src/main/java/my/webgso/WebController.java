@@ -104,7 +104,7 @@ public class WebController {
     if (!password.equals(confirmPassword))
       throw new IllegalArgumentException("The passwords do not match.");
     accounts.register(username.trim(), email.trim(), displayName.trim(), password);
-    return "redirect:/login?registered=pending";
+    return "redirect:/login?registered=success";
   }
 
   @GetMapping("/")

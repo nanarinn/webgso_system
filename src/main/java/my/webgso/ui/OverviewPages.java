@@ -71,7 +71,7 @@ final class OverviewPages {
                                 + " services.")),
                     el(
                             "div",
-                            action("Review signups", "/admin/users", false),
+                            action("Admin accounts", "/admin/users", false),
                             action("View all APIs →", "/admin/lss-plants", true))
                         .cls("java-actions"))
                 .cls("admin-overview-heading"),
