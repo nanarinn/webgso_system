@@ -26,6 +26,7 @@ public final class JavaPageResolver implements ViewResolver, Ordered {
           "users",
           "profile",
           "api-history",
+          "api-retest-progress",
           "batch-progress");
 
   @Override

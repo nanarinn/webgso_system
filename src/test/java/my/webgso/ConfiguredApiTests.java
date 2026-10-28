@@ -351,7 +351,7 @@ class ConfiguredApiTests {
             .getResponse()
             .getContentAsString();
     assertThat(html)
-        .contains("API already tested", "Retesting is not allowed")
+        .contains("API already tested", "To recheck saved APIs")
         .doesNotContain("HTTP status", "Preview response");
     assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(1);
     verify(client, times(1)).fetch("https://example.test/day-ahead");
@@ -364,6 +364,44 @@ class ConfiguredApiTests {
     assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "configured.admin"))
         .isInstanceOf(ApiTestHistoryService.AlreadyTested.class);
     assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(1);
+    verifyNoInteractions(client);
+  }
+
+  @Test
+  void explicitHistoryRecheckUpdatesLatestResultButRegularTestStillCannotRepeat() {
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "{\"timestamp\":\"2026-10-28T00:00:00\",\"power\":10}",
+                25))
+        .thenThrow(
+            new PlantApiClient.Failure(
+                "HTTP 503: Server unavailable",
+                new PlantApiClient.Response(503, "application/json", "{}", 40)));
+    collection.test(plant.id, "Day Ahead", "configured.admin");
+    assertThatThrownBy(
+            () -> collection.retestWithAnomalies(plant.id, "Day Ahead", "configured.admin"))
+        .isInstanceOf(PlantApiClient.Failure.class);
+    var latest = testHistory.latest().get(ApiTestHistoryService.key(plant.id, "Day Ahead"));
+    assertThat(latest.outcome()).isEqualTo("Failed");
+    assertThat(latest.httpStatus()).isEqualTo(503);
+    assertThat(
+            testHistory.allHistory(0).stream()
+                .filter(item -> item.plantId() == plant.id && item.dataset().equals("Day Ahead")))
+        .hasSize(1);
+    assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "configured.admin"))
+        .isInstanceOf(ApiTestHistoryService.AlreadyTested.class);
+    verify(client, times(2)).fetch("https://example.test/day-ahead");
+  }
+
+  @Test
+  void testAllRequiresAuthenticationAndCsrf() throws Exception {
+    mvc.perform(post("/admin/api-test-history/test-all").with(authentication(auth)))
+        .andExpect(status().isForbidden());
+    mvc.perform(post("/admin/api-test-history/test-all").with(csrf()))
+        .andExpect(status().is3xxRedirection());
     verifyNoInteractions(client);
   }
 }

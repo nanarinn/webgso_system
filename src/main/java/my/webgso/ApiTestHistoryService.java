@@ -61,8 +61,8 @@ public class ApiTestHistoryService {
   public static final class AlreadyTested extends IllegalArgumentException {
     public AlreadyTested() {
       super(
-          "This API has already been tested or is currently being tested. Retesting is not allowed."
-              + " You can view the saved result in API test history.");
+          "This API has already been tested or is currently being tested. To recheck saved APIs,"
+              + " use Test all APIs in API test history.");
     }
   }
 

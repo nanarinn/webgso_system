@@ -24,6 +24,7 @@ public class WebController {
   private final ManualBatchService batches;
   private final ProfileService profileService;
   private final ApiTestHistoryService testHistory;
+  private final ApiRetestService apiRetests;
 
   public WebController(
       Store db,
@@ -34,7 +35,8 @@ public class WebController {
       ReportService reports,
       ManualBatchService batches,
       ProfileService profileService,
-      ApiTestHistoryService testHistory) {
+      ApiTestHistoryService testHistory,
+      ApiRetestService apiRetests) {
     this.db = db;
     this.accounts = accounts;
     this.admin = admin;
@@ -44,6 +46,7 @@ public class WebController {
     this.batches = batches;
     this.profileService = profileService;
     this.testHistory = testHistory;
+    this.apiRetests = apiRetests;
   }
 
   static Accounts.Principal principal(Authentication auth) {
@@ -689,6 +692,19 @@ public class WebController {
     model.addAttribute("total", testHistory.countAll());
     model.addAttribute("page", safePage);
     return "api-history";
+  }
+
+  @PostMapping("/admin/api-test-history/test-all")
+  public String retestAll(Authentication auth) {
+    var job = apiRetests.start(principal(auth).id(), principal(auth).username());
+    return "redirect:/admin/api-test-history/checks/" + job.id;
+  }
+
+  @GetMapping("/admin/api-test-history/checks/{id}")
+  public String apiRetestProgress(@PathVariable String id, Authentication auth, Model model) {
+    model.addAttribute("title", "API check progress");
+    model.addAttribute("apiRetestJob", apiRetests.get(id, principal(auth).id()));
+    return "api-retest-progress";
   }
 
   @GetMapping("/admin/plants/{id}/test-history")

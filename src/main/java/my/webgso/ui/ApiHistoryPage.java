@@ -44,13 +44,20 @@ final class ApiHistoryPage {
             "API testing",
             "API test history",
             "Latest test result for each API across all plants.",
-            action("Back to Plant Config", "/admin/lss-plants", false)),
+            el(
+                    "div",
+                    action("Back to Plant Config", "/admin/lss-plants", false),
+                    c.post(
+                        "/admin/api-test-history/test-all",
+                        "api-retest-form",
+                        button("Test all APIs", true).flag("disabled", c.number("total") == 0)))
+                .cls("java-actions")),
         el(
                 "article",
                 el(
                         "p",
-                        "One saved result per plant and API. Each API can be tested once only."
-                            + " Times use Malaysia Standard Time (UTC+8).")
+                        "One latest result per plant and API. Use Test all APIs to recheck"
+                            + " previously tested APIs. Times use Malaysia Standard Time (UTC+8).")
                     .cls("api-history-note"),
                 table(
                     List.of(

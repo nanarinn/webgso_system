@@ -287,6 +287,8 @@
 .api-test-failed { background: #ffebea; color: #ae2929; }
 .api-test-untested { background: #edf0ea; color: #6a776b; }
 .api-history-note { color: #67806f; font-size: 13px; margin-bottom: 20px; }
+.api-retest-form { margin: 0; }
+.api-retest-progress { width: 100%; height: 14px; margin: 0 0 24px; accent-color: #245b40; }
 .anomaly-navigation { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 24px; }
 .anomaly-report { margin-bottom: 24px; }
 .anomaly-report-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 22px; }

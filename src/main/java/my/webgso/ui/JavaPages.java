@@ -31,9 +31,16 @@ public final class JavaPages {
           case "users" -> AdminPages.users(c);
           case "profile" -> ProfilePages.profile(c);
           case "api-history" -> ApiHistoryPage.render(c);
+          case "api-retest-progress" -> ApiRetestPage.render(c);
           default -> throw new IllegalArgumentException("Unknown page");
         };
-    return document(c.text("title"), "", shell(c, content), false, false);
+    return document(
+        c.text("title"),
+        "",
+        shell(c, content),
+        false,
+        name.equals("api-retest-progress")
+            && !c.<ApiRetestService.Job>value("apiRetestJob").complete);
   }
 
   private static boolean refresh(PageContext c) {
@@ -61,7 +68,7 @@ public final class JavaPages {
                 "/styles/interface.css",
                 "/styles/java.css",
                 "/styles/workspace-theme.css?v=4",
-                "/styles/workspace-panels.css?v=21");
+                "/styles/workspace-panels.css?v=22");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
       head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));

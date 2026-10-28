@@ -244,16 +244,27 @@ public class CollectionService {
       PlantApiClient.Response response, long reportId, int readings, int issues, int rules) {}
 
   public ApiTestResult testWithAnomalies(int id, String dataType, String actor) {
+    return runApiTest(id, dataType, actor, false);
+  }
+
+  public ApiTestResult retestWithAnomalies(int id, String dataType, String actor) {
+    return runApiTest(id, dataType, actor, true);
+  }
+
+  private ApiTestResult runApiTest(int id, String dataType, String actor, boolean retest) {
     long started = System.nanoTime();
     var plant = db.find(LssPlant.class, id).orElseThrow();
     String type = Policies.canonical(dataType), apiType = type.equals("MMF") ? "MMF" : "DDQ";
+    if (retest && testHistory.count(id, type) == 0)
+      throw new IllegalArgumentException("This API has no saved test to recheck.");
     boolean claimed =
-        Boolean.TRUE.equals(
-            transaction.execute(
-                status -> {
-                  db.list(LssPlant.class, "WHERE \"Id\"=? FOR UPDATE", id);
-                  return testHistory.claim(id, type);
-                }));
+        retest
+            || Boolean.TRUE.equals(
+                transaction.execute(
+                    status -> {
+                      db.list(LssPlant.class, "WHERE \"Id\"=? FOR UPDATE", id);
+                      return testHistory.claim(id, type);
+                    }));
     if (!claimed) throw new ApiTestHistoryService.AlreadyTested();
     var links =
         db.list(
