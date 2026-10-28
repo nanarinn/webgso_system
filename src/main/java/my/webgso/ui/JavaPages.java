@@ -60,7 +60,7 @@ public final class JavaPages {
                 "/styles/interface.css",
                 "/styles/java.css",
                 "/styles/workspace-theme.css?v=4",
-                "/styles/workspace-panels.css?v=19");
+                "/styles/workspace-panels.css?v=20");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
       head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));
@@ -186,23 +186,6 @@ public final class JavaPages {
         "div",
         link("Skip to content", "#main-content").cls("skip-link"),
         el("div", sidebar, el("main", topbar, mainContent).cls("app-main")).cls("app-shell"),
-        c.model().get("apiTestMessage") == null
-            ? null
-            : el(
-                    "dialog",
-                    el("p", "API connection test").cls("section-label"),
-                    el("h2", c.text("apiTestTitle")).attr("id", "api-test-title"),
-                    el("p", c.text("apiTestMessage")).attr("id", "api-test-message"),
-                    el(
-                            "form",
-                            el("button", "OK")
-                                .attr("type", "submit")
-                                .cls("primary-action")
-                                .flag("autofocus", true))
-                        .attr("method", "dialog"))
-                .cls("api-test-popup")
-                .flag("open", true)
-                .attr("aria-labelledby", "api-test-title")
-                .attr("aria-describedby", "api-test-message"));
+        c.model().get("apiTestMessage") == null ? null : ApiTestPopup.render(c));
   }
 }

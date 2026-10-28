@@ -14,7 +14,41 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class PlantApiClient {
-  public record Response(int status, String contentType, String payload) {}
+  public record Response(int status, String contentType, String payload, long elapsedMillis) {
+    public Response(int status, String contentType, String payload) {
+      this(status, contentType, payload, 0);
+    }
+  }
+
+  public static final class Failure extends IllegalArgumentException {
+    private final Response response;
+
+    public Failure(String message, Response response) {
+      super(message);
+      this.response = response;
+    }
+
+    public Response response() {
+      return response;
+    }
+  }
+
+  private static String httpError(int code) {
+    String reason =
+        switch (code) {
+          case 401 -> "Authentication required. Check the API credentials.";
+          case 403 -> "Access denied by the API server.";
+          case 404 -> "API endpoint not found. Check its URL.";
+          case 429 -> "Too many requests. Wait before testing again.";
+          default ->
+              code >= 500
+                  ? "The API server encountered an error. Try again later."
+                  : code >= 300 && code < 400
+                      ? "The endpoint redirected. Redirects are not followed."
+                      : "The API rejected the request.";
+        };
+    return "HTTP " + code + ": " + reason;
+  }
 
   private final Set<String> privateHosts, httpHosts;
   private final int maxBytes;
@@ -73,6 +107,7 @@ public class PlantApiClient {
   }
 
   public Response fetch(String url) {
+    long started = System.nanoTime();
     URI uri = validate(url);
     DnsResolver resolver =
         new DnsResolver() {
@@ -112,24 +147,44 @@ public class PlantApiClient {
           new HttpGet(uri),
           response -> {
             int code = response.getCode();
-            if (code < 200 || code >= 300)
-              throw new IllegalArgumentException(
-                  "The API returned HTTP " + code + ". Redirects are not followed.");
             var entity = response.getEntity();
-            if (entity == null) throw new IllegalArgumentException("Empty API response");
+            if (entity == null) {
+              var result = new Response(code, "", "", (System.nanoTime() - started) / 1_000_000);
+              throw new Failure(
+                  code < 200 || code >= 300
+                      ? httpError(code)
+                      : "The API returned an empty response.",
+                  result);
+            }
             try (var stream = entity.getContent()) {
               byte[] bytes = stream.readNBytes(maxBytes + 1);
               if (bytes.length > maxBytes)
                 throw new IllegalArgumentException("The API payload exceeds the size limit.");
-              return new Response(
-                  code,
-                  Objects.toString(entity.getContentType(), "application/octet-stream"),
-                  new String(bytes, StandardCharsets.UTF_8));
+              var result =
+                  new Response(
+                      code,
+                      Objects.toString(entity.getContentType(), "application/octet-stream"),
+                      new String(bytes, StandardCharsets.UTF_8),
+                      (System.nanoTime() - started) / 1_000_000);
+              if (code < 200 || code >= 300) throw new Failure(httpError(code), result);
+              return result;
             }
           });
     } catch (IllegalArgumentException e) {
       throw e;
     } catch (Exception e) {
+      for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+        if (cause instanceof java.net.SocketTimeoutException
+            || cause instanceof java.util.concurrent.TimeoutException)
+          throw new IllegalArgumentException(
+              "API request timed out. The server did not respond in time.", e);
+        if (cause instanceof java.net.ConnectException)
+          throw new IllegalArgumentException(
+              "Could not connect to the API server. Check the host and port.", e);
+        if (cause instanceof javax.net.ssl.SSLException)
+          throw new IllegalArgumentException(
+              "The API TLS certificate or secure connection could not be verified.", e);
+      }
       throw new IllegalArgumentException(
           "API connection failed ("
               + e.getClass().getSimpleName()

@@ -626,8 +626,11 @@ public class WebController {
       Authentication auth,
       RedirectAttributes flash) {
     String actor = principal(auth).username();
+    long started = System.nanoTime();
+    flash.addFlashAttribute("apiTestDataset", dataType);
     try {
       var result = collection.testWithAnomalies(id, dataType, actor);
+      ApiTestDetails.add(flash, result.response());
       flash.addFlashAttribute(
           "apiTestTitle",
           result.issues() > 0 ? "Connected — anomalies detected" : "Connection successful");
@@ -645,9 +648,15 @@ public class WebController {
       flash.addFlashAttribute(
           "apiTestMessage",
           "No plant matches this ID. Check the Plant ID in the table and try again.");
+    } catch (PlantApiClient.Failure e) {
+      ApiTestDetails.add(flash, e.response());
+      flash.addFlashAttribute("apiTestTitle", "Connection test failed");
+      flash.addFlashAttribute("apiTestMessage", e.getMessage());
     } catch (IllegalArgumentException e) {
       flash.addFlashAttribute("apiTestTitle", "Connection test failed");
       flash.addFlashAttribute("apiTestMessage", e.getMessage());
+    } finally {
+      flash.addFlashAttribute("apiTestDurationMillis", (System.nanoTime() - started) / 1_000_000);
     }
     return "redirect:/admin/lss-plants";
   }

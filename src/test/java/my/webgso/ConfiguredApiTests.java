@@ -161,4 +161,57 @@ class ConfiguredApiTests {
     assertThat(html).doesNotContain("/admin/anomaly-reports", "View anomaly report");
     verifyNoInteractions(client);
   }
+
+  @Test
+  void apiPopupShowsHttpTimingAndEscapedRedactedPreview() throws Exception {
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "{\"timestamp\":\"2026-10-28T00:00:00\",\"power\":10,\"token\":\"private-token\",\"label\":\"<script>alert(1)</script>\"}",
+                125));
+    var outcome =
+        mvc.perform(
+                post("/admin/plants/" + plant.id + "/test")
+                    .with(authentication(auth))
+                    .with(csrf())
+                    .param("dataType", "Day Ahead"))
+            .andExpect(redirectedUrl("/admin/lss-plants"))
+            .andExpect(flash().attribute("apiTestHttpStatus", 200))
+            .andExpect(flash().attribute("apiTestResponseMillis", 125L))
+            .andReturn();
+    String html =
+        mvc.perform(
+                get("/admin/lss-plants")
+                    .with(authentication(auth))
+                    .flashAttrs(outcome.getFlashMap()))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html)
+        .contains("HTTP status", "125 ms", "Preview response", "[redacted]", "&lt;script&gt;")
+        .doesNotContain("private-token", "<script>alert(1)</script>");
+  }
+
+  @Test
+  void failedHttpResponseStillHasDiagnosticDetailsAndBoundedPreview() throws Exception {
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenThrow(
+            new PlantApiClient.Failure(
+                "HTTP 401: Authentication required.",
+                new PlantApiClient.Response(401, "text/plain", "x".repeat(15000), 31)));
+    var result =
+        mvc.perform(
+                post("/admin/plants/" + plant.id + "/test")
+                    .with(authentication(auth))
+                    .with(csrf())
+                    .param("dataType", "Day Ahead"))
+            .andExpect(redirectedUrl("/admin/lss-plants"))
+            .andExpect(flash().attribute("apiTestHttpStatus", 401))
+            .andExpect(flash().attribute("apiTestPreviewTruncated", true))
+            .andReturn();
+    assertThat((String) result.getFlashMap().get("apiTestPreview")).hasSize(12000);
+  }
 }

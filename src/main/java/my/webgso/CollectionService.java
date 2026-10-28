@@ -259,8 +259,9 @@ public class CollectionService {
           "No API URL is configured for "
               + type
               + ". Choose a saved dataset or add its API URL in Edit.");
+    PlantApiClient.Response response = null;
     try {
-      var response = api.fetch(url);
+      response = api.fetch(url);
       var parsed =
           translator.translate(
               response.payload(),
@@ -293,6 +294,8 @@ public class CollectionService {
       plant.lastApiTestMessage = e.getMessage();
       plant.lastApiTestAt = OffsetDateTime.now(ZoneOffset.UTC);
       db.update(plant);
+      if (!(e instanceof PlantApiClient.Failure) && response != null)
+        throw new PlantApiClient.Failure(e.getMessage(), response);
       throw e;
     }
   }

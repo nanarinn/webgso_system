@@ -89,4 +89,78 @@ class PasswordAndNetworkTests {
                 .validate("http://localhost:5186/data"))
         .isNotNull();
   }
+
+  @Test
+  void diagnosticsRetainHttpErrorsWithoutFollowingRedirectsOrRemovingPayloadLimits()
+      throws Exception {
+    try (var server = new java.net.ServerSocket(0, 10, InetAddress.getByName("127.0.0.1"));
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+      var hits = new java.util.concurrent.atomic.AtomicInteger();
+      var serving =
+          executor.submit(
+              () -> {
+                try {
+                  for (int i = 0; i < 4; i++) {
+                    try (var socket = server.accept()) {
+                      socket.setSoTimeout(3000);
+                      var reader =
+                          new java.io.BufferedReader(
+                              new java.io.InputStreamReader(
+                                  socket.getInputStream(),
+                                  java.nio.charset.StandardCharsets.US_ASCII));
+                      String path = reader.readLine().split(" ")[1];
+                      String line;
+                      while ((line = reader.readLine()) != null && !line.isEmpty()) {}
+                      int status =
+                          path.equals("/denied") ? 401 : path.equals("/redirect") ? 302 : 200;
+                      String body =
+                          switch (path) {
+                            case "/large" -> "x".repeat(256);
+                            case "/denied" -> "{\"error\":\"unauthorized\"}";
+                            default -> "{\"value\":1}";
+                          };
+                      if (path.equals("/ok")) hits.incrementAndGet();
+                      byte[] bytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                      String headers =
+                          "HTTP/1.1 "
+                              + status
+                              + " Result\r\n"
+                              + "Content-Type: application/json\r\n"
+                              + "Connection: close\r\n"
+                              + "Content-Length: "
+                              + bytes.length
+                              + "\r\n"
+                              + (status == 302 ? "Location: /ok\r\n" : "")
+                              + "\r\n";
+                      socket
+                          .getOutputStream()
+                          .write(headers.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                      socket.getOutputStream().write(bytes);
+                      socket.getOutputStream().flush();
+                    }
+                  }
+                  return true;
+                } catch (java.io.IOException e) {
+                  throw new java.io.UncheckedIOException(e);
+                }
+              });
+      var client = new PlantApiClient("127.0.0.1", "127.0.0.1", 128);
+      String base = "http://127.0.0.1:" + server.getLocalPort();
+      var response = client.fetch(base + "/ok");
+      assertThat(response.status()).isEqualTo(200);
+      assertThat(response.elapsedMillis()).isGreaterThanOrEqualTo(0);
+      assertThatThrownBy(() -> client.fetch(base + "/denied"))
+          .isInstanceOfSatisfying(
+              PlantApiClient.Failure.class,
+              failure -> {
+                assertThat(failure.response().status()).isEqualTo(401);
+                assertThat(failure.response().payload()).contains("unauthorized");
+              });
+      assertThatThrownBy(() -> client.fetch(base + "/redirect"))
+          .hasMessageContaining("Redirects are not followed");
+      assertThat(hits.get()).isEqualTo(1);
+      assertThatThrownBy(() -> client.fetch(base + "/large")).hasMessageContaining("size limit");
+      assertThat(serving.get(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    }
+  }
 }
