@@ -77,7 +77,7 @@ final class AdminPages {
                         link("Clear", resource.path()))
                     .cls("java-search")
                     .attr("method", "get"),
-                table(headers, rows, "No records found."),
+                table(headers, rows, "No records found.").attr("data-plant-table", plants),
                 OperationsPages.pagination(c, "Record pages", "q"))
             .cls("panel"));
     return page;
@@ -93,13 +93,34 @@ final class AdminPages {
       addPlantApi(apiRows, api.dataType, api.apiLink);
     if (apiRows.isEmpty()) endpoints.add(el("span", "Not configured").cls("plant-api-empty"));
     else {
+      String apiPopup = "plant-apis-" + plant.get("id");
       endpoints.add(
-          el("div", el("span", "Dataset"), el("span", "API URL")).cls("plant-api-heading"),
-          el("div", apiRows)
-              .cls("plant-api-scroll")
-              .attr("tabindex", "0")
-              .attr("role", "region")
-              .attr("aria-label", "API connections for " + plant.get("name")));
+          el("button", apiRows.size() + (apiRows.size() == 1 ? " API" : " APIs"))
+              .attr("type", "button")
+              .attr("popovertarget", apiPopup)
+              .cls("plant-api-count-button"),
+          el(
+                  "div",
+                  el("h2", "API connections").attr("id", apiPopup + "-title"),
+                  el("p", plant.get("name") + " · " + plant.get("plantId"))
+                      .cls("plant-api-popup-name"),
+                  el("div", el("span", "Dataset"), el("span", "API URL")).cls("plant-api-heading"),
+                  el("div", apiRows)
+                      .cls("plant-api-scroll")
+                      .attr("tabindex", "0")
+                      .attr("role", "region")
+                      .attr("aria-label", "API connections for " + plant.get("name")),
+                  el("button", "Close")
+                      .attr("type", "button")
+                      .attr("popovertarget", apiPopup)
+                      .attr("popovertargetaction", "hide")
+                      .flag("autofocus", true)
+                      .cls("secondary-action"))
+              .attr("id", apiPopup)
+              .attr("popover", "auto")
+              .attr("role", "dialog")
+              .attr("aria-labelledby", apiPopup + "-title")
+              .cls("plant-api-popup"));
     }
     boolean active = Boolean.TRUE.equals(plant.get("isActive"));
     String deletePopup = "delete-plant-" + plant.get("id");
