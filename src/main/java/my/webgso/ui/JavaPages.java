@@ -104,10 +104,12 @@ public final class JavaPages {
     var nav =
         el("div", el("p", "Workspace").cls("nav-section-title"), workspaceNav).cls("nav-body");
     if (c.yes("isAdmin")) {
-      for (Resources.Definition item : c.<Resources.Definition>list("navigation"))
+      for (Resources.Definition item : c.<Resources.Definition>list("navigation")) {
         workspaceNav.add(navigation(c, item.title(), item.path()));
+        if (item.path().equals("/admin/lss-plants"))
+          workspaceNav.add(navigation(c, "Anomalies", "/admin/anomaly-reports"));
+      }
       workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
-      workspaceNav.add(navigation(c, "Anomalies", "/admin/anomaly-reports"));
     }
     nav.add(
         el("div").cls("nav-spacer"),
