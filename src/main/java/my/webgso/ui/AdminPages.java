@@ -85,25 +85,21 @@ final class AdminPages {
 
   private static Element plantRow(PageContext c, Map<String, Object> plant) {
     var endpoints = el("div").cls("plant-api-list");
-    var apiCards = new ArrayList<Element>();
-    addPlantApi(apiCards, "DDQ", plant.get("ddqApiEndpoint"));
-    addPlantApi(apiCards, "MMF", plant.get("mmfApiEndpoint"));
+    var apiRows = new ArrayList<Element>();
+    addPlantApi(apiRows, "DDQ", plant.get("ddqApiEndpoint"));
+    addPlantApi(apiRows, "MMF", plant.get("mmfApiEndpoint"));
     Map<Integer, List<PlantApiConfiguration>> configured = c.value("plantApis");
     for (var api : configured.getOrDefault(((Number) plant.get("id")).intValue(), List.of()))
-      addPlantApi(apiCards, api.dataType, api.apiLink);
-    if (apiCards.isEmpty()) endpoints.add(el("span", "Not configured").cls("plant-api-empty"));
+      addPlantApi(apiRows, api.dataType, api.apiLink);
+    if (apiRows.isEmpty()) endpoints.add(el("span", "Not configured").cls("plant-api-empty"));
     else {
       endpoints.add(
-          el("span", apiCards.size() + (apiCards.size() == 1 ? " API" : " APIs"))
-              .cls("plant-api-count"),
-          apiCards.subList(0, Math.min(2, apiCards.size())));
-      if (apiCards.size() > 2)
-        endpoints.add(
-            el(
-                    "details",
-                    el("summary", "View all " + apiCards.size() + " APIs"),
-                    el("div", apiCards.subList(2, apiCards.size())).cls("plant-api-more-list"))
-                .cls("plant-api-more"));
+          el("div", el("span", "Dataset"), el("span", "API URL")).cls("plant-api-heading"),
+          el("div", apiRows)
+              .cls("plant-api-scroll")
+              .attr("tabindex", "0")
+              .attr("role", "region")
+              .attr("aria-label", "API connections for " + plant.get("name")));
     }
     boolean active = Boolean.TRUE.equals(plant.get("isActive"));
     String deletePopup = "delete-plant-" + plant.get("id");
