@@ -234,3 +234,5 @@
 .plant-delete-name { display: block; overflow-wrap: anywhere; }
 .app-content .plant-delete-confirmation { display: flex; justify-content: flex-end; gap: 12px; margin: 24px 0 0; }
 .app-content .plant-delete-confirmation button { width: auto; min-width: 96px; }
+.schedule-row-actions { display: grid; gap: 10px; min-width: 100px; }
+.schedule-row-actions > a { text-align: center; padding: 6px; }

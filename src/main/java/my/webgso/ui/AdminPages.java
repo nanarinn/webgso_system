@@ -41,8 +41,11 @@ final class AdminPages {
       var values = new ArrayList<Object>();
       values.add(record.get("id"));
       columns.forEach(column -> values.add(record.get(column.get("name"))));
-      if (editable)
-        values.add(link("Edit", url(resource.path() + "/edit", Map.of("id", record.get("id")))));
+      if (editable) {
+        var edit = link("Edit", url(resource.path() + "/edit", Map.of("id", record.get("id"))));
+        values.add(
+            resource.type() == CollectionSchedule.class ? scheduleActions(c, record, edit) : edit);
+      }
       rows.add(row(values.toArray()));
     }
     var tabs = el("nav").cls("java-tabs");
@@ -81,6 +84,43 @@ final class AdminPages {
                 OperationsPages.pagination(c, "Record pages", "q"))
             .cls("panel"));
     return page;
+  }
+
+  private static Element scheduleActions(PageContext c, Map<String, Object> record, Element edit) {
+    String popup = "delete-schedule-" + record.get("id");
+    return el(
+            "div",
+            edit,
+            el("button", "Delete")
+                .attr("type", "button")
+                .attr("popovertarget", popup)
+                .cls("plant-delete-button"),
+            el(
+                    "div",
+                    el("h2", "Delete schedule?").attr("id", popup + "-title"),
+                    el("p", "Are you sure you want to delete this collection schedule?")
+                        .attr("id", popup + "-message"),
+                    el("strong", record.get("name") + " (" + record.get("scheduleCode") + ")")
+                        .cls("plant-delete-name"),
+                    el("p", "Existing collection records will be kept."),
+                    c.post(
+                        "/admin/collection-schedules/" + record.get("id") + "/delete",
+                        "plant-delete-confirmation",
+                        input("confirmation", "hidden", "delete"),
+                        el("button", "Cancel")
+                            .attr("type", "button")
+                            .attr("popovertarget", popup)
+                            .attr("popovertargetaction", "hide")
+                            .flag("autofocus", true)
+                            .cls("secondary-action"),
+                        button("Delete", false).cls("plant-delete-button")))
+                .attr("id", popup)
+                .attr("popover", "auto")
+                .attr("role", "alertdialog")
+                .attr("aria-labelledby", popup + "-title")
+                .attr("aria-describedby", popup + "-message")
+                .cls("plant-delete-popup"))
+        .cls("schedule-row-actions");
   }
 
   private static Element plantRow(PageContext c, Map<String, Object> plant) {
