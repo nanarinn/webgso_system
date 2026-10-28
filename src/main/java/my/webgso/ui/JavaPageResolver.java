@@ -25,7 +25,6 @@ public final class JavaPageResolver implements ViewResolver, Ordered {
           "edit",
           "users",
           "profile",
-          "anomaly-reports",
           "batch-progress");
 
   @Override

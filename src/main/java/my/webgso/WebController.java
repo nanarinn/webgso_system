@@ -23,7 +23,6 @@ public class WebController {
   private final ReportService reports;
   private final ManualBatchService batches;
   private final ProfileService profileService;
-  private final ApiAnomalyService anomalyReports;
 
   public WebController(
       Store db,
@@ -33,8 +32,7 @@ public class WebController {
       ReadingService readings,
       ReportService reports,
       ManualBatchService batches,
-      ProfileService profileService,
-      ApiAnomalyService anomalyReports) {
+      ProfileService profileService) {
     this.db = db;
     this.accounts = accounts;
     this.admin = admin;
@@ -43,7 +41,6 @@ public class WebController {
     this.reports = reports;
     this.batches = batches;
     this.profileService = profileService;
-    this.anomalyReports = anomalyReports;
   }
 
   static Accounts.Principal principal(Authentication auth) {
@@ -644,7 +641,6 @@ public class WebController {
               + (result.rules() == 0
                   ? "No active validation rules are configured for this data type."
                   : "Checked against " + result.rules() + " active validation rules."));
-      flash.addFlashAttribute("apiTestReportId", result.reportId());
     } catch (NoSuchElementException e) {
       flash.addFlashAttribute("apiTestTitle", "Plant not found");
       flash.addFlashAttribute(
@@ -667,25 +663,8 @@ public class WebController {
   }
 
   @GetMapping("/admin/anomaly-reports")
-  public String anomalyReports(
-      Model model,
-      jakarta.servlet.http.HttpServletResponse response,
-      @RequestParam(required = false) Long reportId) {
-    var recent = anomalyReports.recent();
-    var selected =
-        reportId == null
-            ? Optional.<ApiAnomalyService.Report>empty()
-            : anomalyReports.find(reportId);
-    if (reportId != null && selected.isEmpty()) {
-      response.setStatus(404);
-      model.addAttribute("reportNotFound", true);
-    }
-    model.addAttribute("title", "Anomalies");
-    model.addAttribute("validationReports", recent);
-    model.addAttribute("anomalyPlants", db.list(LssPlant.class, "ORDER BY \"Name\", \"PlantId\""));
-    model.addAttribute("plantLatestReports", anomalyReports.latestByPlant());
-    selected.ifPresent(value -> model.addAttribute("validationReport", value));
-    return "anomaly-reports";
+  public String anomalyReports() {
+    return "redirect:/admin/lss-plants";
   }
 
   @GetMapping("/account/profile")

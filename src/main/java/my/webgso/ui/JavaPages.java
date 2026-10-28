@@ -30,7 +30,6 @@ public final class JavaPages {
           case "edit" -> AdminPages.edit(c);
           case "users" -> AdminPages.users(c);
           case "profile" -> ProfilePages.profile(c);
-          case "anomaly-reports" -> AnomalyPages.reports(c);
           default -> throw new IllegalArgumentException("Unknown page");
         };
     return document(c.text("title"), "", shell(c, content), false, false);
@@ -106,8 +105,6 @@ public final class JavaPages {
     if (c.yes("isAdmin")) {
       for (Resources.Definition item : c.<Resources.Definition>list("navigation")) {
         workspaceNav.add(navigation(c, item.title(), item.path()));
-        if (item.path().equals("/admin/lss-plants"))
-          workspaceNav.add(navigation(c, "Anomalies", "/admin/anomaly-reports"));
       }
       workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
     }
@@ -198,13 +195,6 @@ public final class JavaPages {
                     el("p", c.text("apiTestMessage")).attr("id", "api-test-message"),
                     el(
                             "form",
-                            c.model().get("apiTestReportId") == null
-                                ? null
-                                : action(
-                                    "View anomaly report",
-                                    "/admin/anomaly-reports?reportId="
-                                        + c.number("apiTestReportId"),
-                                    false),
                             el("button", "OK")
                                 .attr("type", "submit")
                                 .cls("primary-action")
