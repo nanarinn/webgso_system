@@ -238,7 +238,7 @@ class ConfiguredApiTests {
     assertThat(latest.responseMillis()).isEqualTo(123L);
     String html =
         mvc.perform(
-                get("/admin/plants/" + plant.id + "/test-history")
+                get("/admin/api-test-history")
                     .param("dataType", "Day Ahead")
                     .with(authentication(auth)))
             .andExpect(status().isOk())
@@ -253,18 +253,24 @@ class ConfiguredApiTests {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat(table).contains("api-test-success", "History for Day Ahead API");
+    assertThat(table).contains("api-test-success", "API test history");
     verify(client, times(2)).fetch("https://example.test/day-ahead");
   }
 
   @Test
-  void historyIsSeparatedByDatasetAndRequiresSignIn() throws Exception {
+  void combinedHistoryIncludesAllPlantsAndDatasetsAndRequiresSignIn() throws Exception {
     long started = System.nanoTime();
     testHistory.save(plant.id, "MMF", "another.admin", false, null, started, "MMF failed");
     assertThat(testHistory.count(plant.id, "Day Ahead")).isZero();
+    var another = new LssPlant();
+    another.plantId = "HISTORY-OTHER";
+    another.name = "Another history plant";
+    db.insert(another);
+    testHistory.save(
+        another.id, "Day Ahead", "configured.admin", true, null, started, "Other plant result");
     String page =
         mvc.perform(
-                get("/admin/plants/" + plant.id + "/test-history")
+                get("/admin/api-test-history")
                     .param("dataType", "Day Ahead")
                     .with(authentication(auth)))
             .andExpect(status().isOk())
@@ -272,9 +278,9 @@ class ConfiguredApiTests {
             .getResponse()
             .getContentAsString();
     assertThat(page)
-        .contains("No tests recorded for this API yet")
-        .doesNotContain("MMF failed", "another.admin");
-    mvc.perform(get("/admin/plants/" + plant.id + "/test-history").param("dataType", "MMF"))
+        .contains(
+            "MMF failed", "another.admin", "Another history plant", "Day Ahead", "MMF", plant.name);
+    mvc.perform(get("/admin/api-test-history").param("dataType", "MMF"))
         .andExpect(status().is3xxRedirection());
     verifyNoInteractions(client);
   }
@@ -286,7 +292,7 @@ class ConfiguredApiTests {
           plant.id, "Day Ahead", "configured.admin", true, null, System.nanoTime(), "Result " + i);
     String nextPage =
         mvc.perform(
-                get("/admin/plants/" + plant.id + "/test-history")
+                get("/admin/api-test-history")
                     .param("dataType", "Day Ahead")
                     .param("page", "1")
                     .with(authentication(auth)))

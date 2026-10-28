@@ -57,9 +57,17 @@ final class AdminPages {
                 "Administration",
                 c.text("title"),
                 null,
-                resource.path().equals("/admin/anomalies")
-                    ? action("← Back to Data Quality", "/admin/data-quality", false)
-                    : editable ? action("Add record", resource.path() + "/edit", true) : null),
+                el(
+                        "div",
+                        plants
+                            ? action("API test history", "/admin/api-test-history", false)
+                            : null,
+                        resource.path().equals("/admin/anomalies")
+                            ? action("← Back to Data Quality", "/admin/data-quality", false)
+                            : editable
+                                ? action("Add record", resource.path() + "/edit", true)
+                                : null)
+                    .cls("java-actions")),
             tabs);
     page.add(
         el(
@@ -173,16 +181,7 @@ final class AdminPages {
                                 button("Test", false)
                                     .attr(
                                         "aria-label",
-                                        "Test " + name + " API for " + plant.get("name"))),
-                            action(
-                                    "History",
-                                    url(
-                                        "/admin/plants/" + plant.get("id") + "/test-history",
-                                        Map.of("dataType", dataset)),
-                                    false)
-                                .attr(
-                                    "aria-label",
-                                    "History for " + name + " API for " + plant.get("name")))
+                                        "Test " + name + " API for " + plant.get("name"))))
                         .cls("plant-api-controls"))
                 .cls("plant-api-table-item"));
       }

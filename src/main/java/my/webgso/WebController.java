@@ -674,24 +674,22 @@ public class WebController {
     return testPlant(testPlantId, dataType, auth, flash);
   }
 
-  @GetMapping("/admin/plants/{id}/test-history")
-  public String apiTestHistory(
-      @PathVariable int id,
-      @RequestParam String dataType,
-      @RequestParam(defaultValue = "0") int page,
-      Model model) {
-    var plant =
-        db.find(LssPlant.class, id)
-            .orElseThrow(() -> new IllegalArgumentException("Plant not found"));
-    String dataset = Policies.canonical(dataType);
+  @GetMapping("/admin/api-test-history")
+  public String apiTestHistory(@RequestParam(defaultValue = "0") int page, Model model) {
     int safePage = Math.clamp(page, 0, 100000);
     model.addAttribute("title", "API test history");
-    model.addAttribute("historyPlant", plant);
-    model.addAttribute("dataType", dataset);
-    model.addAttribute("testHistory", testHistory.history(id, dataset, safePage));
-    model.addAttribute("total", testHistory.count(id, dataset));
+    var plants = new HashMap<Integer, LssPlant>();
+    db.list(LssPlant.class, "").forEach(plant -> plants.put(plant.id, plant));
+    model.addAttribute("historyPlants", plants);
+    model.addAttribute("testHistory", testHistory.allHistory(safePage));
+    model.addAttribute("total", testHistory.countAll());
     model.addAttribute("page", safePage);
     return "api-history";
+  }
+
+  @GetMapping("/admin/plants/{id}/test-history")
+  public String oldApiTestHistory() {
+    return "redirect:/admin/api-test-history";
   }
 
   @GetMapping("/admin/anomaly-reports")

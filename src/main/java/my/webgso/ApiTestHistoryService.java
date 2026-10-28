@@ -89,6 +89,14 @@ public class ApiTestHistoryService {
         dataset);
   }
 
+  public List<Entry> allHistory(int page) {
+    return query("ORDER BY \"Id\" DESC LIMIT 25 OFFSET ?", page * 25);
+  }
+
+  public long countAll() {
+    return jdbc.queryForObject("SELECT COUNT(*) FROM \"ApiTestHistory\"", Long.class);
+  }
+
   private List<Entry> query(String predicate, Object... args) {
     return jdbc.query(
         "SELECT * FROM \"ApiTestHistory\" " + predicate,

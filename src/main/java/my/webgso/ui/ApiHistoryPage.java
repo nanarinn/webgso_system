@@ -13,14 +13,19 @@ final class ApiHistoryPage {
   private ApiHistoryPage() {}
 
   static Element render(PageContext c) {
-    LssPlant plant = c.value("historyPlant");
+    Map<Integer, LssPlant> plants = c.value("historyPlants");
     var rows = new ArrayList<Element>();
-    for (Entry test : c.<Entry>list("testHistory"))
+    for (Entry test : c.<Entry>list("testHistory")) {
+      var plant = plants.get(test.plantId());
       rows.add(
           row(
               date(
                   test.testedAt().atZoneSameInstant(ZoneId.of("Asia/Kuala_Lumpur")),
                   "dd MMM yyyy, HH:mm:ss"),
+              plant == null
+                  ? "Deleted plant #" + test.plantId()
+                  : plant.name + " · " + plant.plantId,
+              test.dataset(),
               test.actor(),
               el("span", test.outcome())
                   .cls(
@@ -32,20 +37,26 @@ final class ApiHistoryPage {
               test.responseMillis() == null ? "—" : test.responseMillis() + " ms",
               test.durationMillis() + " ms",
               test.message()));
+    }
     return el(
         "section",
         heading(
             "API testing",
             "API test history",
-            plant.name + " · " + plant.plantId + " · " + c.text("dataType"),
+            "All tested APIs across all plants.",
             action("Back to Plant Config", "/admin/lss-plants", false)),
         el(
                 "article",
-                el("p", "Saved results for this API. Times use Malaysia Standard Time (UTC+8).")
+                el(
+                        "p",
+                        "All saved API tests, newest first. Times use Malaysia Standard Time"
+                            + " (UTC+8).")
                     .cls("api-history-note"),
                 table(
                     List.of(
                         "Tested at (MYT)",
+                        "Plant",
+                        "API",
                         "Tested by",
                         "Result",
                         "HTTP",
@@ -53,9 +64,9 @@ final class ApiHistoryPage {
                         "Test duration",
                         "Message"),
                     rows,
-                    "No tests recorded for this API yet. Press Test in Plant Config to create the"
+                    "No tests recorded yet. Press Test in Plant Config to create the"
                         + " first result."),
-                OperationsPages.pagination(c, "Test history pages", "dataType"))
+                OperationsPages.pagination(c, "Test history pages"))
             .cls("panel"));
   }
 }
