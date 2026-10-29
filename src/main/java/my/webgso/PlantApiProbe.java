@@ -6,8 +6,7 @@ import org.springframework.stereotype.Service;
 /** A connection test reads and parses the response without importing measurements. */
 @Service
 public class PlantApiProbe {
-  private static final com.fasterxml.jackson.databind.ObjectMapper JSON =
-      new com.fasterxml.jackson.databind.ObjectMapper();
+
   private final PlantApiClient client;
   private final PayloadTranslator translator;
 
@@ -30,21 +29,9 @@ public class PlantApiProbe {
     var parsed =
         translator.translate(
             response.payload(), response.contentType(), apiType, dataType, plantId, 0, now, 15);
-    if (parsed.readings().isEmpty()) {
-      try {
-        var body = JSON.readTree(response.payload());
-        if (body != null && body.path("data_status").asText().equalsIgnoreCase("awaiting_broker"))
-          throw new IllegalArgumentException(
-              "API server is reachable (HTTP "
-                  + response.status()
-                  + "), but it reports awaiting_broker and has no readable MMF measurements. Check"
-                  + " the MQTT broker and data publisher, then test again. The URL was not saved.");
-      } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
-        // Other response formats keep the normal no-measurements message.
-      }
+    if (parsed.readings().isEmpty())
       throw new IllegalArgumentException(
-          "The API did not return readable measurements. The URL was not saved.");
-    }
+          ApiFailureGuide.noMeasurements(response) + " The URL was not saved.");
     return parsed.readings().size();
   }
 }

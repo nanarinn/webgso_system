@@ -312,7 +312,7 @@ public class CollectionService {
                 LocalDateTime.now(Policies.LOCAL),
                 15);
         if (parsed.readings().isEmpty())
-          throw new IllegalArgumentException("The API did not return readable measurements.");
+          throw new IllegalArgumentException(ApiFailureGuide.noMeasurements(response));
         var issues =
             validation.evaluate(parsed.readings(), apiType, plant.capacityMw, parsed.issues());
         int ruleCount =

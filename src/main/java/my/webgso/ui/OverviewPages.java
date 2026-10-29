@@ -16,20 +16,25 @@ final class OverviewPages {
         el(
                 "div",
                 apiCard(
-                    "All API",
+                    "Total APIs",
                     c.number("apiCount"),
                     "Total registered plant API connections",
                     "/admin/lss-plants"),
                 apiCard(
-                    "Active / Success",
+                    "Successful",
                     c.number("apiSuccessCount"),
                     "Last test passed",
                     "/?apiStatus=success#latest-api-activity"),
                 apiCard(
-                    "Inactive / Failed",
+                    "Failed",
                     c.number("apiFailedCount"),
                     "Last test failed",
-                    "/?apiStatus=failed#latest-api-activity"))
+                    "/?apiStatus=failed#latest-api-activity"),
+                apiCard(
+                    "Not tested",
+                    c.number("apiUntestedCount"),
+                    "No saved test result yet",
+                    "/?apiStatus=untested#latest-api-activity"))
             .cls("admin-api-metrics");
     var rows = new ArrayList<Element>();
     for (Map<String, Object> api : c.<Map<String, Object>>list("apiActivity")) {
@@ -50,7 +55,7 @@ final class OverviewPages {
               tested,
               dataUrl.isBlank()
                   ? el("span", "No saved data").cls("admin-no-data")
-                  : action("View data", dataUrl, false)));
+                  : action("View history", dataUrl, false)));
     }
     return el(
             "section",
@@ -64,11 +69,8 @@ final class OverviewPages {
                     el(
                         "div",
                         el("p", "Admin console").cls("section-label"),
-                        el("h1", "Administration"),
-                        el(
-                            "p",
-                            "Manage visibility across Admin accounts and registered API"
-                                + " services.")),
+                        el("h1", "API overview"),
+                        el("p", "Review the latest test result for each configured plant API.")),
                     el(
                             "div",
                             action("Admin accounts", "/admin/users", false),
@@ -84,24 +86,22 @@ final class OverviewPages {
                             "div",
                             el("h2", "Latest API activity"),
                             el("p", "Latest saved connection tests for registered plants.")),
-                        action("All API records", "/collection-management", false)),
+                        action("API test history", "/admin/api-test-history", false)),
                     table(
-                        List.of(
-                            "API name", "Owner", "Category", "Status API", "Last tested", "Data"),
+                        List.of("Plant", "Tested by", "API", "Result", "Last tested", "History"),
                         rows,
                         "No registered plant API connections yet."),
                     el(
                         "footer",
                         el(
                             "p",
-                            "Active / Inactive reflects the last API connection test, not"
-                                + " continuous monitoring. Saved collection records remain"
-                                + " available separately."),
+                            "Counts use the latest saved result per configured API. They do not"
+                                + " represent continuous monitoring."),
                         el(
                             "p",
                             c.number("apiUntestedCount")
-                                + " connections not tested. API owners are not recorded in the"
-                                + " current plant registry.")))
+                                + " APIs have not been tested yet. Only APIs with saved URLs are"
+                                + " included.")))
                 .cls("admin-api-activity")
                 .attr("id", "latest-api-activity"))
         .cls("admin-overview");

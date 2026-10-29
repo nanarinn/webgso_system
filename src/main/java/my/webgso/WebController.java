@@ -127,60 +127,27 @@ public class WebController {
     if (auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_Admin"))) {
       var apiPlants =
           db.list(LssPlant.class, "ORDER BY \"LastApiTestAt\" DESC NULLS LAST, \"Name\"");
-      model.addAttribute("apiCount", apiPlants.size());
+      var apiRows =
+          ApiOverview.rows(
+              apiPlants, db.list(PlantApiConfiguration.class, ""), testHistory.latest());
+      model.addAttribute("apiCount", apiRows.size());
       model.addAttribute(
           "apiSuccessCount",
-          apiPlants.stream().filter(p -> "Connected".equals(p.apiConnectionStatus)).count());
+          apiRows.stream().filter(row -> "success".equals(row.get("tone"))).count());
       model.addAttribute(
           "apiFailedCount",
-          apiPlants.stream().filter(p -> "Failed".equals(p.apiConnectionStatus)).count());
+          apiRows.stream().filter(row -> "failed".equals(row.get("tone"))).count());
       model.addAttribute(
           "apiUntestedCount",
-          apiPlants.stream()
+          apiRows.stream().filter(row -> "untested".equals(row.get("tone"))).count());
+      var activity =
+          apiRows.stream()
               .filter(
-                  p ->
-                      !"Connected".equals(p.apiConnectionStatus)
-                          && !"Failed".equals(p.apiConnectionStatus))
-              .count());
-      var activity = new ArrayList<Map<String, Object>>();
-      for (var plant :
-          apiPlants.stream()
-              .filter(
-                  p ->
-                      !Set.of("success", "failed").contains(apiStatus)
-                          || (apiStatus.equals("success") ? "Connected" : "Failed")
-                              .equals(p.apiConnectionStatus))
+                  row ->
+                      !Set.of("success", "failed", "untested").contains(apiStatus)
+                          || apiStatus.equals(row.get("tone")))
               .limit(10)
-              .toList()) {
-        var row = new LinkedHashMap<String, Object>();
-        row.put("name", plant.name);
-        row.put("plantCode", plant.plantId);
-        row.put("category", Objects.toString(plant.lastApiTestSource, "DDQ / MMF"));
-        row.put(
-            "status",
-            "Connected".equals(plant.apiConnectionStatus)
-                ? "Active / Success"
-                : "Failed".equals(plant.apiConnectionStatus) ? "Inactive / Failed" : "Not tested");
-        row.put(
-            "tone",
-            "Connected".equals(plant.apiConnectionStatus)
-                ? "success"
-                : "Failed".equals(plant.apiConnectionStatus) ? "failed" : "untested");
-        row.put(
-            "testedAt",
-            plant.lastApiTestAt == null
-                ? null
-                : plant.lastApiTestAt.atZoneSameInstant(Policies.LOCAL));
-        // The current schema stores a test actor in audit history, rather than an API owner.
-        row.put("owner", "Not recorded");
-        var saved =
-            db.list(
-                CollectionJobEntity.class,
-                "WHERE \"PlantId\"=? ORDER BY \"StartedAt\" DESC LIMIT 1",
-                plant.id);
-        row.put("dataUrl", saved.isEmpty() ? "" : "/collections/" + saved.getFirst().id);
-        activity.add(row);
-      }
+              .toList();
       model.addAttribute("apiActivity", activity);
       return "admin-overview";
     }

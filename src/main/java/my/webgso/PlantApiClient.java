@@ -173,23 +173,7 @@ public class PlantApiClient {
     } catch (IllegalArgumentException e) {
       throw e;
     } catch (Exception e) {
-      for (Throwable cause = e; cause != null; cause = cause.getCause()) {
-        if (cause instanceof java.net.SocketTimeoutException
-            || cause instanceof java.util.concurrent.TimeoutException)
-          throw new IllegalArgumentException(
-              "API request timed out. The server did not respond in time.", e);
-        if (cause instanceof java.net.ConnectException)
-          throw new IllegalArgumentException(
-              "Could not connect to the API server. Check the host and port.", e);
-        if (cause instanceof javax.net.ssl.SSLException)
-          throw new IllegalArgumentException(
-              "The API TLS certificate or secure connection could not be verified.", e);
-      }
-      throw new IllegalArgumentException(
-          "API connection failed ("
-              + e.getClass().getSimpleName()
-              + "). Check connectivity and allowed hosts.",
-          e);
+      throw new IllegalArgumentException(ApiFailureGuide.connection(e), e);
     }
   }
 }

@@ -32,6 +32,7 @@ class ApplicationIntegrationTests {
   @Autowired Accounts accounts;
   @Autowired CollectionService collection;
   @Autowired ReportService reports;
+  @Autowired ApiTestHistoryService overviewHistory;
   @MockitoBean PlantApiClient client;
   @MockitoBean ManualBatchService batches;
   ApplicationUser admin, otherAdmin;
@@ -664,11 +665,17 @@ class ApplicationIntegrationTests {
     failed.name = "Overview failed API";
     failed.apiConnectionStatus = "Failed";
     db.insert(failed);
+    passed.mmfApiEndpoint = "https://example.test/mmf";
+    failed.mmfApiEndpoint = "https://example.test/mmf";
+    db.update(passed);
+    db.update(failed);
+    overviewHistory.save(passed.id, "MMF", "admin", true, null, System.nanoTime(), "Passed");
+    overviewHistory.save(failed.id, "MMF", "admin", false, null, System.nanoTime(), "Failed");
     mvc.perform(get("/").with(authentication(adminAuth)))
         .andExpect(status().isOk())
         .andExpect(view().name("admin-overview"))
-        .andExpect(model().attribute("apiCount", (int) db.count(LssPlant.class)))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("22 Oct 2026, 07:15 MYT")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Total APIs")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Not tested")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Admin accounts")));
     var filtered =
         mvc.perform(get("/").param("apiStatus", "failed").with(authentication(adminAuth)))
