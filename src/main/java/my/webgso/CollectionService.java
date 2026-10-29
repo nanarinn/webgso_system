@@ -18,6 +18,7 @@ public class CollectionService {
   private final ValidationService validation;
   private final ApiAnomalyService anomalyReports;
   private final ApiTestHistoryService testHistory;
+  private final ApiTestTiming testTiming;
   private final TransactionTemplate transaction;
 
   public CollectionService(
@@ -28,6 +29,7 @@ public class CollectionService {
       ValidationService validation,
       ApiAnomalyService anomalyReports,
       ApiTestHistoryService testHistory,
+      ApiTestTiming testTiming,
       PlatformTransactionManager manager) {
     this.db = db;
     this.accounts = accounts;
@@ -36,6 +38,7 @@ public class CollectionService {
     this.validation = validation;
     this.anomalyReports = anomalyReports;
     this.testHistory = testHistory;
+    this.testTiming = testTiming;
     transaction = new TransactionTemplate(manager);
   }
 
@@ -258,80 +261,97 @@ public class CollectionService {
     if (retest && testHistory.count(id, type) == 0)
       throw new IllegalArgumentException("This API has no saved test to recheck.");
     boolean claimed =
-        retest
-            || Boolean.TRUE.equals(
-                transaction.execute(
-                    status -> {
-                      db.list(LssPlant.class, "WHERE \"Id\"=? FOR UPDATE", id);
-                      return testHistory.claim(id, type);
-                    }));
+        Boolean.TRUE.equals(
+            transaction.execute(
+                status -> {
+                  db.list(LssPlant.class, "WHERE \"Id\"=? FOR UPDATE", id);
+                  var next = testTiming.nextTests().get(ApiTestHistoryService.key(id, type));
+                  if (!retest && next != null && next.isAfter(OffsetDateTime.now(ZoneOffset.UTC)))
+                    throw new ApiTestHistoryService.AlreadyTested(
+                        "Please wait until "
+                            + next.atZoneSameInstant(Policies.LOCAL)
+                                .format(
+                                    java.time.format.DateTimeFormatter.ofPattern(
+                                        "dd MMM yyyy, HH:mm:ss"))
+                            + " MYT before testing this API again. This follows Collection"
+                            + " Schedules.");
+                  return testHistory.claim(id, type);
+                }));
     if (!claimed) throw new ApiTestHistoryService.AlreadyTested();
-    var links =
-        db.list(
-            PlantApiConfiguration.class,
-            "WHERE \"PlantId\"=? AND \"ApiType\"=? AND \"DataType\"=?",
-            id,
-            apiType,
-            type);
-    String url =
-        links.isEmpty()
-            ? (apiType.equals("MMF") ? plant.mmfApiEndpoint : plant.ddqApiEndpoint)
-            : links.getFirst().apiLink;
-    if (url == null || url.isBlank()) {
-      testHistory.save(
-          id, type, actor, false, null, started, "No API URL is configured for " + type + ".");
-      throw new IllegalArgumentException(
-          "No API URL is configured for "
-              + type
-              + ". Choose a saved dataset or add its API URL in Edit.");
-    }
-    PlantApiClient.Response response = null;
     try {
-      response = api.fetch(url);
-      var parsed =
-          translator.translate(
-              response.payload(),
-              response.contentType(),
-              apiType,
-              type,
+      var links =
+          db.list(
+              PlantApiConfiguration.class,
+              "WHERE \"PlantId\"=? AND \"ApiType\"=? AND \"DataType\"=?",
               id,
-              0,
-              LocalDateTime.now(Policies.LOCAL),
-              15);
-      if (parsed.readings().isEmpty())
-        throw new IllegalArgumentException("The API did not return readable measurements.");
-      var issues =
-          validation.evaluate(parsed.readings(), apiType, plant.capacityMw, parsed.issues());
-      int ruleCount =
-          (int) validation.rules().stream().filter(rule -> rule.dataType.equals(apiType)).count();
-      long reportId = anomalyReports.save(plant, type, parsed.readings().size(), ruleCount, issues);
-      plant.apiConnectionStatus = "Connected";
-      plant.lastApiTestMessage =
-          parsed.readings().size() + " readable value(s); " + issues.size() + " anomaly/anomalies";
-      plant.lastApiTestSource = apiType;
-      plant.lastApiTestAt = OffsetDateTime.now(ZoneOffset.UTC);
-      db.update(plant);
-      accounts.audit(
-          actor, "API test", "Plant", plant.plantId, "Success", plant.lastApiTestMessage);
-      testHistory.save(id, type, actor, true, response, started, plant.lastApiTestMessage);
-      return new ApiTestResult(
-          response, reportId, parsed.readings().size(), issues.size(), ruleCount);
-    } catch (RuntimeException e) {
-      testHistory.save(
-          id,
-          type,
-          actor,
-          false,
-          e instanceof PlantApiClient.Failure failure ? failure.response() : response,
-          started,
-          e.getMessage());
-      plant.apiConnectionStatus = "Failed";
-      plant.lastApiTestMessage = e.getMessage();
-      plant.lastApiTestAt = OffsetDateTime.now(ZoneOffset.UTC);
-      db.update(plant);
-      if (!(e instanceof PlantApiClient.Failure) && response != null)
-        throw new PlantApiClient.Failure(e.getMessage(), response);
-      throw e;
+              apiType,
+              type);
+      String url =
+          links.isEmpty()
+              ? (apiType.equals("MMF") ? plant.mmfApiEndpoint : plant.ddqApiEndpoint)
+              : links.getFirst().apiLink;
+      if (url == null || url.isBlank()) {
+        testHistory.save(
+            id, type, actor, false, null, started, "No API URL is configured for " + type + ".");
+        throw new IllegalArgumentException(
+            "No API URL is configured for "
+                + type
+                + ". Choose a saved dataset or add its API URL in Edit.");
+      }
+      PlantApiClient.Response response = null;
+      try {
+        response = api.fetch(url);
+        var parsed =
+            translator.translate(
+                response.payload(),
+                response.contentType(),
+                apiType,
+                type,
+                id,
+                0,
+                LocalDateTime.now(Policies.LOCAL),
+                15);
+        if (parsed.readings().isEmpty())
+          throw new IllegalArgumentException("The API did not return readable measurements.");
+        var issues =
+            validation.evaluate(parsed.readings(), apiType, plant.capacityMw, parsed.issues());
+        int ruleCount =
+            (int) validation.rules().stream().filter(rule -> rule.dataType.equals(apiType)).count();
+        long reportId =
+            anomalyReports.save(plant, type, parsed.readings().size(), ruleCount, issues);
+        plant.apiConnectionStatus = "Connected";
+        plant.lastApiTestMessage =
+            parsed.readings().size()
+                + " readable value(s); "
+                + issues.size()
+                + " anomaly/anomalies";
+        plant.lastApiTestSource = apiType;
+        plant.lastApiTestAt = OffsetDateTime.now(ZoneOffset.UTC);
+        db.update(plant);
+        accounts.audit(
+            actor, "API test", "Plant", plant.plantId, "Success", plant.lastApiTestMessage);
+        testHistory.save(id, type, actor, true, response, started, plant.lastApiTestMessage);
+        return new ApiTestResult(
+            response, reportId, parsed.readings().size(), issues.size(), ruleCount);
+      } catch (RuntimeException e) {
+        testHistory.save(
+            id,
+            type,
+            actor,
+            false,
+            e instanceof PlantApiClient.Failure failure ? failure.response() : response,
+            started,
+            e.getMessage());
+        plant.apiConnectionStatus = "Failed";
+        plant.lastApiTestMessage = e.getMessage();
+        plant.lastApiTestAt = OffsetDateTime.now(ZoneOffset.UTC);
+        db.update(plant);
+        if (!(e instanceof PlantApiClient.Failure) && response != null)
+          throw new PlantApiClient.Failure(e.getMessage(), response);
+        throw e;
+      }
+    } finally {
+      testHistory.release(id, type);
     }
   }
 }

@@ -25,6 +25,7 @@ public class WebController {
   private final ProfileService profileService;
   private final ApiTestHistoryService testHistory;
   private final ApiRetestService apiRetests;
+  private final ApiTestTiming testTiming;
 
   public WebController(
       Store db,
@@ -36,7 +37,8 @@ public class WebController {
       ManualBatchService batches,
       ProfileService profileService,
       ApiTestHistoryService testHistory,
-      ApiRetestService apiRetests) {
+      ApiRetestService apiRetests,
+      ApiTestTiming testTiming) {
     this.db = db;
     this.accounts = accounts;
     this.admin = admin;
@@ -47,6 +49,7 @@ public class WebController {
     this.profileService = profileService;
     this.testHistory = testHistory;
     this.apiRetests = apiRetests;
+    this.testTiming = testTiming;
   }
 
   static Accounts.Principal principal(Authentication auth) {
@@ -527,6 +530,7 @@ public class WebController {
       }
       model.addAttribute("plantApis", plantApis);
       model.addAttribute("latestApiTests", testHistory.latest());
+      model.addAttribute("nextApiTests", testTiming.nextTests());
     }
     model.addAttribute("q", q);
     model.addAttribute("page", safePage);
@@ -660,7 +664,7 @@ public class WebController {
                   ? "No active validation rules are configured for this data type."
                   : "Checked against " + result.rules() + " active validation rules."));
     } catch (ApiTestHistoryService.AlreadyTested e) {
-      flash.addFlashAttribute("apiTestTitle", "API already tested");
+      flash.addFlashAttribute("apiTestTitle", "Please wait before testing again");
       flash.addFlashAttribute("apiTestMessage", e.getMessage());
       flash.addFlashAttribute("apiTestAlreadyTested", true);
     } catch (NoSuchElementException e) {

@@ -35,6 +35,11 @@ public class ApiTestHistoryService {
   void initialize() {
     new ResourceDatabasePopulator(new ClassPathResource("schema-api-test-history.sql"))
         .execute(source);
+    jdbc.update(
+        "DELETE FROM \"ApiTestClaims\" WHERE EXISTS (SELECT 1 FROM \"ApiTestHistory\" h WHERE"
+            + " h.\"PlantId\"=\"ApiTestClaims\".\"PlantId\" AND"
+            + " h.\"Dataset\"=\"ApiTestClaims\".\"Dataset\" AND"
+            + " h.\"TestedAt\">=\"ApiTestClaims\".\"StartedAt\")");
   }
 
   public static String key(int plantId, String dataset) {
@@ -43,13 +48,12 @@ public class ApiTestHistoryService {
 
   // Called while holding the plant row lock, before making any outbound request.
   public boolean claim(int plantId, String dataset) {
-    if (count(plantId, dataset) > 0
-        || jdbc.queryForObject(
-                "SELECT COUNT(*) FROM \"ApiTestClaims\" WHERE \"PlantId\"=? AND \"Dataset\"=?",
-                Long.class,
-                plantId,
-                dataset)
-            > 0) return false;
+    if (jdbc.queryForObject(
+            "SELECT COUNT(*) FROM \"ApiTestClaims\" WHERE \"PlantId\"=? AND \"Dataset\"=?",
+            Long.class,
+            plantId,
+            dataset)
+        > 0) return false;
     jdbc.update(
         "INSERT INTO \"ApiTestClaims\" (\"PlantId\",\"Dataset\",\"StartedAt\") VALUES (?,?,?)",
         plantId,
@@ -58,11 +62,18 @@ public class ApiTestHistoryService {
     return true;
   }
 
+  public void release(int plantId, String dataset) {
+    jdbc.update(
+        "DELETE FROM \"ApiTestClaims\" WHERE \"PlantId\"=? AND \"Dataset\"=?", plantId, dataset);
+  }
+
   public static final class AlreadyTested extends IllegalArgumentException {
     public AlreadyTested() {
-      super(
-          "This API has already been tested or is currently being tested. To recheck saved APIs,"
-              + " use Test all APIs in API test history.");
+      this("This API is currently being tested. Please wait for it to finish.");
+    }
+
+    public AlreadyTested(String message) {
+      super(message);
     }
   }
 

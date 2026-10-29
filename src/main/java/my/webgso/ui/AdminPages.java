@@ -138,6 +138,12 @@ final class AdminPages {
       Map<String, ApiTestHistoryService.Entry> latestTests = c.value("latestApiTests");
       for (String name : apiNames) {
         String dataset = name.equals("DDQ") ? "Rolling 24 Hour" : name;
+        Map<String, java.time.OffsetDateTime> nextTests = c.value("nextApiTests");
+        var nextTest =
+            nextTests == null
+                ? null
+                : nextTests.get(
+                    ApiTestHistoryService.key(((Number) plant.get("id")).intValue(), dataset));
         var last =
             latestTests == null
                 ? null
@@ -170,7 +176,18 @@ final class AdminPages {
                                             ? "api-test-untested"
                                             : last.outcome().equals("Success")
                                                 ? "api-test-success"
-                                                : "api-test-failed")))
+                                                : "api-test-failed")),
+                            nextTest != null && nextTest.isAfter(java.time.OffsetDateTime.now())
+                                ? el(
+                                        "small",
+                                        "Next test: "
+                                            + date(
+                                                nextTest.atZoneSameInstant(
+                                                    java.time.ZoneId.of("Asia/Kuala_Lumpur")),
+                                                "dd MMM yyyy, HH:mm")
+                                            + " MYT")
+                                    .cls("api-history-note")
+                                : null)
                         .cls("plant-api-name-result"),
                     el(
                             "div",

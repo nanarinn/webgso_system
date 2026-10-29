@@ -29,6 +29,7 @@ class ConfiguredApiTests {
   @Autowired CollectionService collection;
   @Autowired ApiAnomalyService anomalyReports;
   @Autowired ApiTestHistoryService testHistory;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
   @MockitoBean PlantApiClient client;
   LssPlant plant;
   Authentication auth;
@@ -57,6 +58,11 @@ class ConfiguredApiTests {
     link.dataType = "Day Ahead";
     link.apiLink = "https://example.test/day-ahead";
     db.insert(link);
+    var schedule = new CollectionSchedule();
+    schedule.plantId = plant.id;
+    schedule.dataType = "Day Ahead";
+    schedule.cronExpression = "0 0 0 * * *";
+    db.insert(schedule);
   }
 
   @Test
@@ -338,7 +344,7 @@ class ConfiguredApiTests {
                     .with(csrf())
                     .param("dataType", "Day Ahead"))
             .andExpect(redirectedUrl("/admin/lss-plants"))
-            .andExpect(flash().attribute("apiTestTitle", "API already tested"))
+            .andExpect(flash().attribute("apiTestTitle", "Please wait before testing again"))
             .andExpect(flash().attribute("apiTestAlreadyTested", true))
             .andReturn();
     String html =
@@ -351,7 +357,7 @@ class ConfiguredApiTests {
             .getResponse()
             .getContentAsString();
     assertThat(html)
-        .contains("API already tested", "To recheck saved APIs")
+        .contains("Please wait before testing again", "This follows Collection Schedules")
         .doesNotContain("HTTP status", "Preview response");
     assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(1);
     verify(client, times(1)).fetch("https://example.test/day-ahead");
@@ -510,5 +516,48 @@ class ConfiguredApiTests {
     assertThat(testHistory.allHistory(0).stream().filter(item -> item.plantId() == plant.id))
         .hasSize(1);
     verify(client, times(2)).fetch("https://example.test/day-ahead");
+  }
+
+  @Test
+  void plantTestAllowedAgainAfterNextScheduledRun() {
+    testHistory.save(plant.id, "Day Ahead", "admin", true, null, System.nanoTime(), "Previous");
+    assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "admin"))
+        .isInstanceOf(ApiTestHistoryService.AlreadyTested.class);
+    verifyNoInteractions(client);
+    jdbc.update(
+        "UPDATE \"ApiTestHistory\" SET \"TestedAt\"=? WHERE \"PlantId\"=?",
+        java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).minusDays(2),
+        plant.id);
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "{\"timestamp\":\"2026-10-28T00:00:00\",\"power\":10}",
+                25));
+    collection.test(plant.id, "Day Ahead", "admin");
+    assertThat(testHistory.count(plant.id, "Day Ahead")).isEqualTo(2);
+    verify(client).fetch("https://example.test/day-ahead");
+  }
+
+  @Test
+  void noActiveScheduleAllowsRetestButConcurrentClaimsAreBlocked() {
+    jdbc.update(
+        "UPDATE \"CollectionSchedules\" SET \"IsActive\"=false WHERE \"PlantId\"=?", plant.id);
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "{\"timestamp\":\"2026-10-28T00:00:00\",\"power\":10}",
+                25));
+    collection.test(plant.id, "Day Ahead", "admin");
+    collection.test(plant.id, "Day Ahead", "admin");
+    verify(client, times(2)).fetch("https://example.test/day-ahead");
+    assertThat(testHistory.claim(plant.id, "Day Ahead")).isTrue();
+    assertThat(testHistory.claim(plant.id, "Day Ahead")).isFalse();
+    assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "admin"))
+        .isInstanceOf(ApiTestHistoryService.AlreadyTested.class);
+    testHistory.release(plant.id, "Day Ahead");
   }
 }
