@@ -16,9 +16,11 @@ final class OperationsPages {
     long page = c.number("page");
     return el(
             "nav",
-            page > 0 ? link("Previous", c.pageUrl(page - 1, filters)) : null,
-            el("span", "Page " + (page + 1)),
-            (page + 1) * 25 < c.number("total") ? link("Next", c.pageUrl(page + 1, filters)) : null)
+            page > 0 ? link("Previous", c.pageUrl(page - 1, filters)).attr("rel", "prev") : null,
+            el("span", "Page " + (page + 1)).attr("aria-current", "page"),
+            (page + 1) * 25 < c.number("total")
+                ? link("Next", c.pageUrl(page + 1, filters)).attr("rel", "next")
+                : null)
         .cls("java-pagination")
         .attr("aria-label", label);
   }
@@ -134,11 +136,11 @@ final class OperationsPages {
                       "p",
                       range != null
                           ? "Saved readings exist, but none match the selected dates. Show"
-                                + " available data to use the correct date range."
+                              + " available data to use the correct date range."
                           : "No saved readings match the selected plant, dataset, parameter or"
-                                + " submission. Check these filters, or collect data first. Test"
-                                + " API checks the connection; Collect data saves readings for"
-                                + " Analytics."),
+                              + " submission. Check these filters, or collect data first. Test"
+                              + " API checks the connection; Collect data saves readings for"
+                              + " Analytics."),
                   el(
                           "div",
                           range != null

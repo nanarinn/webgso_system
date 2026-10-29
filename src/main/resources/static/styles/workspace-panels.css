@@ -326,3 +326,18 @@
 .analytics-empty-help { padding: 28px 0; }
 .analytics-empty-help h3 { font-size: 20px; margin: 0 0 12px; }
 .analytics-empty-help p { max-width: 780px; margin-bottom: 20px; }
+.app-content .java-pagination { gap: 12px; align-items: center; flex-wrap: wrap; }
+.app-content .java-pagination > a {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  min-height: 42px; padding: 10px 18px; border: 1px solid #cbdccf;
+  border-radius: 10px; background: #fff; color: #19513e;
+  font-size: 14px; font-weight: 650; text-decoration: none;
+  box-shadow: 0 2px 5px #123d2f06; transition: background .15s, border-color .15s;
+}
+.app-content .java-pagination > a:hover { background: #edf5e5; border-color: #94b682; color: #123d2f; }
+.app-content .java-pagination > a:focus-visible { outline: 3px solid #9fbc77; outline-offset: 3px; }
+.app-content .java-pagination > a[rel="next"] { background: #19513e; border-color: #19513e; color: #fff; }
+.app-content .java-pagination > a[rel="next"]:hover { background: #123d2f; }
+.app-content .java-pagination > a[rel="prev"]::before { content: "←"; }
+.app-content .java-pagination > a[rel="next"]::after { content: "→"; }
+.app-content .java-pagination > span { padding: 8px 13px; border-radius: 8px; background: #f0f5eb; color: #526b5b; font-size: 13px; font-weight: 600; }
