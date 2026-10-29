@@ -415,8 +415,13 @@ final class AdminPages {
                                 .attr("inputmode", "numeric")
                                 .attr("pattern", "[0-9]+")
                                 .attr("title", "Use numbers only, for example 01 or 02.")
-                                .flag("required", true)
-                                .attr("placeholder", "e.g. 01")),
+                                .flag("required", plant.id != 0)
+                                .flag("readonly", plant.id == 0)
+                                .attr(
+                                    "placeholder",
+                                    plant.id == 0
+                                        ? "Assigned automatically when saved"
+                                        : "e.g. 01")),
                         field(
                             "Plant name",
                             input("name", "text", plant.name)
@@ -604,7 +609,12 @@ final class AdminPages {
             .cls("plant-editor-layout"),
         el(
                 "footer",
-                el("p", "Only Plant ID, plant name and capacity are required."),
+                el(
+                    "p",
+                    plant.id == 0
+                        ? "Plant ID is assigned automatically. Only plant name and capacity are"
+                              + " required."
+                        : "Plant name and capacity are required."),
                 el("div", action("Cancel", "/admin/lss-plants", false), button("Save plant", true))
                     .cls("java-actions"))
             .cls("plant-editor-footer"));

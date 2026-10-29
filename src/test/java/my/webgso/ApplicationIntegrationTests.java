@@ -331,6 +331,53 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void newPlantsReceiveNextNumericIdsAndApiCardKeepsAssignedId() throws Exception {
+    var maximum =
+        db.list(LssPlant.class, "").stream()
+            .map(p -> p.plantId)
+            .filter(value -> value.matches("[0-9]{1,20}"))
+            .map(java.math.BigInteger::new)
+            .max(java.math.BigInteger::compareTo)
+            .orElse(java.math.BigInteger.ZERO);
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("plantId", "")
+                .param("name", "AUTO BDNS")
+                .param("capacityMw", "30"))
+        .andExpect(redirectedUrl("/admin/lss-plants"));
+    var saved = db.list(LssPlant.class, "WHERE \"Name\"=?", "AUTO BDNS").getFirst();
+    assertThat(new java.math.BigInteger(saved.plantId))
+        .isEqualTo(maximum.add(java.math.BigInteger.ONE));
+    assertThat(saved.plantId).matches("[0-9]{2,20}");
+    readableApi("https://example.test/auto/dayahead");
+    var result =
+        mvc.perform(
+                post("/admin/lss-plants/save-api")
+                    .with(authentication(adminAuth))
+                    .with(csrf())
+                    .param("plantId", "")
+                    .param("name", "AUTO KMPR")
+                    .param("capacityMw", "30")
+                    .param("saveApi", "apiDayAhead")
+                    .param("apiDayAhead", "https://example.test/auto/dayahead"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("edit"))
+            .andReturn();
+    var apiPlant = (LssPlant) result.getModelAndView().getModel().get("plant");
+    assertThat(new java.math.BigInteger(apiPlant.plantId))
+        .isEqualTo(maximum.add(java.math.BigInteger.TWO));
+    assertThat(db.find(LssPlant.class, apiPlant.id).orElseThrow().plantId)
+        .isEqualTo(apiPlant.plantId);
+    mvc.perform(get("/admin/lss-plants/edit").with(authentication(adminAuth)))
+        .andExpect(
+            content()
+                .string(org.hamcrest.Matchers.containsString("Assigned automatically when saved")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("readonly=\"readonly\"")));
+  }
+
+  @Test
   void plantIdAcceptsOnlyDigitsAndPreservesLeadingZeros() throws Exception {
     long before = db.count(LssPlant.class);
     for (String invalid : List.of("BDNS", "1.5", "-1", "1e3")) {

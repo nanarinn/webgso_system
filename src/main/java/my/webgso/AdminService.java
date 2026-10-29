@@ -162,6 +162,17 @@ public class AdminService {
         else throw new IllegalArgumentException("Unsupported form field");
         field.set(record, value);
       }
+      if (record instanceof LssPlant p) {
+        var original = rawId.isBlank() ? null : db.find(LssPlant.class, p.id).orElseThrow();
+        if (original == null || !p.plantId.equals(original.plantId)) {
+          lockPlantIds();
+          if (original == null && p.plantId.isBlank()) p.plantId = nextPlantId();
+          if (!db.list(LssPlant.class, "WHERE \"PlantId\"=? AND \"Id\"<>?", p.plantId, p.id)
+              .isEmpty())
+            throw new IllegalArgumentException(
+                "This Plant ID is already used. Choose another number.");
+        }
+      }
       validate(record, rawId.isBlank(), actor);
       if (rawId.isBlank()) db.insert(record);
       else db.update(record);
@@ -183,6 +194,36 @@ public class AdminService {
   private static void nonblank(String value, String field) {
     if (value == null || value.isBlank())
       throw new IllegalArgumentException(field + " is required");
+  }
+
+  private void lockPlantIds() {
+    boolean postgres =
+        Boolean.TRUE.equals(
+            db.jdbc()
+                .execute(
+                    (org.springframework.jdbc.core.ConnectionCallback<Boolean>)
+                        connection ->
+                            connection
+                                .getMetaData()
+                                .getDatabaseProductName()
+                                .equals("PostgreSQL")));
+    // A database transaction lock coordinates ID allocation across application instances.
+    if (postgres) db.jdbc().queryForList("SELECT pg_advisory_xact_lock(1196642127, 1)");
+    else db.jdbc().queryForList("SELECT \"Id\" FROM \"LssPlants\" FOR UPDATE");
+  }
+
+  private String nextPlantId() {
+    var maximum = java.math.BigInteger.ZERO;
+    for (String code :
+        db.jdbc().queryForList("SELECT \"PlantId\" FROM \"LssPlants\"", String.class)) {
+      if (code != null && code.matches("[0-9]{1,20}"))
+        maximum = maximum.max(new java.math.BigInteger(code));
+    }
+    String next = maximum.add(java.math.BigInteger.ONE).toString();
+    if (next.length() > 20)
+      throw new IllegalArgumentException(
+          "No more Plant IDs are available within the 20-digit limit.");
+    return next.length() < 2 ? "0" + next : next;
   }
 
   private void plant(Integer id) {

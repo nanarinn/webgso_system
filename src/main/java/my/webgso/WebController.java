@@ -750,7 +750,8 @@ public class WebController {
     editResource(Resources.get("/admin/lss-plants"), model, id);
     var plant = (LssPlant) model.getAttribute("plant");
     // Keep other in-progress fields on screen; only the chosen API is persisted.
-    if (form.containsKey("plantId")) plant.plantId = form.get("plantId");
+    if (form.containsKey("plantId") && (id == null || !form.get("plantId").isBlank()))
+      plant.plantId = form.get("plantId");
     if (form.containsKey("name")) plant.name = form.get("name");
     if (form.containsKey("state")) plant.state = form.get("state");
     if (form.containsKey("capacityMw")) {
