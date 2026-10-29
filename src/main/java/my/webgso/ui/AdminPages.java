@@ -42,7 +42,8 @@ final class AdminPages {
     }
     var tabs = el("nav").cls("java-tabs");
     switch (resource.path()) {
-      case "/admin/lss-plants" -> tabs.add(link("Plant API links", "/admin/api-configurations"));
+      case "/admin/lss-plants" ->
+          tabs.add(action("Plant API links", "/admin/api-configurations", false));
       case "/admin/report-automation" ->
           tabs.add(
               link("Recipients", "/admin/report-recipients"),
@@ -613,7 +614,7 @@ final class AdminPages {
                     "p",
                     plant.id == 0
                         ? "Plant ID is assigned automatically. Only plant name and capacity are"
-                              + " required."
+                            + " required."
                         : "Plant name and capacity are required."),
                 el("div", action("Cancel", "/admin/lss-plants", false), button("Save plant", true))
                     .cls("java-actions"))
