@@ -40,18 +40,11 @@ final class OperationsPages {
     var stateOptions =
         el("select", option("", "All states", c.text("state"))).attr("name", "state");
     for (String s : c.<String>list("states")) stateOptions.add(option(s, s, c.text("state")));
-    var regionOptions =
-        el("select", option("", "All regions", c.text("region"))).attr("name", "region");
-    for (String r : c.<String>list("regions")) regionOptions.add(option(r, r, c.text("region")));
     var filters =
         el(
                 "form",
                 field("Plant", plants(c, "plantIds", c.text("plantIds"), "All plants")),
-                field("State", stateOptions),
-                field("Region", regionOptions),
-                field(
-                    "Group by",
-                    select("scope", List.of("Plant", "State", "Region"), c.text("scope"))))
+                field("State", stateOptions))
             .cls("panel java-filters")
             .attr("method", "get");
     if (mmf) {
@@ -66,7 +59,11 @@ final class OperationsPages {
         dateField("Data from", "from", c.value("from"), false),
         dateField("Data until (exclusive)", "to", c.value("to"), false),
         dateField("Submission (optional)", "submission", c.value("submission"), false),
-        button("Apply filters", true));
+        el(
+                "div",
+                button("Apply filters", true),
+                action("Clear", mmf ? "/mmf-analytics" : "/ddq-analytics", false))
+            .cls("java-actions"));
     var chart =
         el(
                 "article",
@@ -127,9 +124,7 @@ final class OperationsPages {
             "to",
             "submission",
             "parameter",
-            "state",
-            "region",
-            "scope"));
+            "state"));
     return el(
         "section",
         heading(
