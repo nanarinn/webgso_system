@@ -354,7 +354,7 @@ final class AdminPages {
     return el(
         "section",
         heading(
-            "Repository configuration",
+            "Web services configuration",
             c.text("title"),
             null,
             action("Back to list", resource.path(), false)),
@@ -606,7 +606,10 @@ final class AdminPages {
                 plant.id == 0 ? "Add LSS plant" : "Edit LSS plant",
                 "Manage plant information and connect the APIs available for this site.",
                 action("Back to plants", "/admin/lss-plants", false)),
-            form)
+            form,
+            c.text("plantSaveError").isBlank()
+                ? null
+                : RequestErrorPopup.render(c.text("plantSaveError"), false))
         .cls("plant-editor-page");
   }
 

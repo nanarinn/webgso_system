@@ -202,10 +202,8 @@ final class AuthPages {
         el(
                 "main",
                 el("p", Branding.REPOSITORY).cls("section-label"),
-                el("h1", "Request could not be completed"),
-                el("p", c.text("message")).attr("role", "alert"),
-                action("Return to repository", "/", true),
-                action("Sign in", "/login", false))
+                action("Return to web services", "/", true),
+                RequestErrorPopup.render(c.text("message"), true))
             .cls("registration-shell"),
         false,
         false);

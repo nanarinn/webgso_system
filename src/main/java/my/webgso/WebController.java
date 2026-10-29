@@ -758,6 +758,15 @@ public class WebController {
         String rawId = form.getOrDefault("id", "");
         restorePlantDraft(form, model, rawId.isBlank() ? null : Long.valueOf(rawId));
         model.addAttribute("apiSaveErrors", failed.errors);
+        model.addAttribute(
+            "plantSaveError",
+            "Some API tests failed. Check the red messages below each API. No changes were saved.");
+        response.setStatus(400);
+        return "edit";
+      } catch (IllegalArgumentException failed) {
+        String rawId = form.getOrDefault("id", "");
+        restorePlantDraft(form, model, rawId.isBlank() ? null : Long.valueOf(rawId));
+        model.addAttribute("plantSaveError", failed.getMessage());
         response.setStatus(400);
         return "edit";
       }

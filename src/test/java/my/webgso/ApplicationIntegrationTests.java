@@ -173,6 +173,40 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void generalApiFailureStaysOnPlantFormWithDismissiblePopup() throws Exception {
+    var plant = apiSavePlant("Popup original plant");
+    when(client.fetch("https://example.test/popup-offline"))
+        .thenThrow(
+            new IllegalArgumentException(
+                "Could not connect to the API server. Check the host and port."));
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", plant.id.toString())
+                .param("plantId", plant.plantId)
+                .param("name", "Unsaved popup draft")
+                .param("capacityMw", "10")
+                .param("ddqApiEndpoint", "https://example.test/popup-offline"))
+        .andExpect(status().isBadRequest())
+        .andExpect(view().name("edit"))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("request-error-title")))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.containsString("Could not connect to the API server")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Unsaved popup draft")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("GSO Web Services")))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Return to repository"))));
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().name)
+        .isEqualTo("Popup original plant");
+  }
+
+  @Test
   void failedNewApiCannotBeSavedThroughEitherFormOrGenericApiPage() throws Exception {
     var plant = apiSavePlant("Blocked endpoints");
     when(client.fetch("https://example.test/offline"))
