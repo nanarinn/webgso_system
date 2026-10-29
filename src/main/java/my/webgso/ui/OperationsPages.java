@@ -158,23 +158,33 @@ final class OperationsPages {
   }
 
   static Element collections(PageContext c) {
+    var plantPicker =
+        el(
+                "form",
+                field("Plant", plants(c, "plantId", c.text("collectionPlantId"), null)),
+                button("Show available APIs", false).attr("type", "submit"))
+            .attr("method", "get")
+            .attr("action", "/collection-management")
+            .cls("java-filters");
     var single =
         c.post(
             "/collections/run",
             "java-filters",
-            field("Plant", plants(c, "plantId", "", null).flag("required", true)),
-            field("Dataset", select("dataType", c.list("dataTypes"), "Rolling 24 Hour")),
+            input("plantId", "hidden", c.text("collectionPlantId")),
+            field("Dataset", select("dataType", c.list("dataTypes"), "").flag("required", true)),
             dateField("Submission date and time", "submission", c.value("now"), true),
             replaceCheckbox(),
-            button("Collect data", true));
+            button("Collect data", true).flag("disabled", c.list("dataTypes").isEmpty()));
     var batchForm =
         c.post(
             "/collections/batch",
             "java-filters",
-            field("Dataset", select("dataType", c.list("dataTypes"), "Rolling 24 Hour")),
+            field(
+                "Dataset", select("dataType", c.list("batchDataTypes"), "").flag("required", true)),
             dateField("Submission date and time", "submission", c.value("now"), true),
             replaceCheckbox(),
-            button("Collect all active plants", true));
+            button("Collect all active plants", true)
+                .flag("disabled", c.list("batchDataTypes").isEmpty()));
     var page =
         el(
             "section",
@@ -182,7 +192,18 @@ final class OperationsPages {
                 "Data operations",
                 "Collection Management",
                 "Fetch registered plant APIs and inspect collection outcomes."),
-            el("article", el("h2", "Run a manual collection"), single).cls("panel"),
+            el(
+                    "article",
+                    el("h2", "Run a manual collection"),
+                    plantPicker,
+                    c.list("dataTypes").isEmpty()
+                        ? el(
+                            "p",
+                            "No API URLs are configured for this plant. Add an API in Plant Config"
+                                + " first.")
+                        : null,
+                    single)
+                .cls("panel"),
             el("details", el("summary", "Collect a dataset from all active plants"), batchForm)
                 .cls("panel java-panel"));
     ManualBatchService.Batch batch = c.value("batch");

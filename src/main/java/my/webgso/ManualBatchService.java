@@ -56,12 +56,16 @@ public class ManualBatchService implements AutoCloseable {
         .removeIf(b -> b.complete() && Duration.between(b.createdAt, Instant.now()).toHours() > 1);
     if (batches.values().stream().anyMatch(b -> b.owner.equals(owner) && !b.complete()))
       throw new IllegalArgumentException("Your previous batch is still running.");
+    var links = db.list(PlantApiConfiguration.class, "");
+    String dataset = Policies.canonical(type);
     var plants =
         db.list(LssPlant.class, "WHERE \"IsActive\"=true ORDER BY \"PlantId\"").stream()
             .filter(p -> selected.isEmpty() || selected.contains(p.id))
+            .filter(p -> ConfiguredDatasets.forPlant(p, links).contains(dataset))
             .toList();
     if (plants.isEmpty() || plants.size() > 100)
-      throw new IllegalArgumentException("Choose 1–100 active plants for a batch");
+      throw new IllegalArgumentException(
+          "Choose 1–100 active plants with a saved API URL for this dataset");
     if (submission.isAfter(LocalDateTime.now(Policies.LOCAL).plusMinutes(1)))
       throw new IllegalArgumentException("Submission cannot be in the future");
     var batch = new Batch(owner);

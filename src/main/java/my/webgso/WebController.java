@@ -318,13 +318,26 @@ public class WebController {
   public String collections(
       Model model,
       @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "0") int plantId,
       @RequestParam(defaultValue = "") String batch,
       Authentication auth) {
     model.addAttribute("batch", batch.isBlank() ? null : batches.get(batch, requester(auth)));
     model.addAttribute("title", "Collection Management");
-    model.addAttribute("plants", db.list(LssPlant.class, "ORDER BY \"PlantId\""));
+    var plants = db.list(LssPlant.class, "WHERE \"IsActive\"=true ORDER BY \"PlantId\"");
+    var links = db.list(PlantApiConfiguration.class, "");
+    var chosen =
+        plants.stream()
+            .filter(p -> p.id == plantId)
+            .findFirst()
+            .orElse(plants.isEmpty() ? null : plants.getFirst());
+    model.addAttribute("plants", plants);
+    model.addAttribute("collectionPlantId", chosen == null ? "" : chosen.id);
     model.addAttribute(
-        "dataTypes", List.of("Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month Ahead", "MMF"));
+        "dataTypes", chosen == null ? List.of() : ConfiguredDatasets.forPlant(chosen, links));
+    var batchTypes = new HashSet<String>();
+    plants.forEach(p -> batchTypes.addAll(ConfiguredDatasets.forPlant(p, links)));
+    model.addAttribute(
+        "batchDataTypes", ConfiguredDatasets.ALL.stream().filter(batchTypes::contains).toList());
     model.addAttribute(
         "jobs",
         db.list(
@@ -345,6 +358,14 @@ public class WebController {
       @RequestParam(defaultValue = "false") boolean replace,
       Authentication auth,
       RedirectAttributes flash) {
+    var selectedPlant = db.find(LssPlant.class, plantId).orElse(null);
+    if (selectedPlant == null
+        || !Boolean.TRUE.equals(selectedPlant.isActive)
+        || !ConfiguredDatasets.forPlant(selectedPlant, db.list(PlantApiConfiguration.class, ""))
+            .contains(dataType)) {
+      flash.addFlashAttribute("message", "Choose a saved API dataset for an active plant.");
+      return "redirect:/collection-management?plantId=" + plantId;
+    }
     var job =
         collection.collect(
             plantId,
