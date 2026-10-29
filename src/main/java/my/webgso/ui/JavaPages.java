@@ -141,13 +141,13 @@ public final class JavaPages {
             "nav",
             navigation(c, "◫ Overview", "/"),
             navigation(c, "↗ DDQ Analytics", "/ddq-analytics"),
-            navigation(c, "☀ MMF Analytics", "/mmf-analytics"),
-            navigation(c, "▤ On-Demand Analysis", "/on-demand-analysis"),
-            navigation(c, "⇣ Collection Management", "/collection-management"));
+            navigation(c, "☀ MMF Analytics", "/mmf-analytics"));
     var nav =
         el("div", el("p", "Workspace").cls("nav-section-title"), workspaceNav).cls("nav-body");
     if (c.yes("isAdmin")) {
       for (Resources.Definition item : c.<Resources.Definition>list("navigation")) {
+        if (Set.of("/admin/report-automation", "/admin/collection-schedules").contains(item.path()))
+          continue;
         workspaceNav.add(navigation(c, item.title(), item.path()));
       }
       workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
