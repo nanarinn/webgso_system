@@ -60,7 +60,8 @@ final class OperationsPages {
     filters.add(
         dateField("Data from", "from", c.value("from"), false),
         dateField("Data until (exclusive)", "to", c.value("to"), false),
-        dateField("Submission (optional)", "submission", c.value("submission"), false),
+        dateField("Submission (optional)", "submission", c.value("submission"), false));
+    var filterActions =
         el(
                 "div",
                 button("Apply filters", true),
@@ -69,7 +70,7 @@ final class OperationsPages {
                     .attr("name", "available")
                     .attr("value", "true"),
                 action("Clear", mmf ? "/mmf-analytics" : "/ddq-analytics", false))
-            .cls("java-actions"));
+            .cls("java-actions analytics-filter-actions");
     ReadingService.AvailableRange range = c.value("availableRange");
     var availableText =
         el(
@@ -89,7 +90,7 @@ final class OperationsPages {
                         + " (MYT). Use Show available data to fill the date range.")
             .cls("page-subtitle analytics-available-data")
             .attr("role", "status");
-    filters.add(availableText);
+    filters.add(availableText, filterActions);
     var chart =
         el(
                 "article",

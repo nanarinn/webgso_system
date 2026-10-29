@@ -315,3 +315,10 @@
 .app-content .plant-table-api-test button { min-height: 34px; padding: 5px 12px; border-radius: 7px; font-size: 12px; white-space: nowrap; }
 
 .analytics-available-data { grid-column: 1 / -1; margin: 0; }
+.app-content .java-filters > .analytics-filter-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  margin: 0;
+  gap: 12px;
+}
+.analytics-filter-actions > :is(button, a) { flex: 0 0 auto; white-space: nowrap; }
