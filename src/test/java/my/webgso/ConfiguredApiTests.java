@@ -694,4 +694,59 @@ class ConfiguredApiTests {
     assertThat(second).contains("Filtered 0", "Previous", "Page 2").doesNotContain("Filtered 25");
     verifyNoInteractions(client);
   }
+
+  @Test
+  void analyticsInvalidRangeShowsPopupAndKeepsFiltersOnBothPages() throws Exception {
+    for (String path : java.util.List.of("/ddq-analytics", "/mmf-analytics")) {
+      for (String end : java.util.List.of("2026-10-28T00:00", "2026-10-29T00:00")) {
+        String html =
+            mvc.perform(
+                    get(path)
+                        .with(authentication(auth))
+                        .param("from", "2026-10-29T00:00")
+                        .param("to", end)
+                        .param("submission", "2026-10-28T09:00")
+                        .param("dataType", "Week Ahead"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(html)
+            .contains(
+                "<dialog",
+                "Check date and time",
+                "Data until must be later than Data from",
+                "method=\"dialog\"",
+                ">OK</button>",
+                "value=\"2026-10-29T00:00\"",
+                "value=\"" + end + "\"",
+                "value=\"2026-10-28T09:00\"")
+            .doesNotContain("Request could not be completed");
+      }
+    }
+  }
+
+  @Test
+  void analyticsMalformedDateShowsPopupAndValidRangeDoesNot() throws Exception {
+    for (String field : java.util.List.of("from", "to", "submission")) {
+      String html =
+          mvc.perform(get("/ddq-analytics").with(authentication(auth)).param(field, "invalid"))
+              .andExpect(status().isOk())
+              .andReturn()
+              .getResponse()
+              .getContentAsString();
+      assertThat(html).contains("analytics-filter-message", "Enter a valid date and time");
+    }
+    String valid =
+        mvc.perform(
+                get("/ddq-analytics")
+                    .with(authentication(auth))
+                    .param("from", "2026-10-28T00:00")
+                    .param("to", "2026-10-29T00:00"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(valid).doesNotContain("analytics-filter-message");
+  }
 }

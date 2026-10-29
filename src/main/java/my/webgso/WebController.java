@@ -212,10 +212,23 @@ public class WebController {
       @RequestParam(defaultValue = "0") int page) {
     boolean mmf = request.getRequestURI().equals("/mmf-analytics");
     String type = mmf ? "MMF" : Policies.canonical(dataType);
-    LocalDateTime
-        start = from.isBlank() ? LocalDate.now(Policies.LOCAL).atStartOfDay() : parseTime(from),
-        end = to.isBlank() ? start.plusDays(1) : parseTime(to);
-    if (!start.isBefore(end)) throw new IllegalArgumentException("End must be after start");
+    LocalDateTime start = LocalDate.now(Policies.LOCAL).atStartOfDay(),
+        end = start.plusDays(1),
+        submittedAt = null;
+    String filterError = "";
+    try {
+      if (!from.isBlank()) start = parseTime(from);
+      end = to.isBlank() ? start.plusDays(1) : parseTime(to);
+      if (!submission.isBlank()) submittedAt = parseTime(submission);
+      if (!start.isBefore(end))
+        filterError =
+            "Data until must be later than Data from. Please correct the dates and apply filters"
+                + " again.";
+    } catch (IllegalArgumentException | DateTimeException e) {
+      filterError =
+          "Enter a valid date and time for Data from, Data until and Submission (if provided).";
+    }
+    model.addAttribute("analyticsFilterError", filterError);
     var registered = db.list(LssPlant.class, "WHERE \"IsActive\"=true ORDER BY \"PlantId\"");
     var selectedIds = ReadingService.plantIds(plantIds);
     var selectedPlants =
@@ -230,8 +243,9 @@ public class WebController {
     selectedPlants.forEach(p -> filteredIds.add(p.id));
     if (filteredIds.isEmpty()) filteredIds.add(-1);
     var source =
-        readings.select(
-            type, filteredIds, submission.isBlank() ? null : parseTime(submission), start, end);
+        filterError.isEmpty()
+            ? readings.select(type, filteredIds, submittedAt, start, end)
+            : List.<SolarApiReading>of();
     String activeParameter = mmf ? (parameter.isBlank() ? "AmbientTemp" : parameter) : parameter;
     if (!activeParameter.isBlank())
       source = source.stream().filter(r -> r.parameter.equalsIgnoreCase(activeParameter)).toList();
@@ -281,8 +295,8 @@ public class WebController {
     model.addAttribute("dataTypes", Policies.DDQ_TYPES);
     model.addAttribute("parameters", Policies.MMF_UNITS.keySet().stream().sorted().toList());
     model.addAttribute("parameter", activeParameter);
-    model.addAttribute("from", start);
-    model.addAttribute("to", end);
+    model.addAttribute("from", from.isBlank() ? start : from);
+    model.addAttribute("to", to.isBlank() ? end : to);
     model.addAttribute("submission", submission);
     model.addAttribute("points", String.join(" ", points));
     model.addAttribute("chartMax", String.format(Locale.ROOT, "%.2f", max));

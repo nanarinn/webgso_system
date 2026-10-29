@@ -93,7 +93,7 @@ final class OperationsPages {
                           "p",
                           mmf
                               ? "Average across the selected measurements. Select one parameter"
-                                    + " when comparing units."
+                                  + " when comparing units."
                               : "Total forecast across the selected plants.")
                       .cls("page-subtitle"))
               .cls("java-chart"));
@@ -139,7 +139,25 @@ final class OperationsPages {
                 ? "Review meteorological measurements by plant, parameter and timestamp."
                 : "Review forecast production across all configured DDQ horizons."),
         filters,
-        chart);
+        chart,
+        c.text("analyticsFilterError").isEmpty()
+            ? null
+            : el(
+                    "dialog",
+                    el("p", "Analytics filters").cls("section-label"),
+                    el("h2", "Check date and time").attr("id", "analytics-filter-title"),
+                    el("p", c.text("analyticsFilterError")).attr("id", "analytics-filter-message"),
+                    el(
+                            "form",
+                            el("button", "OK")
+                                .attr("type", "submit")
+                                .cls("primary-action")
+                                .flag("autofocus", true))
+                        .attr("method", "dialog"))
+                .cls("api-test-popup")
+                .flag("open", true)
+                .attr("aria-labelledby", "analytics-filter-title")
+                .attr("aria-describedby", "analytics-filter-message"));
   }
 
   static Element collections(PageContext c) {
