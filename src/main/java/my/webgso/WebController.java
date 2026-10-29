@@ -197,7 +197,7 @@ public class WebController {
   }
 
   @GetMapping({"/ddq-analytics", "/mmf-analytics"})
-  public String analytics(
+  public Object analytics(
       HttpServletRequest request,
       Model model,
       @RequestParam(defaultValue = "") String plantIds,
@@ -210,7 +210,9 @@ public class WebController {
       @RequestParam(defaultValue = "") String region,
       @RequestParam(defaultValue = "Plant") String scope,
       @RequestParam(defaultValue = "false") boolean available,
-      @RequestParam(defaultValue = "0") int page) {
+      @RequestParam(defaultValue = "false") boolean downloadCsv,
+      @RequestParam(defaultValue = "0") int page)
+      throws java.io.IOException {
     boolean mmf = request.getRequestURI().equals("/mmf-analytics");
     String type = mmf ? "MMF" : Policies.canonical(dataType);
     LocalDateTime start = LocalDate.now(Policies.LOCAL).atStartOfDay(),
@@ -264,6 +266,17 @@ public class WebController {
       source = source.stream().filter(r -> r.parameter.equalsIgnoreCase(activeParameter)).toList();
     var grouped = AnalyticsService.aggregate(selectedPlants, source, scope, mmf);
     source = grouped.readings();
+    if (downloadCsv && filterError.isEmpty()) {
+      var names = new HashMap<Integer, String>();
+      grouped.plants().forEach(p -> names.put(p.id, p.plantId));
+      return ResponseEntity.ok()
+          .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+          .header(
+              HttpHeaders.CONTENT_DISPOSITION,
+              "attachment; filename=\"gso-" + (mmf ? "mmf" : "ddq") + "-analytics.csv\"")
+          .header(HttpHeaders.CACHE_CONTROL, "no-store")
+          .body(AnalyticsCsv.write(source, names));
+    }
     var buckets = new TreeMap<LocalDateTime, List<BigDecimal>>();
     for (var r : source)
       buckets.computeIfAbsent(r.intervalStart, k -> new ArrayList<>()).add(r.value);

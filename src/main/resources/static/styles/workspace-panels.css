@@ -341,3 +341,6 @@
 .app-content .java-pagination > a[rel="prev"]::before { content: "←"; }
 .app-content .java-pagination > a[rel="next"]::after { content: "→"; }
 .app-content .java-pagination > span { padding: 8px 13px; border-radius: 8px; background: #f0f5eb; color: #526b5b; font-size: 13px; font-weight: 600; }
+
+.analytics-download { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.analytics-download > a { min-height: 40px; padding: 9px 15px; font-size: 13px; }

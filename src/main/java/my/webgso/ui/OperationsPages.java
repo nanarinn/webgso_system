@@ -94,13 +94,37 @@ final class OperationsPages {
             .cls("page-subtitle analytics-available-data")
             .attr("role", "status");
     filters.add(availableText, filterActions);
+    var downloadFilters = new LinkedHashMap<String, Object>();
+    for (String key :
+        List.of(
+            "plantIds",
+            "dataType",
+            "from",
+            "to",
+            "submission",
+            "parameter",
+            "state",
+            "region",
+            "scope")) downloadFilters.put(key, c.text(key));
+    downloadFilters.put("downloadCsv", true);
     var chart =
         el(
                 "article",
                 el(
                         "div",
                         el("h2", c.text("dataType") + " trend"),
-                        el("span", c.number("total") + " readings"))
+                        el(
+                                "div",
+                                c.number("total") > 0
+                                    ? action(
+                                        "Download CSV",
+                                        url(
+                                            mmf ? "/mmf-analytics" : "/ddq-analytics",
+                                            downloadFilters),
+                                        false)
+                                    : null,
+                                el("span", c.number("total") + " readings"))
+                            .cls("analytics-download"))
                     .cls("panel-heading"))
             .cls("panel java-panel");
     if (c.number("total") > 0)

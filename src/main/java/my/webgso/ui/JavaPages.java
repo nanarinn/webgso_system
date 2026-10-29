@@ -68,7 +68,7 @@ public final class JavaPages {
                 "/styles/interface.css",
                 "/styles/java.css",
                 "/styles/workspace-theme.css?v=4",
-                "/styles/workspace-panels.css?v=26",
+                "/styles/workspace-panels.css?v=27",
                 "/styles/plant-editor.css?v=4");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)

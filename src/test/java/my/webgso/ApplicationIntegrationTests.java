@@ -246,6 +246,27 @@ class ApplicationIntegrationTests {
           .andExpect(model().attribute("total", 2));
       mvc.perform(get("/collections/" + job.id).with(authentication(adminAuth)))
           .andExpect(content().string(org.hamcrest.Matchers.containsString("View analytics")));
+      mvc.perform(
+              get(route)
+                  .with(authentication(adminAuth))
+                  .param("plantIds", plant.id.toString())
+                  .param("dataType", type)
+                  .param("parameter", type.equals("MMF") ? "Humidity" : "")
+                  .param("from", "2032-10-31T00:00")
+                  .param("to", "2032-11-09T00:00")
+                  .param("downloadCsv", "true"))
+          .andExpect(status().isOk())
+          .andExpect(
+              header()
+                  .string(
+                      "Content-Disposition",
+                      org.hamcrest.Matchers.containsString(
+                          type.equals("MMF") ? "gso-mmf-analytics.csv" : "gso-ddq-analytics.csv")))
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          type.equals("MMF") ? "Humidity" : "ForecastValue")));
     }
     var empty = apiSavePlant("No available readings");
     mvc.perform(
@@ -257,6 +278,56 @@ class ApplicationIntegrationTests {
         .andExpect(model().attribute("total", 0))
         .andExpect(
             content().string(org.hamcrest.Matchers.containsString("No saved data is available")));
+  }
+
+  @Test
+  void analyticsCsvIncludesEveryFilteredPageWithoutOtherPlants() throws Exception {
+    var plant = apiSavePlant("CSV readings plant");
+    var job = new CollectionJobEntity();
+    job.collectionId = "CSV-READINGS-" + UUID.randomUUID();
+    job.plantId = plant.id;
+    job.dataType = "Day Ahead";
+    db.insert(job);
+    for (int i = 0; i < 26; i++) {
+      var r = new SolarApiReading();
+      r.plantId = plant.id;
+      r.collectionJobId = job.id;
+      r.dataType = "Day Ahead";
+      r.parameter = "ForecastValue";
+      r.value = BigDecimal.valueOf(i);
+      r.intervalStart = LocalDateTime.of(2034, 10, 1, 0, 0).plusMinutes(i * 15L);
+      r.intervalEnd = r.intervalStart.plusMinutes(15);
+      db.insert(r);
+    }
+    var bytes =
+        mvc.perform(
+                get("/ddq-analytics")
+                    .with(authentication(adminAuth))
+                    .param("plantIds", plant.id.toString())
+                    .param("dataType", "Day Ahead")
+                    .param("from", "2034-10-01T00:00")
+                    .param("to", "2034-10-02T00:00")
+                    .param("page", "1")
+                    .param("downloadCsv", "true"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsByteArray();
+    String csv = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+    try (var parsed =
+        org.apache.commons.csv.CSVParser.parse(
+            csv.substring(1),
+            org.apache.commons.csv.CSVFormat.DEFAULT
+                .builder()
+                .setHeader()
+                .setSkipHeaderRecord(true)
+                .get())) {
+      assertThat(parsed.getRecords())
+          .hasSize(26)
+          .allSatisfy(row -> assertThat(row.get("Plant")).isEqualTo(plant.plantId));
+    }
+    mvc.perform(get("/ddq-analytics").param("downloadCsv", "true"))
+        .andExpect(status().is3xxRedirection());
   }
 
   @Test
