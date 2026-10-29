@@ -105,6 +105,52 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void awaitingBrokerMmfShowsSpecificCauseForNewAndExistingPlants() throws Exception {
+    String url = "https://example.test/bidor/live/mmf";
+    when(client.fetch(url))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "{\"data\":{\"Weather_Station_SAE\":{},\"Weather_Station_SAE_1\":{}},\"data_status\":\"awaiting_broker\",\"data_type\":\"MMF\",\"last_received_at\":null}"));
+    long before = db.count(LssPlant.class);
+    mvc.perform(
+            post("/admin/lss-plants/save-api")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("name", "Waiting MMF plant")
+                .param("capacityMw", "30")
+                .param("saveApi", "apiMmf")
+                .param("apiMmf", url))
+        .andExpect(status().isOk())
+        .andExpect(view().name("edit"))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("awaiting_broker")))
+        .andExpect(
+            content()
+                .string(org.hamcrest.Matchers.containsString("MQTT broker and data publisher")))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("One or more API tests failed"))));
+    assertThat(db.count(LssPlant.class)).isEqualTo(before);
+    var existing = apiSavePlant("Waiting MMF existing plant");
+    mvc.perform(
+            post("/admin/lss-plants/save-api")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", existing.id.toString())
+                .param("saveApi", "apiMmf")
+                .param("apiMmf", url))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.containsString("API server is reachable (HTTP 200)")));
+    assertThat(db.list(PlantApiConfiguration.class, "WHERE \"PlantId\"=?", existing.id)).isEmpty();
+  }
+
+  @Test
   void failedCardReplacementKeepsOriginalAndDoesNotImportAnyData() throws Exception {
     var plant = apiSavePlant("Failed replacement target");
     var link = new PlantApiConfiguration();

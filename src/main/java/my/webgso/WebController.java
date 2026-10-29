@@ -740,7 +740,11 @@ public class WebController {
       }
       success = true;
     } catch (IllegalArgumentException e) {
-      message = "API test failed. API not saved. " + e.getMessage();
+      message =
+          e instanceof AdminService.ApiTestsFailed failed
+              ? failed.errors.getOrDefault(
+                  field, "API test failed. API not saved. " + e.getMessage())
+              : "API test failed. API not saved. " + e.getMessage();
     }
     restorePlantDraft(form, model, id);
     model.addAttribute("apiSaveField", field);
