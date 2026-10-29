@@ -615,6 +615,52 @@ class ConfiguredApiTests {
   }
 
   @Test
+  void historyCsvRespectsFiltersAndExportsBeyondTheCurrentPage() throws Exception {
+    for (int i = 0; i < 26; i++)
+      testHistory.save(
+          plant.id, "CSV-API-" + i, "admin", true, null, System.nanoTime(), "CSV row " + i);
+    testHistory.save(
+        plant.id, "Day Ahead", "admin", false, null, System.nanoTime(), "Old failed result");
+    testHistory.save(
+        plant.id, "Day Ahead", "admin", true, null, System.nanoTime(), "Latest matching result");
+    var csv =
+        mvc.perform(
+                get("/admin/api-test-history/export")
+                    .with(authentication(auth))
+                    .param("filterPlant", plant.id.toString()))
+            .andExpect(status().isOk())
+            .andExpect(
+                header()
+                    .string(
+                        "Content-Disposition", "attachment; filename=\"gso-api-test-history.csv\""))
+            .andReturn()
+            .getResponse()
+            .getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+    assertThat(csv)
+        .contains("CSV row 25", "CSV row 0", "Latest matching result")
+        .doesNotContain("Old failed result");
+    mvc.perform(
+            get("/admin/api-test-history/export")
+                .with(authentication(auth))
+                .param("filterPlant", plant.id.toString())
+                .param("filterApi", "Day Ahead")
+                .param("filterResult", "Failed"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Latest matching result"))));
+    mvc.perform(
+            get("/admin/api-test-history/export")
+                .with(authentication(auth))
+                .param("dateFrom", "2026-11-02")
+                .param("dateTo", "2026-11-01"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(get("/admin/api-test-history/export")).andExpect(status().is3xxRedirection());
+  }
+
+  @Test
   void historyFilterFormKeepsSelectionsAndRendersEmptyState() throws Exception {
     testHistory.save(plant.id, "Day Ahead", "admin", true, null, System.nanoTime(), "Filter match");
     String html =

@@ -180,6 +180,16 @@ public class ApiTestHistoryService {
         clause.args().toArray());
   }
 
+  public List<Entry> exportHistory(Filter filter) {
+    var clause = filtered(filter);
+    var entries =
+        query(clause.sql() + " ORDER BY \"Id\" DESC LIMIT 10001", clause.args().toArray());
+    if (entries.size() > 10000)
+      throw new IllegalArgumentException(
+          "Choose a narrower history filter before downloading more than 10,000 results.");
+    return entries;
+  }
+
   private List<Entry> query(String predicate, Object... args) {
     return jdbc.query(
         "SELECT * FROM \"ApiTestHistory\" " + predicate,

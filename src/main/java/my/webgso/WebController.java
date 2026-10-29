@@ -928,6 +928,34 @@ public class WebController {
     return "redirect:/admin/api-test-history/checks/" + job.id;
   }
 
+  @GetMapping("/admin/api-test-history/export")
+  public ResponseEntity<byte[]> exportApiHistory(
+      @RequestParam(defaultValue = "0") int filterPlant,
+      @RequestParam(defaultValue = "") String filterApi,
+      @RequestParam(defaultValue = "") String filterResult,
+      @RequestParam(defaultValue = "") String dateFrom,
+      @RequestParam(defaultValue = "") String dateTo)
+      throws java.io.IOException {
+    LocalDate from, to;
+    try {
+      from = dateFrom.isBlank() ? null : LocalDate.parse(dateFrom);
+      to = dateTo.isBlank() ? null : LocalDate.parse(dateTo);
+      if (from != null && to != null && from.isAfter(to)) throw new IllegalArgumentException();
+    } catch (DateTimeException | IllegalArgumentException e) {
+      throw new IllegalArgumentException(
+          "Choose valid dates. From date must be on or before To date.");
+    }
+    var filter = new ApiTestHistoryService.Filter(filterPlant, filterApi, filterResult, from, to);
+    var plants = new HashMap<Integer, LssPlant>();
+    db.list(LssPlant.class, "").forEach(p -> plants.put(p.id, p));
+    return ResponseEntity.ok()
+        .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"gso-api-test-history.csv\"")
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .body(ApiHistoryCsv.write(testHistory.exportHistory(filter), plants));
+  }
+
   @PostMapping("/admin/api-test-history/retest")
   public String retestApi(
       @RequestParam int plantId,

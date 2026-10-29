@@ -17,7 +17,8 @@ final class OperationsPages {
     return el(
             "nav",
             page > 0 ? link("Previous", c.pageUrl(page - 1, filters)).attr("rel", "prev") : null,
-            el("span", "Page " + (page + 1)).attr("aria-current", "page"),
+            el("span", "Page " + (page + 1) + " of " + Math.max(1, (c.number("total") + 24) / 25))
+                .attr("aria-current", "page"),
             (page + 1) * 25 < c.number("total")
                 ? link("Next", c.pageUrl(page + 1, filters)).attr("rel", "next")
                 : null)

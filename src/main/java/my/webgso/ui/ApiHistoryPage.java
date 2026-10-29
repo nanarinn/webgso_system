@@ -14,6 +14,9 @@ final class ApiHistoryPage {
 
   static Element render(PageContext c) {
     Map<Integer, LssPlant> plants = c.value("historyPlants");
+    var exportFilters = new LinkedHashMap<String, Object>();
+    for (String key : List.of("filterPlant", "filterApi", "filterResult", "dateFrom", "dateTo"))
+      exportFilters.put(key, c.text(key));
     var rows = new ArrayList<Element>();
     for (Entry test : c.<Entry>list("testHistory")) {
       var plant = plants.get(test.plantId());
@@ -59,6 +62,10 @@ final class ApiHistoryPage {
             el(
                     "div",
                     action("Back to Plant Config", "/admin/lss-plants", false),
+                    action(
+                        "Download CSV",
+                        url("/admin/api-test-history/export", exportFilters),
+                        false),
                     c.post(
                         "/admin/api-test-history/test-all",
                         "api-retest-form",
