@@ -14,6 +14,45 @@ class ApiRetestServiceTests {
   ApiTestHistoryService history = mock(ApiTestHistoryService.class);
   CollectionService collection = mock(CollectionService.class);
 
+  @Test
+  @Timeout(5)
+  void configuredCheckIncludesUntestedApisAndContinuesAfterFailure() throws Exception {
+    var plant = new LssPlant();
+    plant.id = 1;
+    plant.name = "Plant A";
+    var day = new my.webgso.Models.PlantApiConfiguration();
+    day.plantId = 1;
+    day.apiType = "DDQ";
+    day.dataType = "Day Ahead";
+    day.apiLink = "https://example.test/day";
+    var mmf = new my.webgso.Models.PlantApiConfiguration();
+    mmf.plantId = 1;
+    mmf.apiType = "MMF";
+    mmf.dataType = "MMF";
+    mmf.apiLink = "https://example.test/mmf";
+    when(db.list(LssPlant.class, "")).thenReturn(List.of(plant));
+    when(db.list(my.webgso.Models.PlantApiConfiguration.class, ""))
+        .thenReturn(List.of(day, mmf, day));
+    when(history.latest()).thenReturn(Map.of("1:Day Ahead", saved(1, 1, "Day Ahead")));
+    when(collection.retestWithAnomalies(1, "Day Ahead", "admin"))
+        .thenThrow(new IllegalArgumentException("Unavailable"));
+    when(collection.testWithAnomalies(1, "MMF", "admin")).thenReturn(success());
+    var service = new ApiRetestService(db, history, collection);
+    try {
+      var job = service.startConfigured("owner", "admin");
+      complete(job);
+      assertThat(job.configured).isTrue();
+      assertThat(job.items)
+          .extracting(ApiRetestService.Item::status)
+          .containsExactly("Failed", "Success");
+      verify(collection).retestWithAnomalies(1, "Day Ahead", "admin");
+      verify(collection).testWithAnomalies(1, "MMF", "admin");
+      verifyNoMoreInteractions(collection);
+    } finally {
+      service.close();
+    }
+  }
+
   private static ApiTestHistoryService.Entry saved(long id, int plantId, String dataset) {
     return new ApiTestHistoryService.Entry(
         id,

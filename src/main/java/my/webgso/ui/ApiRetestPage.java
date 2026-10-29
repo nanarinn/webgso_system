@@ -47,16 +47,18 @@ final class ApiRetestPage {
                 + " success · "
                 + failed
                 + " failed",
-            action("Back to API test history", "/admin/api-test-history", false)),
+            job.configured
+                ? action("Back to Plant Config", "/admin/lss-plants", false)
+                : action("Back to API test history", "/admin/api-test-history", false)),
         el(
                 "article",
                 el(
                         "p",
                         job.complete
                             ? "Results have been saved. API test history displays one latest result"
-                                  + " per API."
+                                + " per API."
                             : "This page updates automatically. You can leave this page while the"
-                                  + " check continues.")
+                                + " check continues.")
                     .cls("api-history-note"),
                 el("progress")
                     .attr("value", done)

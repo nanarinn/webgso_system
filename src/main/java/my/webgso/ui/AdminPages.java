@@ -61,6 +61,12 @@ final class AdminPages {
                 el(
                         "div",
                         plants
+                            ? c.post(
+                                "/admin/lss-plants/test-all",
+                                "api-retest-form",
+                                button("Test all APIs", true))
+                            : null,
+                        plants
                             ? action("API test history", "/admin/api-test-history", false)
                             : null,
                         resource.path().equals("/admin/anomalies")

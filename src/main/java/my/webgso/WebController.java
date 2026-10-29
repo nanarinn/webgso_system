@@ -950,6 +950,19 @@ public class WebController {
     return "redirect:/admin/api-test-history/checks/" + job.id;
   }
 
+  @PostMapping("/admin/lss-plants/test-all")
+  public String testConfiguredApis(Authentication auth, RedirectAttributes flash) {
+    try {
+      var job = apiRetests.startConfigured(principal(auth).id(), principal(auth).username());
+      return "redirect:/admin/lss-plants/checks/" + job.id;
+    } catch (IllegalArgumentException e) {
+      flash.addFlashAttribute("apiTestTitle", "API check could not start");
+      flash.addFlashAttribute("apiTestAlreadyTested", true);
+      flash.addFlashAttribute("apiTestMessage", e.getMessage());
+      return "redirect:/admin/lss-plants";
+    }
+  }
+
   @GetMapping("/admin/api-test-history/export")
   public ResponseEntity<byte[]> exportApiHistory(
       @RequestParam(defaultValue = "0") int filterPlant,
@@ -996,7 +1009,7 @@ public class WebController {
     return "redirect:" + redirect.build().encode().toUriString();
   }
 
-  @GetMapping("/admin/api-test-history/checks/{id}")
+  @GetMapping({"/admin/api-test-history/checks/{id}", "/admin/lss-plants/checks/{id}"})
   public String apiRetestProgress(@PathVariable String id, Authentication auth, Model model) {
     model.addAttribute("title", "API check progress");
     model.addAttribute("apiRetestJob", apiRetests.get(id, principal(auth).id()));

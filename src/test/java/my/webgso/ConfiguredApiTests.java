@@ -409,6 +409,15 @@ class ConfiguredApiTests {
 
   @Test
   void testAllRequiresAuthenticationAndCsrf() throws Exception {
+    mvc.perform(post("/admin/lss-plants/test-all").with(authentication(auth)))
+        .andExpect(status().isForbidden());
+    mvc.perform(post("/admin/lss-plants/test-all").with(csrf()))
+        .andExpect(status().is3xxRedirection());
+    mvc.perform(get("/admin/lss-plants").with(authentication(auth)))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(org.hamcrest.Matchers.containsString("/admin/lss-plants/test-all")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Test all APIs")));
     mvc.perform(
             post("/admin/api-test-history/retest")
                 .with(authentication(auth))

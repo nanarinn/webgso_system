@@ -4,6 +4,7 @@ import jakarta.annotation.PreDestroy;
 import java.util.*;
 import java.util.concurrent.*;
 import my.webgso.Models.LssPlant;
+import my.webgso.Models.PlantApiConfiguration;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +24,7 @@ public class ApiRetestService {
     public final String owner;
     public volatile List<Item> items;
     public volatile boolean complete;
+    public boolean configured;
 
     Job(String owner, List<Item> items) {
       this.owner = owner;
@@ -44,6 +46,31 @@ public class ApiRetestService {
 
   public synchronized Job start(String owner, String actor) {
     return start(owner, actor, null, null);
+  }
+
+  public synchronized Job startConfigured(String owner, String actor) {
+    for (var existing : jobs.values()) {
+      if (!existing.complete) {
+        if (existing.owner.equals(owner)) return existing;
+        throw new IllegalArgumentException(
+            "Another API check is already running. Please try again when it finishes.");
+      }
+    }
+    var links = db.list(PlantApiConfiguration.class, "");
+    var items = new ArrayList<Item>();
+    for (var plant : db.list(LssPlant.class, "")) {
+      for (String dataset : ConfiguredDatasets.forPlant(plant, links))
+        items.add(new Item(plant.id, plant.name, dataset, "Queued", null, null, "Waiting"));
+    }
+    if (items.isEmpty())
+      throw new IllegalArgumentException(
+          "No APIs are configured. Add an API in Plant Config first.");
+    while (jobs.size() >= 8) jobs.remove(jobs.keySet().iterator().next());
+    var job = new Job(owner, items);
+    job.configured = true;
+    jobs.put(job.id, job);
+    executor.execute(() -> run(job, actor));
+    return job;
   }
 
   public synchronized Job startSingle(String owner, String actor, int plantId, String dataset) {
@@ -119,7 +146,14 @@ public class ApiRetestService {
         job.items = List.copyOf(results);
         Item result;
         try {
-          var tested = collection.retestWithAnomalies(target.plantId(), target.dataset(), actor);
+          var tested =
+              job.configured
+                      && !history
+                          .latest()
+                          .containsKey(
+                              ApiTestHistoryService.key(target.plantId(), target.dataset()))
+                  ? collection.testWithAnomalies(target.plantId(), target.dataset(), actor)
+                  : collection.retestWithAnomalies(target.plantId(), target.dataset(), actor);
           var response = tested.response();
           result =
               new Item(
