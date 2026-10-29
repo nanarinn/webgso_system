@@ -676,7 +676,11 @@ class ApplicationIntegrationTests {
         .andExpect(view().name("admin-overview"))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Total APIs")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Not tested")))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Admin accounts")));
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Admin accounts"))));
     var filtered =
         mvc.perform(get("/").param("apiStatus", "failed").with(authentication(adminAuth)))
             .andExpect(status().isOk())
@@ -690,7 +694,11 @@ class ApplicationIntegrationTests {
     mvc.perform(get("/").with(authentication(otherAdminAuth)))
         .andExpect(status().isOk())
         .andExpect(view().name("admin-overview"))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Admin accounts")));
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Admin accounts"))));
   }
 
   @Test

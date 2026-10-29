@@ -71,10 +71,7 @@ final class OverviewPages {
                         el("p", "Admin console").cls("section-label"),
                         el("h1", "API overview"),
                         el("p", "Review the latest test result for each configured plant API.")),
-                    el(
-                            "div",
-                            action("Admin accounts", "/admin/users", false),
-                            action("View all APIs →", "/admin/lss-plants", true))
+                    el("div", action("View all APIs →", "/admin/lss-plants", true))
                         .cls("java-actions"))
                 .cls("admin-overview-heading"),
             cards,
