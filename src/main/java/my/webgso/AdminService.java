@@ -164,13 +164,21 @@ public class AdminService {
       }
       if (record instanceof LssPlant p) {
         var original = rawId.isBlank() ? null : db.find(LssPlant.class, p.id).orElseThrow();
-        if (original == null || !p.plantId.equals(original.plantId)) {
+        if (original == null
+            || !p.plantId.equals(original.plantId)
+            || !p.name.equals(original.name)) {
           lockPlantIds();
           if (original == null && p.plantId.isBlank()) p.plantId = nextPlantId();
           if (!db.list(LssPlant.class, "WHERE \"PlantId\"=? AND \"Id\"<>?", p.plantId, p.id)
               .isEmpty())
             throw new IllegalArgumentException(
                 "This Plant ID is already used. Choose another number.");
+          if (!p.name.isBlank()
+              && db.list(LssPlant.class, "WHERE \"Id\"<>?", p.id).stream()
+                  .anyMatch(
+                      other -> normalizedPlantName(other.name).equals(normalizedPlantName(p.name))))
+            throw new IllegalArgumentException(
+                "This plant name already exists. Please use a different plant name.");
         }
       }
       validate(record, rawId.isBlank(), actor);
@@ -210,6 +218,12 @@ public class AdminService {
     // A database transaction lock coordinates ID allocation across application instances.
     if (postgres) db.jdbc().queryForList("SELECT pg_advisory_xact_lock(1196642127, 1)");
     else db.jdbc().queryForList("SELECT \"Id\" FROM \"LssPlants\" FOR UPDATE");
+  }
+
+  static String normalizedPlantName(String name) {
+    return name == null
+        ? ""
+        : name.replaceAll("[\\s\\p{Z}]+", " ").strip().toUpperCase(Locale.ROOT);
   }
 
   private String nextPlantId() {

@@ -331,6 +331,52 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void duplicatePlantNamesAreRejectedOnCreateAndRenameButOwnNameCanBeSaved() throws Exception {
+    var existing = apiSavePlant("BDNS Duplicate Check");
+    long before = db.count(LssPlant.class);
+    for (String name :
+        List.of(
+            "BDNS Duplicate Check",
+            "bdns duplicate check",
+            " BDNS   Duplicate\tCheck ",
+            "BDNS\u00a0Duplicate Check")) {
+      mvc.perform(
+              post("/admin/lss-plants/save")
+                  .with(authentication(adminAuth))
+                  .with(csrf())
+                  .param("name", name)
+                  .param("capacityMw", "30"))
+          .andExpect(status().isBadRequest())
+          .andExpect(view().name("edit"))
+          .andExpect(
+              content()
+                  .string(org.hamcrest.Matchers.containsString("This plant name already exists")));
+    }
+    assertThat(db.count(LssPlant.class)).isEqualTo(before);
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", existing.id.toString())
+                .param("plantId", existing.plantId)
+                .param("name", existing.name)
+                .param("capacityMw", "40"))
+        .andExpect(redirectedUrl("/admin/lss-plants"));
+    var other = apiSavePlant("KMPR Duplicate Check");
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", other.id.toString())
+                .param("plantId", other.plantId)
+                .param("name", "bdns duplicate check")
+                .param("capacityMw", "30"))
+        .andExpect(status().isBadRequest());
+    assertThat(db.find(LssPlant.class, other.id).orElseThrow().name)
+        .isEqualTo("KMPR Duplicate Check");
+  }
+
+  @Test
   void newPlantsReceiveNextNumericIdsAndApiCardKeepsAssignedId() throws Exception {
     var maximum =
         db.list(LssPlant.class, "").stream()
