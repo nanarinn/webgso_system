@@ -50,4 +50,37 @@ public final class PlantApiSlots {
               "apiMmf", "MMF", "MMF", "Live weather measurements", "MMF readings for this plant."));
 
   private PlantApiSlots() {}
+
+  public static String datasetWarning(String url, String selectedDataset) {
+    if (url == null || url.isBlank()) return "";
+    String path;
+    try {
+      path = java.net.URI.create(url.trim()).getPath();
+    } catch (IllegalArgumentException e) {
+      return "";
+    }
+    if (path == null) return "";
+    path = path.replaceAll("/+$", "");
+    String segment = path.substring(path.lastIndexOf('/') + 1).toLowerCase(java.util.Locale.ROOT);
+    String inferred =
+        switch (segment) {
+          case "dayahead" -> "Day Ahead";
+          case "weekahead" -> "Week Ahead";
+          case "fourmonthsahead" -> "4 Month Ahead";
+          case "fourmonthsahead1" -> "4 Month Ahead 1";
+          case "fourmonthsahead2" -> "4 Month Ahead 2";
+          case "fourmonthsahead3" -> "4 Month Ahead 3";
+          case "fourmonthsahead4" -> "4 Month Ahead 4";
+          case "rolling24", "rolling24hour" -> "Rolling 24 Hour";
+          case "mmf" -> "MMF";
+          default -> "";
+        };
+    return inferred.isEmpty() || inferred.equals(selectedDataset)
+        ? ""
+        : "Check dataset: the URL name suggests "
+            + inferred
+            + ", but this slot is "
+            + selectedDataset
+            + ". Confirm the dataset with your API provider before collecting data.";
+  }
 }

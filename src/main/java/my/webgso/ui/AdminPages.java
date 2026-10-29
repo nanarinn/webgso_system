@@ -452,6 +452,7 @@ final class AdminPages {
     for (var slot : PlantApiSlots.ALL) {
       String value = endpoints.getOrDefault(slot.field(), "");
       String savedValue = savedEndpoints.getOrDefault(slot.field(), "");
+      String datasetWarning = PlantApiSlots.datasetWarning(value, slot.dataType());
       boolean failed = apiErrors.containsKey(slot.field());
       boolean result = failed || slot.field().equals(c.text("apiSaveField"));
       var input =
@@ -501,6 +502,11 @@ final class AdminPages {
                                   .attr("role", "status")
                                   .attr("aria-live", "polite")
                               : null,
+                          datasetWarning.isBlank()
+                              ? null
+                              : el("p", datasetWarning)
+                                  .cls("plant-api-result api-dataset-warning")
+                                  .attr("role", "status"),
                           el(
                               "small",
                               "The connection is tested before saving. Failed URLs are not saved."

@@ -322,3 +322,7 @@
   gap: 12px;
 }
 .analytics-filter-actions > :is(button, a) { flex: 0 0 auto; white-space: nowrap; }
+
+.analytics-empty-help { padding: 28px 0; }
+.analytics-empty-help h3 { font-size: 20px; margin: 0 0 12px; }
+.analytics-empty-help p { max-width: 780px; margin-bottom: 20px; }

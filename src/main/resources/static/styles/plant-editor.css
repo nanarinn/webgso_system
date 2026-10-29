@@ -33,6 +33,7 @@
 .plant-api-result { padding: 11px 13px; border-radius: 8px; overflow-wrap: anywhere; }
 .plant-api-result.api-save-success { background: #e8f4ed; color: #225c3d; }
 .plant-api-result.api-save-failed { background: #fff0ec; color: #b42318; border: 1px solid #f8c7c2; }
+.plant-api-result.api-dataset-warning { background: #fff8e5; color: #805314; border: 1px solid #ecd594; }
 .plant-api-slot { scroll-margin-top: 24px; }
 .plant-general-apis { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e2eae4; }
 .plant-general-apis summary { cursor: pointer; color: #365a45; font-size: 13px; font-weight: 650; }

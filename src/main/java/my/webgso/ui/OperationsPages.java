@@ -121,10 +121,36 @@ final class OperationsPages {
                               : "Total forecast across the selected plants.")
                       .cls("page-subtitle"))
               .cls("java-chart"));
-    else
+    else {
+      var showDataParams = new LinkedHashMap<String, Object>();
+      for (String key : List.of("plantIds", "dataType", "state", "parameter", "submission"))
+        showDataParams.put(key, c.text(key));
+      showDataParams.put("available", true);
       chart.add(
-          el("p", "No readings match these filters. Select another range or collect API data.")
-              .cls("java-empty"));
+          el(
+                  "div",
+                  el("h3", "No readings for these filters"),
+                  el(
+                      "p",
+                      range != null
+                          ? "Saved readings exist, but none match the selected dates. Show"
+                                + " available data to use the correct date range."
+                          : "No saved readings match the selected plant, dataset, parameter or"
+                                + " submission. Check these filters, or collect data first. Test"
+                                + " API checks the connection; Collect data saves readings for"
+                                + " Analytics."),
+                  el(
+                          "div",
+                          range != null
+                              ? action(
+                                  "Show available data",
+                                  url(mmf ? "/mmf-analytics" : "/ddq-analytics", showDataParams),
+                                  true)
+                              : action("Collect data", "/collection-management", true),
+                          action("Clear filters", mmf ? "/mmf-analytics" : "/ddq-analytics", false))
+                      .cls("java-actions"))
+              .cls("analytics-empty-help"));
+    }
     Map<Integer, String> names = c.value("plantNames");
     var rows = new ArrayList<Element>();
     for (SolarApiReading r : c.<SolarApiReading>list("rows"))
