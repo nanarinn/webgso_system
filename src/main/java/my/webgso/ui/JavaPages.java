@@ -70,7 +70,7 @@ public final class JavaPages {
                 "/styles/workspace-theme.css?v=4",
                 "/styles/workspace-panels.css?v=27",
                 "/styles/plant-editor.css?v=4",
-                "/styles/workspace-polish.css?v=1");
+                "/styles/workspace-polish.css?v=2");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
       head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));
@@ -159,6 +159,7 @@ public final class JavaPages {
                 el("span").cls("status-light"),
                 el("span", el("strong", Branding.NAME), el("small", "Web Services")))
             .cls("sidebar-status"),
+        DatabaseStatusCard.render(c),
         el(
                 "footer",
                 el(

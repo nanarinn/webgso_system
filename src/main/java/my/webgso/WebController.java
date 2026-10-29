@@ -26,6 +26,7 @@ public class WebController {
   private final ApiTestHistoryService testHistory;
   private final ApiRetestService apiRetests;
   private final ApiTestTiming testTiming;
+  private final DatabaseConnectionStatus databaseConnection;
 
   public WebController(
       Store db,
@@ -38,7 +39,8 @@ public class WebController {
       ProfileService profileService,
       ApiTestHistoryService testHistory,
       ApiRetestService apiRetests,
-      ApiTestTiming testTiming) {
+      ApiTestTiming testTiming,
+      DatabaseConnectionStatus databaseConnection) {
     this.db = db;
     this.accounts = accounts;
     this.admin = admin;
@@ -50,6 +52,7 @@ public class WebController {
     this.testHistory = testHistory;
     this.apiRetests = apiRetests;
     this.testTiming = testTiming;
+    this.databaseConnection = databaseConnection;
   }
 
   static Accounts.Principal principal(Authentication auth) {
@@ -80,6 +83,7 @@ public class WebController {
             && auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_Admin")));
     if (auth != null && auth.getPrincipal() instanceof Accounts.Principal p) {
       model.addAttribute("account", p);
+      model.addAttribute("databaseConnection", databaseConnection.check());
       model.addAttribute(
           "notifications",
           db.list(

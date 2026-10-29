@@ -331,6 +331,20 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void databaseStatusAppearsBetweenGsoAndPartnerLogo() throws Exception {
+    String html =
+        mvc.perform(get("/account/profile").with(authentication(adminAuth)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html).contains("Database connected", "sidebar-database-status");
+    assertThat(html.indexOf("sidebar-status")).isLessThan(html.indexOf("sidebar-database-status"));
+    assertThat(html.indexOf("sidebar-database-status"))
+        .isLessThan(html.indexOf("system-footer system-footer-sidebar"));
+  }
+
+  @Test
   void duplicatePlantNamesAreRejectedOnCreateAndRenameButOwnNameCanBeSaved() throws Exception {
     var existing = apiSavePlant("BDNS Duplicate Check");
     long before = db.count(LssPlant.class);
