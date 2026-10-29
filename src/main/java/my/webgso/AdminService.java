@@ -10,14 +10,114 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AdminService {
+  public static final class ApiTestsFailed extends IllegalArgumentException {
+    public final Map<String, String> errors;
+
+    public ApiTestsFailed(Map<String, String> errors) {
+      super("One or more API tests failed. No changes were saved.");
+      this.errors = Map.copyOf(errors);
+    }
+  }
+
   private final Store db;
   private final Accounts accounts;
   private final PlantApiClient client;
+  private final PlantApiProbe probe;
 
-  public AdminService(Store db, Accounts accounts, PlantApiClient client) {
+  public AdminService(Store db, Accounts accounts, PlantApiClient client, PlantApiProbe probe) {
     this.db = db;
     this.accounts = accounts;
     this.client = client;
+    this.probe = probe;
+  }
+
+  @Transactional
+  public int savePlantApi(int plantId, String field, String url, String actor) {
+    plant(plantId);
+    var slot =
+        PlantApiSlots.ALL.stream()
+            .filter(item -> item.field().equals(field))
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Choose a valid API dataset"));
+    String link = url.trim();
+    if (link.length() > 1000) throw new IllegalArgumentException("API URL is too long");
+    int count = link.isBlank() ? 0 : probe.verify(link, slot.apiType(), slot.dataType(), plantId);
+    storePlantApi(plantId, slot, link);
+    accounts.audit(
+        actor,
+        link.isBlank() ? "API removed" : "API tested and saved",
+        "Plant API",
+        Integer.toString(plantId),
+        "Success",
+        slot.label());
+    return count;
+  }
+
+  private void storePlantApi(int plantId, PlantApiSlots.Slot slot, String link) {
+    var existing =
+        db.list(
+            PlantApiConfiguration.class,
+            "WHERE \"PlantId\"=? AND \"ApiType\"=? AND \"DataType\"=?",
+            plantId,
+            slot.apiType(),
+            slot.dataType());
+    if (link.isBlank()) {
+      db.jdbc()
+          .update(
+              "DELETE FROM \"PlantApiConfigurations\" WHERE \"PlantId\"=? AND \"ApiType\"=? AND"
+                  + " \"DataType\"=?",
+              plantId,
+              slot.apiType(),
+              slot.dataType());
+    } else {
+      var api = existing.isEmpty() ? new PlantApiConfiguration() : existing.getFirst();
+      api.plantId = plantId;
+      api.apiType = slot.apiType();
+      api.dataType = slot.dataType();
+      api.apiLink = link;
+      if (existing.isEmpty()) db.insert(api);
+      else db.update(api);
+    }
+  }
+
+  @Transactional
+  public LssPlant savePlant(Map<String, String> form, String actor) {
+    String id = form.getOrDefault("id", "");
+    int plantId = id.isBlank() ? 0 : Integer.parseInt(id);
+    if (plantId != 0) plant(plantId);
+    // Check every changed endpoint so each failed card can show its own result.
+    var errors = new LinkedHashMap<String, String>();
+    for (var slot : PlantApiSlots.ALL) {
+      if (!form.containsKey(slot.field())) continue;
+      String link = form.get(slot.field()).trim();
+      if (link.length() > 1000) {
+        errors.put(slot.field(), "API test failed. API not saved. URL is too long.");
+        continue;
+      }
+      var existing =
+          db.list(
+              PlantApiConfiguration.class,
+              "WHERE \"PlantId\"=? AND \"ApiType\"=? AND \"DataType\"=?",
+              plantId,
+              slot.apiType(),
+              slot.dataType());
+      if (!link.isBlank() && (existing.isEmpty() || !existing.getFirst().apiLink.equals(link))) {
+        try {
+          probe.verify(link, slot.apiType(), slot.dataType(), plantId);
+        } catch (IllegalArgumentException e) {
+          errors.put(slot.field(), "API test failed. API not saved. " + e.getMessage());
+        }
+      }
+    }
+    if (!errors.isEmpty()) throw new ApiTestsFailed(errors);
+    var plant = (LssPlant) save(Resources.get("/admin/lss-plants"), form, actor);
+    for (var slot : PlantApiSlots.ALL) {
+      // Old clients do not send these fields: leave their existing API links alone.
+      if (!form.containsKey(slot.field())) continue;
+      String link = form.get(slot.field()).trim();
+      storePlantApi(plant.id, slot, link);
+    }
+    return plant;
   }
 
   @Transactional
@@ -107,6 +207,11 @@ public class AdminService {
         throw new IllegalArgumentException("Capacity cannot be negative");
       if (!p.ddqApiEndpoint.isBlank()) client.validate(p.ddqApiEndpoint);
       if (!p.mmfApiEndpoint.isBlank()) client.validate(p.mmfApiEndpoint);
+      var original = create ? new LssPlant() : db.find(LssPlant.class, p.id).orElseThrow();
+      if (!p.ddqApiEndpoint.isBlank() && !p.ddqApiEndpoint.equals(original.ddqApiEndpoint))
+        probe.verify(p.ddqApiEndpoint, "DDQ", "Rolling 24 Hour", p.id);
+      if (!p.mmfApiEndpoint.isBlank() && !p.mmfApiEndpoint.equals(original.mmfApiEndpoint))
+        probe.verify(p.mmfApiEndpoint, "MMF", "MMF", p.id);
     }
     if (record instanceof PlantApiConfiguration p) {
       plant(p.plantId);
@@ -123,6 +228,7 @@ public class AdminService {
               p.id);
       if (!conflicts.isEmpty())
         throw new IllegalArgumentException("A link already exists for this plant and dataset");
+      probe.verify(p.apiLink, p.apiType, p.dataType, p.plantId);
     }
     if (record instanceof CollectionSchedule s) {
       plant(s.plantId);
@@ -188,7 +294,7 @@ public class AdminService {
       } catch (Exception e) {
         throw new IllegalArgumentException("Enter a weekday, for example Monday");
       }
-    if (Set.of("4 Month", "4 Month Ahead").contains(type)) {
+    if (type.equals("4 Month") || type.startsWith("4 Month Ahead")) {
       int n;
       try {
         n = Integer.parseInt(day);

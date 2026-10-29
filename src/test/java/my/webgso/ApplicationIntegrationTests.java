@@ -59,6 +59,182 @@ class ApplicationIntegrationTests {
     reset(client);
   }
 
+  private void readableApi(String url) {
+    when(client.fetch(url))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "[{\"timestamp\":\"2026-10-28T00:00:00\",\"value\":1.5,\"unit\":\"MW\"}]"));
+  }
+
+  private LssPlant apiSavePlant(String name) {
+    var plant = new LssPlant();
+    plant.plantId = "PROBE-" + System.nanoTime() % 1000000;
+    plant.name = name;
+    plant.capacityMw = BigDecimal.TEN;
+    return db.insert(plant);
+  }
+
+  @Test
+  void cardSaveTestsAndPersistsOnlyTheChosenApiWithoutLosingDrafts() throws Exception {
+    var plant = apiSavePlant("Card save target");
+    readableApi("https://example.test/card/dayahead");
+    mvc.perform(
+            post("/admin/lss-plants/save-api")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", plant.id.toString())
+                .param("saveApi", "apiDayAhead")
+                .param("name", "Unsaved plant name")
+                .param("apiDayAhead", "https://example.test/card/dayahead")
+                .param("apiWeekAhead", "https://example.test/unsaved/weekahead"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("API saved.")))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.containsString("https://example.test/unsaved/weekahead")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Test &amp; Save API")));
+    var links = db.list(PlantApiConfiguration.class, "WHERE \"PlantId\"=?", plant.id);
+    assertThat(links).hasSize(1);
+    assertThat(links.getFirst().dataType).isEqualTo("Day Ahead");
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().name).isEqualTo("Card save target");
+    verify(client).fetch("https://example.test/card/dayahead");
+    verify(client, never()).fetch("https://example.test/unsaved/weekahead");
+  }
+
+  @Test
+  void failedCardReplacementKeepsOriginalAndDoesNotImportAnyData() throws Exception {
+    var plant = apiSavePlant("Failed replacement target");
+    var link = new PlantApiConfiguration();
+    link.plantId = plant.id;
+    link.dataType = "Day Ahead";
+    link.apiLink = "https://example.test/old";
+    db.insert(link);
+    long jobsBefore = db.count(CollectionJobEntity.class);
+    for (var response :
+        List.of(
+            new PlantApiClient.Response(502, "application/json", "{}"),
+            new PlantApiClient.Response(200, "application/json", "[]"),
+            new PlantApiClient.Response(200, "text/html", "<html>Login</html>"))) {
+      when(client.fetch("https://example.test/failing")).thenReturn(response);
+      mvc.perform(
+              post("/admin/lss-plants/save-api")
+                  .with(authentication(adminAuth))
+                  .with(csrf())
+                  .param("id", plant.id.toString())
+                  .param("saveApi", "apiDayAhead")
+                  .param("apiDayAhead", "https://example.test/failing"))
+          .andExpect(status().isOk())
+          .andExpect(content().string(org.hamcrest.Matchers.containsString("API not saved.")))
+          .andExpect(content().string(org.hamcrest.Matchers.containsString("Not saved")));
+      assertThat(db.find(PlantApiConfiguration.class, link.id).orElseThrow().apiLink)
+          .isEqualTo("https://example.test/old");
+    }
+    assertThat(db.count(CollectionJobEntity.class)).isEqualTo(jobsBefore);
+  }
+
+  @Test
+  void savingPlantShowsEveryFailedApiUnderItsOwnButtonWithoutSavingChanges() throws Exception {
+    var plant = apiSavePlant("Multiple failed APIs");
+    when(client.fetch("https://example.test/fail-day"))
+        .thenThrow(new IllegalArgumentException("Day API is offline"));
+    when(client.fetch("https://example.test/fail-week"))
+        .thenThrow(new IllegalArgumentException("Week API is offline"));
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", plant.id.toString())
+                .param("plantId", plant.plantId)
+                .param("name", "Do not overwrite name")
+                .param("capacityMw", "10")
+                .param("apiDayAhead", "https://example.test/fail-day")
+                .param("apiWeekAhead", "https://example.test/fail-week"))
+        .andExpect(status().isBadRequest())
+        .andExpect(view().name("edit"))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.containsString(
+                        "API test failed. API not saved. Day API is offline")))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.containsString(
+                        "API test failed. API not saved. Week API is offline")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("api-save-failed")));
+    verify(client).fetch("https://example.test/fail-day");
+    verify(client).fetch("https://example.test/fail-week");
+    assertThat(db.list(PlantApiConfiguration.class, "WHERE \"PlantId\"=?", plant.id)).isEmpty();
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().name)
+        .isEqualTo("Multiple failed APIs");
+  }
+
+  @Test
+  void failedNewApiCannotBeSavedThroughEitherFormOrGenericApiPage() throws Exception {
+    var plant = apiSavePlant("Blocked endpoints");
+    when(client.fetch("https://example.test/offline"))
+        .thenThrow(new IllegalArgumentException("API connection failed"));
+    mvc.perform(
+            post("/admin/lss-plants/save-api")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", plant.id.toString())
+                .param("saveApi", "apiMonth4")
+                .param("apiMonth4", "https://example.test/offline"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("API not saved.")));
+    mvc.perform(
+            post("/admin/api-configurations/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("plantId", plant.id.toString())
+                .param("apiType", "DDQ")
+                .param("dataType", "Day Ahead")
+                .param("apiLink", "https://example.test/offline"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("plantId", "FAIL-NEW-API")
+                .param("name", "Do not create")
+                .param("capacityMw", "10")
+                .param("apiDayAhead", "https://example.test/offline"))
+        .andExpect(status().isBadRequest());
+    assertThat(db.list(PlantApiConfiguration.class, "WHERE \"PlantId\"=?", plant.id)).isEmpty();
+    assertThat(db.list(LssPlant.class, "WHERE \"PlantId\"=?", "FAIL-NEW-API")).isEmpty();
+    mvc.perform(
+            post("/admin/lss-plants/save-api")
+                .with(authentication(adminAuth))
+                .param("id", plant.id.toString())
+                .param("saveApi", "apiMonth4")
+                .param("apiMonth4", "https://example.test/offline"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void newPlantCardTestsBeforeCreationAndKeepsOtherApisUnsaved() throws Exception {
+    readableApi("https://example.test/new/month4");
+    mvc.perform(
+            post("/admin/lss-plants/save-api")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("saveApi", "apiMonth4")
+                .param("plantId", "NEW-CARD-API")
+                .param("name", "New card plant")
+                .param("capacityMw", "10")
+                .param("apiMonth4", "https://example.test/new/month4")
+                .param("apiMonth1", "https://example.test/not-yet-saved"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Plant and API saved.")));
+    var plant = db.list(LssPlant.class, "WHERE \"PlantId\"=?", "NEW-CARD-API").getFirst();
+    assertThat(db.list(PlantApiConfiguration.class, "WHERE \"PlantId\"=?", plant.id)).hasSize(1);
+    verify(client, never()).fetch("https://example.test/not-yet-saved");
+  }
+
   @Test
   void authenticationAndEveryPageRenderWithCorrectAccess() throws Exception {
     mvc.perform(get("/")).andExpect(status().is3xxRedirection());
@@ -224,8 +400,6 @@ class ApplicationIntegrationTests {
             "https://example.test/ddq",
             "https://example.test/mmf",
             "https://example.test/day-ahead",
-            "plant-active\">Active",
-            "plant-inactive\">Inactive",
             "Not configured",
             "Test API",
             "action=\"/admin/plants/" + plant.id + "/test\"",
@@ -479,6 +653,7 @@ class ApplicationIntegrationTests {
 
   @Test
   void configurationCollectionValidationReportAndDownloadsWorkTogether() throws Exception {
+    readableApi("https://example.test/data");
     mvc.perform(
             post("/admin/lss-plants/save")
                 .with(authentication(adminAuth))
@@ -492,6 +667,7 @@ class ApplicationIntegrationTests {
                 .param("mmfApiEndpoint", ""))
         .andExpect(redirectedUrl("/admin/lss-plants"));
     var plant = db.list(LssPlant.class, "WHERE \"PlantId\"='JAVA-TEST'").getFirst();
+    clearInvocations(client);
     var now = LocalDate.now(Policies.LOCAL).atStartOfDay();
     String payload =
         "[{\"timestamp\":\""
@@ -569,6 +745,128 @@ class ApplicationIntegrationTests {
             content().string(org.hamcrest.Matchers.containsString("Registered plant capacity")));
     mvc.perform(get("/on-demand-analysis").with(authentication(otherAdminAuth)))
         .andExpect(status().isOk());
+  }
+
+  @Test
+  void plantCanBeSavedWithoutAnyApiAndEditorOffersAllOptionalDatasets() throws Exception {
+    mvc.perform(get("/admin/lss-plants/edit").with(authentication(adminAuth)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("+ Add APIs")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"apiMonth4\"")))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Times use HH:mm"))));
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("plantId", "NOAPI-" + System.nanoTime() % 1000000)
+                .param("name", "Plant without APIs")
+                .param("capacityMw", "30")
+                .param("isActive", "true"))
+        .andExpect(redirectedUrl("/admin/lss-plants"));
+    var plant = db.list(LssPlant.class, "WHERE \"Name\"=?", "Plant without APIs").getFirst();
+    assertThat(plant.ddqApiEndpoint).isEmpty();
+    assertThat(db.list(PlantApiConfiguration.class, "WHERE \"PlantId\"=?", plant.id)).isEmpty();
+  }
+
+  @Test
+  void plantApiLinksAreOptionalOwnedAndMonthlyDatasetIsUsedForCollection() throws Exception {
+    readableApi("https://example.test/site/dayahead");
+    readableApi("https://example.test/site/month1");
+    readableApi("https://example.test/site/mmf");
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("plantId", "API-" + System.nanoTime() % 1000000)
+                .param("name", "Plant with API slots")
+                .param("capacityMw", "30")
+                .param("isActive", "true")
+                .param("apiDayAhead", "https://example.test/site/dayahead")
+                .param("apiMonth1", "https://example.test/site/month1")
+                .param("apiMmf", "https://example.test/site/mmf"))
+        .andExpect(redirectedUrl("/admin/lss-plants"));
+    var plant = db.list(LssPlant.class, "WHERE \"Name\"=?", "Plant with API slots").getFirst();
+    var links = db.list(PlantApiConfiguration.class, "WHERE \"PlantId\"=?", plant.id);
+    assertThat(links).hasSize(3);
+    assertThat(links)
+        .extracting(link -> link.dataType)
+        .containsExactlyInAnyOrder("Day Ahead", "4 Month Ahead 1", "MMF");
+    mvc.perform(
+            get("/admin/lss-plants/edit")
+                .param("id", plant.id.toString())
+                .with(authentication(adminAuth)))
+        .andExpect(
+            content()
+                .string(org.hamcrest.Matchers.containsString("https://example.test/site/month1")));
+    var other = new LssPlant();
+    other.plantId = "OTHER-" + System.nanoTime() % 1000000;
+    other.name = "Separate plant";
+    db.insert(other);
+    var otherLink = new PlantApiConfiguration();
+    otherLink.plantId = other.id;
+    otherLink.dataType = "Day Ahead";
+    otherLink.apiLink = "https://example.test/other/dayahead";
+    db.insert(otherLink);
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", plant.id.toString())
+                .param("plantId", plant.plantId)
+                .param("name", plant.name)
+                .param("capacityMw", "30")
+                .param("apiDayAhead", "")
+                .param("apiMonth1", "https://example.test/site/month1"))
+        .andExpect(redirectedUrl("/admin/lss-plants"));
+    assertThat(
+            db.list(
+                PlantApiConfiguration.class,
+                "WHERE \"PlantId\"=? AND \"DataType\"=?",
+                plant.id,
+                "Day Ahead"))
+        .isEmpty();
+    assertThat(db.find(PlantApiConfiguration.class, otherLink.id)).isPresent();
+    assertThat(
+            db.list(
+                PlantApiConfiguration.class, "WHERE \"PlantId\"=? AND \"ApiType\"='MMF'", plant.id))
+        .hasSize(1);
+    clearInvocations(client);
+    when(client.fetch("https://example.test/site/month1"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "[{\"timestamp\":\"2026-11-01T00:00:00\",\"power\":1.5}]"));
+    collection.test(plant.id, "4 Month Ahead 1", "test.admin");
+    verify(client).fetch("https://example.test/site/month1");
+  }
+
+  @Test
+  void invalidPlantApiDoesNotPartiallySaveAndCsrfIsRequired() throws Exception {
+    doThrow(new IllegalArgumentException("Use HTTPS"))
+        .when(client)
+        .validate("http://blocked.test/api");
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("plantId", "REJECT-API")
+                .param("name", "Must not save")
+                .param("capacityMw", "30")
+                .param("apiMonth4", "http://blocked.test/api"))
+        .andExpect(status().isBadRequest());
+    assertThat(db.list(LssPlant.class, "WHERE \"PlantId\"=?", "REJECT-API")).isEmpty();
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .param("plantId", "NO-CSRF")
+                .param("name", "Blocked")
+                .param("capacityMw", "30"))
+        .andExpect(status().isForbidden());
   }
 
   @Test

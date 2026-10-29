@@ -323,6 +323,7 @@ final class AdminPages {
 
   static Element edit(PageContext c) {
     Resources.Definition resource = c.value("resource");
+    if (resource.type() == LssPlant.class) return plantEdit(c);
     var form =
         c.post(
             resource.path() + "/save",
@@ -358,6 +359,255 @@ final class AdminPages {
             null,
             action("Back to list", resource.path(), false)),
         el("article", form).cls("panel"));
+  }
+
+  private static Element plantEdit(PageContext c) {
+    LssPlant plant = c.value("plant");
+    Map<String, String> endpoints = c.value("plantApiEndpoints");
+    Map<String, String> savedEndpoints = c.value("savedPlantApiEndpoints");
+    var selectedGroups = c.request().getParameterValues("apiGroups");
+    boolean ddqSelected =
+        selectedGroups == null
+            ? !plant.ddqApiEndpoint.isBlank()
+                || PlantApiSlots.ALL.stream()
+                    .anyMatch(
+                        slot ->
+                            slot.apiType().equals("DDQ")
+                                && (!endpoints.getOrDefault(slot.field(), "").isBlank()
+                                    || slot.field().equals(c.text("apiSaveField"))))
+            : Arrays.asList(selectedGroups).contains("DDQ");
+    boolean mmfSelected =
+        selectedGroups == null
+            ? !plant.mmfApiEndpoint.isBlank()
+                || PlantApiSlots.ALL.stream()
+                    .anyMatch(
+                        slot ->
+                            slot.apiType().equals("MMF")
+                                && (!endpoints.getOrDefault(slot.field(), "").isBlank()
+                                    || slot.field().equals(c.text("apiSaveField"))))
+            : Arrays.asList(selectedGroups).contains("MMF");
+    long count = savedEndpoints.values().stream().filter(value -> !value.isBlank()).count();
+    var form =
+        c.post(
+            "/admin/lss-plants/save",
+            "java-form plant-editor",
+            input("id", "hidden", plant.id == 0 ? "" : plant.id));
+    var identity =
+        el(
+                "section",
+                el(
+                        "div",
+                        el("span", "01").cls("plant-step"),
+                        el(
+                            "div",
+                            el("h2", "Plant details"),
+                            el(
+                                "p",
+                                "Register the plant first. API connections can be added whenever"
+                                    + " they are ready.")))
+                    .cls("plant-section-heading"),
+                el(
+                        "div",
+                        field(
+                            "Plant ID / mnemonic",
+                            input("plantId", "text", plant.plantId)
+                                .attr("maxlength", 20)
+                                .flag("required", true)
+                                .attr("placeholder", "e.g. KMPR")),
+                        field(
+                            "Plant name",
+                            input("name", "text", plant.name)
+                                .attr("maxlength", 160)
+                                .flag("required", true)
+                                .attr("placeholder", "Enter the registered plant name")),
+                        field(
+                            "State",
+                            input("state", "text", plant.state)
+                                .attr("maxlength", 60)
+                                .attr("placeholder", "e.g. Perak")),
+                        field(
+                            "Installed capacity (MW)",
+                            input("capacityMw", "number", plant.capacityMw)
+                                .attr("step", "any")
+                                .attr("min", 0)
+                                .flag("required", true)))
+                    .cls("plant-detail-grid"))
+            .cls("plant-editor-card");
+    var connections =
+        el("details")
+            .cls("plant-connections plant-editor-card")
+            .flag("open", count > 0 || !c.text("apiSaveField").isBlank());
+    connections.add(
+        el(
+            "summary",
+            el("span", "02").cls("plant-step"),
+            el(
+                "span",
+                el("strong", "API connections"),
+                el("small", "Optional · " + count + " dataset links configured")),
+            el("span", count == 0 ? "+ Add APIs" : "Manage APIs").cls("plant-add-api")));
+    var slots = el("div").cls("plant-api-grid");
+    Map<String, String> apiErrors = c.value("apiSaveErrors");
+    if (apiErrors == null) apiErrors = Map.of();
+    for (var slot : PlantApiSlots.ALL) {
+      String value = endpoints.getOrDefault(slot.field(), "");
+      String savedValue = savedEndpoints.getOrDefault(slot.field(), "");
+      boolean failed = apiErrors.containsKey(slot.field());
+      boolean result = failed || slot.field().equals(c.text("apiSaveField"));
+      var input =
+          input(slot.field(), "url", value)
+              .attr("maxlength", 1000)
+              .attr(
+                  "placeholder",
+                  "https://provider.example/" + plant.plantId.toLowerCase(Locale.ROOT) + "/…")
+              .attr("aria-label", slot.label() + " API URL");
+      slots.add(
+          el(
+                  "details",
+                  el(
+                      "summary",
+                      el(
+                          "span",
+                          el("small", slot.apiType()).cls("plant-api-kind"),
+                          el("strong", slot.label())),
+                      el(
+                              "span",
+                              !value.equals(savedValue)
+                                  ? "Not saved"
+                                  : savedValue.isBlank() ? "+ Add URL" : "Configured")
+                          .cls("plant-api-badge")),
+                  el(
+                          "div",
+                          el("p", slot.hint()),
+                          field("API endpoint URL", input),
+                          button("Test & Save API", true)
+                              .attr("name", "saveApi")
+                              .attr("value", slot.field())
+                              .attr(
+                                  "formaction",
+                                  "/admin/lss-plants/save-api#plant-api-" + slot.field())
+                              .cls("primary-action plant-api-save"),
+                          result
+                              ? el(
+                                      "p",
+                                      failed
+                                          ? apiErrors.get(slot.field())
+                                          : c.text("apiSaveMessage"))
+                                  .cls(
+                                      "plant-api-result "
+                                          + (!failed && c.yes("apiSaveSuccess")
+                                              ? "api-save-success"
+                                              : "api-save-failed"))
+                                  .attr("role", "status")
+                                  .attr("aria-live", "polite")
+                              : null,
+                          el(
+                              "small",
+                              "The connection is tested before saving. Failed URLs are not saved."
+                                  + " Clear the URL and save to remove this connection."))
+                      .cls("plant-api-body"))
+              .cls("plant-api-slot")
+              .attr("data-api-type", slot.apiType())
+              .attr("id", "plant-api-" + slot.field())
+              .flag("open", !value.isBlank() || result));
+    }
+    connections.add(
+        el(
+                "div",
+                el(
+                        "p",
+                        "Add only the APIs available for this plant. Each dataset can use its own"
+                            + " URL; all fields are optional.")
+                    .cls("plant-api-help"),
+                el(
+                        "fieldset",
+                        el("legend", "Choose API types"),
+                        el("p", "Select DDQ, MMF or both."),
+                        el(
+                                "div",
+                                el(
+                                    "label",
+                                    input("apiGroups", "checkbox", "DDQ")
+                                        .attr("id", "plant-group-ddq")
+                                        .flag("checked", ddqSelected),
+                                    el(
+                                        "span",
+                                        el("strong", "DDQ"),
+                                        el("small", "Solar forecasts"))),
+                                el(
+                                    "label",
+                                    input("apiGroups", "checkbox", "MMF")
+                                        .attr("id", "plant-group-mmf")
+                                        .flag("checked", mmfSelected),
+                                    el(
+                                        "span",
+                                        el("strong", "MMF"),
+                                        el("small", "Weather measurements"))))
+                            .cls("plant-api-type-options"))
+                    .cls("plant-api-type-picker"),
+                el("p", "Select an API type above to add its connections.")
+                    .cls("plant-api-type-empty"),
+                slots,
+                el(
+                        "details",
+                        el("summary", "General DDQ / MMF links (optional)"),
+                        el(
+                            "p",
+                            "Use these if your provider supplies one general URL. A"
+                                + " dataset-specific URL takes priority."),
+                        el(
+                                "div",
+                                field(
+                                        "General DDQ URL",
+                                        input("ddqApiEndpoint", "url", plant.ddqApiEndpoint)
+                                            .attr("maxlength", 1000))
+                                    .cls("plant-general-ddq"),
+                                field(
+                                        "General MMF URL",
+                                        input("mmfApiEndpoint", "url", plant.mmfApiEndpoint)
+                                            .attr("maxlength", 1000))
+                                    .cls("plant-general-mmf"))
+                            .cls("plant-detail-grid"))
+                    .cls("plant-general-apis")
+                    .flag(
+                        "open", !plant.ddqApiEndpoint.isBlank() || !plant.mmfApiEndpoint.isBlank()))
+            .cls("plant-connections-body"));
+    var status =
+        el(
+                "aside",
+                el("span", "PLANT STATUS").cls("section-label"),
+                el("h2", "Ready when you are"),
+                field(
+                    "Active plant",
+                    input("isActive", "checkbox", "true").flag("checked", plant.isActive)),
+                el("p", "Keep this plant active to include it in collection selections."),
+                el(
+                        "div",
+                        el("strong", "No API yet?"),
+                        el(
+                            "p",
+                            "Save the plant now and add its connections later. Data collection"
+                                + " requires a configured API."))
+                    .cls("plant-optional-note"))
+            .cls("plant-editor-card plant-status-card");
+    form.add(
+        el("div", el("div", identity, connections).cls("plant-editor-main"), status)
+            .cls("plant-editor-layout"),
+        el(
+                "footer",
+                el("p", "Only Plant ID, plant name and capacity are required."),
+                el("div", action("Cancel", "/admin/lss-plants", false), button("Save plant", true))
+                    .cls("java-actions"))
+            .cls("plant-editor-footer"));
+    return el(
+            "section",
+            heading(
+                "Plant configuration",
+                plant.id == 0 ? "Add LSS plant" : "Edit LSS plant",
+                "Manage plant information and connect the APIs available for this site.",
+                action("Back to plants", "/admin/lss-plants", false)),
+            form)
+        .cls("plant-editor-page");
   }
 
   static Element users(PageContext c) {

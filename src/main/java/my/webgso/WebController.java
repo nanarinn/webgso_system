@@ -431,8 +431,7 @@ public class WebController {
             ReportExecution.class,
             "WHERE \"RequestedBy\"=? ORDER BY \"RequestedAt\" DESC LIMIT 100",
             requester(auth)));
-    model.addAttribute(
-        "dataTypes", List.of("Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month Ahead", "MMF"));
+    model.addAttribute("dataTypes", Policies.DATA_TYPES);
     return "reports";
   }
 
@@ -586,6 +585,11 @@ public class WebController {
       HttpServletRequest request, Model model, @RequestParam(required = false) Long id)
       throws ReflectiveOperationException {
     var resource = Resources.get(request.getRequestURI().replaceFirst("/edit$", ""));
+    return editResource(resource, model, id);
+  }
+
+  private String editResource(Resources.Definition resource, Model model, Long id)
+      throws ReflectiveOperationException {
     if (resource.type() == DataAnomaly.class && id == null)
       throw new IllegalArgumentException("Select an existing anomaly");
     Object record =
@@ -620,23 +624,107 @@ public class WebController {
     model.addAttribute("resource", resource);
     model.addAttribute("fields", fields);
     model.addAttribute("id", id);
+    if (record instanceof LssPlant plant) {
+      model.addAttribute("plant", plant);
+      var endpoints = new LinkedHashMap<String, String>();
+      var configured =
+          id == null
+              ? List.<PlantApiConfiguration>of()
+              : db.list(
+                  PlantApiConfiguration.class, "WHERE \"PlantId\"=? ORDER BY \"Id\"", plant.id);
+      for (var slot : PlantApiSlots.ALL)
+        endpoints.put(
+            slot.field(),
+            configured.stream()
+                .filter(
+                    api ->
+                        api.apiType.equals(slot.apiType()) && api.dataType.equals(slot.dataType()))
+                .map(api -> api.apiLink)
+                .findFirst()
+                .orElse(""));
+      model.addAttribute("plantApiEndpoints", endpoints);
+      model.addAttribute("savedPlantApiEndpoints", new LinkedHashMap<>(endpoints));
+    }
     return "edit";
+  }
+
+  @PostMapping("/admin/lss-plants/save-api")
+  public String savePlantApi(
+      @RequestParam Map<String, String> form, Model model, Authentication auth)
+      throws ReflectiveOperationException {
+    String field = form.getOrDefault("saveApi", "");
+    var slot =
+        PlantApiSlots.ALL.stream()
+            .filter(item -> item.field().equals(field))
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Choose a valid API dataset"));
+    String rawId = form.getOrDefault("id", "");
+    Long id = rawId.isBlank() ? null : Long.valueOf(rawId);
+    String link = form.getOrDefault(slot.field(), "").trim();
+    boolean success = false;
+    String message;
+    try {
+      if (id == null) {
+        if (link.isBlank())
+          throw new IllegalArgumentException(
+              "Enter an API URL, or save the plant without an API first.");
+        var selectedForm = new LinkedHashMap<>(form);
+        for (var other : PlantApiSlots.ALL)
+          if (!other.field().equals(field)) selectedForm.remove(other.field());
+        selectedForm.remove("ddqApiEndpoint");
+        selectedForm.remove("mmfApiEndpoint");
+        id = admin.savePlant(selectedForm, principal(auth).username()).id.longValue();
+        message = "Connection test passed. Plant and API saved.";
+      } else {
+        int count =
+            admin.savePlantApi(Math.toIntExact(id), field, link, principal(auth).username());
+        message =
+            link.isBlank()
+                ? "API connection removed."
+                : "Connection test passed: " + count + " readable value(s). API saved.";
+      }
+      success = true;
+    } catch (IllegalArgumentException e) {
+      message = "API test failed. API not saved. " + e.getMessage();
+    }
+    restorePlantDraft(form, model, id);
+    model.addAttribute("apiSaveField", field);
+    model.addAttribute("apiSaveSuccess", success);
+    model.addAttribute("apiSaveMessage", message);
+    return "edit";
+  }
+
+  private void restorePlantDraft(Map<String, String> form, Model model, Long id)
+      throws ReflectiveOperationException {
+    editResource(Resources.get("/admin/lss-plants"), model, id);
+    var plant = (LssPlant) model.getAttribute("plant");
+    // Keep other in-progress fields on screen; only the chosen API is persisted.
+    if (form.containsKey("plantId")) plant.plantId = form.get("plantId");
+    if (form.containsKey("name")) plant.name = form.get("name");
+    if (form.containsKey("state")) plant.state = form.get("state");
+    if (form.containsKey("capacityMw")) {
+      try {
+        plant.capacityMw = new BigDecimal(form.get("capacityMw"));
+      } catch (NumberFormatException ignored) {
+      }
+    }
+    plant.isActive = Set.of("true", "on").contains(form.getOrDefault("isActive", ""));
+    if (form.containsKey("ddqApiEndpoint")) plant.ddqApiEndpoint = form.get("ddqApiEndpoint");
+    if (form.containsKey("mmfApiEndpoint")) plant.mmfApiEndpoint = form.get("mmfApiEndpoint");
+    @SuppressWarnings("unchecked")
+    var drafts = (Map<String, String>) model.getAttribute("plantApiEndpoints");
+    for (var item : PlantApiSlots.ALL)
+      if (form.containsKey(item.field())) drafts.put(item.field(), form.get(item.field()));
   }
 
   private static List<String> options(String name) {
     return switch (name) {
       case "apiType" -> List.of("DDQ", "MMF");
       case "dataType" ->
-          List.of(
-              "DDQ",
-              "Rolling 24 Hour",
-              "Day Ahead",
-              "Week Ahead",
-              "4 Month Ahead",
-              "MMF",
-              "Daily",
-              "Weekly",
-              "4 Month");
+          java.util.stream.Stream.concat(
+                  Policies.DDQ_TYPES.stream(),
+                  java.util.stream.Stream.of("DDQ", "MMF", "Daily", "Weekly", "4 Month"))
+              .toList();
       case "interval" -> List.of("15 minutes", "30 minutes", "1 hour");
       case "scheduleType" -> List.of("Daily", "Weekly", "4 Month", "Rolling 24 Hour");
       case "severity" -> List.of("Error", "Warning");
@@ -658,9 +746,22 @@ public class WebController {
       HttpServletRequest request,
       @RequestParam Map<String, String> form,
       Authentication auth,
-      RedirectAttributes flash) {
+      RedirectAttributes flash,
+      Model model,
+      jakarta.servlet.http.HttpServletResponse response)
+      throws ReflectiveOperationException {
     var resource = Resources.get(request.getRequestURI().replaceFirst("/save$", ""));
-    admin.save(resource, form, principal(auth).username());
+    if (resource.type() == LssPlant.class) {
+      try {
+        admin.savePlant(form, principal(auth).username());
+      } catch (AdminService.ApiTestsFailed failed) {
+        String rawId = form.getOrDefault("id", "");
+        restorePlantDraft(form, model, rawId.isBlank() ? null : Long.valueOf(rawId));
+        model.addAttribute("apiSaveErrors", failed.errors);
+        response.setStatus(400);
+        return "edit";
+      }
+    } else admin.save(resource, form, principal(auth).username());
     flash.addFlashAttribute("message", "Configuration saved.");
     return "redirect:" + resource.path();
   }

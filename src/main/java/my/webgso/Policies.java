@@ -8,7 +8,18 @@ import my.webgso.Models.*;
 public final class Policies {
   public static final ZoneId LOCAL = ZoneId.of("Asia/Kuala_Lumpur");
   public static final List<String> DDQ_TYPES =
-      List.of("Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month Ahead");
+      List.of(
+          "Rolling 24 Hour",
+          "Day Ahead",
+          "Week Ahead",
+          "4 Month Ahead",
+          "4 Month Ahead 1",
+          "4 Month Ahead 2",
+          "4 Month Ahead 3",
+          "4 Month Ahead 4");
+  public static final List<String> DATA_TYPES =
+      java.util.stream.Stream.concat(DDQ_TYPES.stream(), java.util.stream.Stream.of("MMF"))
+          .toList();
   public static final Map<String, String> MMF_UNITS =
       Map.ofEntries(
           Map.entry("AirPressure", "hPa"),
@@ -29,9 +40,15 @@ public final class Policies {
 
   public static String canonical(String value) {
     return switch (value.trim().toLowerCase(Locale.ROOT)) {
-      case "daily", "day ahead", "five day ahead", "5 day ahead", "five-day ahead" -> "Day Ahead";
-      case "weekly", "week ahead" -> "Week Ahead";
+      case "daily", "dayahead", "day ahead", "five day ahead", "5 day ahead", "five-day ahead" ->
+          "Day Ahead";
+      case "weekly", "weekahead", "week ahead" -> "Week Ahead";
+      case "4 month ahead 1", "fourmonthsahead1" -> "4 Month Ahead 1";
+      case "4 month ahead 2", "fourmonthsahead2" -> "4 Month Ahead 2";
+      case "4 month ahead 3", "fourmonthsahead3" -> "4 Month Ahead 3";
+      case "4 month ahead 4", "fourmonthsahead4" -> "4 Month Ahead 4";
       case "4 month",
+              "fourmonthsahead",
               "4 month ahead",
               "4 months ahead",
               "four month ahead",
@@ -96,7 +113,7 @@ public final class Policies {
             && !last.toLocalTime().isBefore(time)) return false;
     if (s.dataType.equals("Weekly") || canonical(s.dataType).equals("Week Ahead"))
       return now.getDayOfWeek().name().equalsIgnoreCase(s.scheduleDay);
-    if (s.dataType.equals("4 Month") || canonical(s.dataType).equals("4 Month Ahead")) {
+    if (s.dataType.equals("4 Month") || canonical(s.dataType).startsWith("4 Month Ahead")) {
       try {
         return now.getDayOfMonth()
                 == Math.min(Integer.parseInt(s.scheduleDay), now.toLocalDate().lengthOfMonth())

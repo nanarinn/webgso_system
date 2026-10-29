@@ -10,6 +10,24 @@ import org.junit.jupiter.api.Test;
 
 class PolicyTests {
   @Test
+  void monthlyEndpointPartsKeepTheirDatasetAndMonthlySchedule() {
+    for (int month = 1; month <= 4; month++) {
+      String type = "4 Month Ahead " + month;
+      assertThat(Policies.canonical("fourmonthsahead" + month)).isEqualTo(type);
+      assertThat(Policies.canonical(type)).isEqualTo(type);
+      var schedule = new CollectionSchedule();
+      schedule.dataType = type;
+      schedule.scheduleDay = "25";
+      schedule.scheduleMonths = "1,2,3,4,5,6,7,8,9,10,11,12";
+      schedule.runTime = "09:00";
+      assertThat(Policies.collectionDue(schedule, LocalDateTime.of(2026, 10, 25, 9, 0), null))
+          .isTrue();
+      assertThat(Policies.collectionDue(schedule, LocalDateTime.of(2026, 10, 26, 9, 0), null))
+          .isFalse();
+    }
+  }
+
+  @Test
   void locationAggregationUsesMeanForMmfAndSumForForecasts() {
     var first = new LssPlant();
     first.id = 1;
