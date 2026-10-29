@@ -252,9 +252,14 @@ class ConfiguredApiTests {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat(html)
-        .contains("configured.admin", "Failed", "42 ms", "401")
-        .containsOnlyOnce(plant.name);
+    assertThat(html).contains("configured.admin", "Failed", "42 ms", "401");
+    assertThat(
+            Pattern.compile("<tr>.*?</tr>", Pattern.DOTALL)
+                .matcher(html)
+                .results()
+                .filter(match -> match.group().contains(plant.name))
+                .count())
+        .isEqualTo(1);
     assertThat(
             testHistory.allHistory(0).stream()
                 .filter(test -> test.plantId() == plant.id && test.dataset().equals("Day Ahead")))
@@ -559,5 +564,134 @@ class ConfiguredApiTests {
     assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "admin"))
         .isInstanceOf(ApiTestHistoryService.AlreadyTested.class);
     testHistory.release(plant.id, "Day Ahead");
+  }
+
+  @Test
+  void historyFiltersLatestResultsAndUsesInclusiveMalaysiaDates() {
+    testHistory.save(plant.id, "Day Ahead", "admin", false, null, System.nanoTime(), "Old failure");
+    testHistory.save(
+        plant.id, "Day Ahead", "admin", true, null, System.nanoTime(), "Current success");
+    testHistory.save(plant.id, "MMF", "admin", false, null, System.nanoTime(), "Previous MYT day");
+    jdbc.update(
+        "UPDATE \"ApiTestHistory\" SET \"TestedAt\"=? WHERE \"PlantId\"=? AND \"Dataset\"=?",
+        java.time.OffsetDateTime.parse("2026-10-28T16:00:00Z"),
+        plant.id,
+        "Day Ahead");
+    jdbc.update(
+        "UPDATE \"ApiTestHistory\" SET \"TestedAt\"=? WHERE \"PlantId\"=? AND \"Dataset\"=?",
+        java.time.OffsetDateTime.parse("2026-10-28T15:59:59Z"),
+        plant.id,
+        "MMF");
+    var date = java.time.LocalDate.parse("2026-10-29");
+    var filter = new ApiTestHistoryService.Filter(plant.id, "Day Ahead", "Success", date, date);
+    assertThat(testHistory.allHistory(0, filter))
+        .extracting(ApiTestHistoryService.Entry::message)
+        .containsExactly("Current success");
+    assertThat(testHistory.countAll(filter)).isEqualTo(1);
+    assertThat(
+            testHistory.countAll(
+                new ApiTestHistoryService.Filter(plant.id, "Day Ahead", "Failed", null, null)))
+        .isZero();
+    assertThat(
+            testHistory.countAll(
+                new ApiTestHistoryService.Filter(plant.id, "MMF", "Failed", date, date)))
+        .isZero();
+    assertThat(
+            testHistory.countAll(
+                new ApiTestHistoryService.Filter(plant.id, "x' OR 1=1 --", "", null, null)))
+        .isZero();
+    jdbc.update(
+        "UPDATE \"ApiTestHistory\" SET \"TestedAt\"=? WHERE \"PlantId\"=? AND \"Dataset\"=?",
+        java.time.OffsetDateTime.parse("2026-10-29T15:59:59Z"),
+        plant.id,
+        "Day Ahead");
+    assertThat(testHistory.countAll(filter)).isEqualTo(1);
+    jdbc.update(
+        "UPDATE \"ApiTestHistory\" SET \"TestedAt\"=? WHERE \"PlantId\"=? AND \"Dataset\"=?",
+        java.time.OffsetDateTime.parse("2026-10-29T16:00:00Z"),
+        plant.id,
+        "Day Ahead");
+    assertThat(testHistory.countAll(filter)).isZero();
+  }
+
+  @Test
+  void historyFilterFormKeepsSelectionsAndRendersEmptyState() throws Exception {
+    testHistory.save(plant.id, "Day Ahead", "admin", true, null, System.nanoTime(), "Filter match");
+    String html =
+        mvc.perform(
+                get("/admin/api-test-history")
+                    .with(authentication(auth))
+                    .param("filterPlant", String.valueOf(plant.id))
+                    .param("filterApi", "Day Ahead")
+                    .param("filterResult", "Failed"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html)
+        .contains(
+            "Apply filters",
+            "From date (MYT)",
+            "To date (MYT)",
+            "No results match these filters",
+            "value=\"Failed\" selected",
+            "value=\"Day Ahead\" selected");
+    var invalidDate =
+        mvc.perform(
+                get("/admin/api-test-history")
+                    .with(authentication(auth))
+                    .param("dateFrom", "invalid-date"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(invalidDate).contains("Choose valid dates", "role=\"alert\"");
+    verifyNoInteractions(client);
+  }
+
+  @Test
+  void historyPaginationPreservesAllFilters() throws Exception {
+    for (int i = 0; i < 26; i++) {
+      testHistory.save(
+          plant.id, "Filter API " + i, "admin", false, null, System.nanoTime(), "Filtered " + i);
+    }
+    jdbc.update(
+        "UPDATE \"ApiTestHistory\" SET \"TestedAt\"=? WHERE \"PlantId\"=?",
+        java.time.OffsetDateTime.parse("2040-01-01T01:00:00Z"),
+        plant.id);
+    String html =
+        mvc.perform(
+                get("/admin/api-test-history")
+                    .with(authentication(auth))
+                    .param("filterPlant", String.valueOf(plant.id))
+                    .param("filterResult", "Failed")
+                    .param("dateFrom", "2040-01-01")
+                    .param("dateTo", "2040-01-01"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(html)
+        .contains(
+            "26 API result(s) found.",
+            "filterPlant=" + plant.id,
+            "filterResult=Failed",
+            "dateFrom=2040-01-01",
+            "page=1");
+    String second =
+        mvc.perform(
+                get("/admin/api-test-history")
+                    .with(authentication(auth))
+                    .param("filterPlant", String.valueOf(plant.id))
+                    .param("filterResult", "Failed")
+                    .param("dateFrom", "2040-01-01")
+                    .param("dateTo", "2040-01-01")
+                    .param("page", "1"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(second).contains("Filtered 0", "Previous", "Page 2").doesNotContain("Filtered 25");
+    verifyNoInteractions(client);
   }
 }

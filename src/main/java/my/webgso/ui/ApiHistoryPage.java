@@ -42,6 +42,7 @@ final class ApiHistoryPage {
                           input("plantId", "hidden", test.plantId()),
                           input("dataType", "hidden", test.dataset()),
                           input("page", "hidden", c.number("page")),
+                          filterValues(c),
                           button("Test API again", true))
                       : null),
               test.httpStatus() == null ? "No response" : test.httpStatus(),
@@ -61,10 +62,16 @@ final class ApiHistoryPage {
                     c.post(
                         "/admin/api-test-history/test-all",
                         "api-retest-form",
-                        button("Test all APIs", true).flag("disabled", c.number("total") == 0)))
+                        button("Test all APIs", true)
+                            .flag("disabled", c.number("historyTotal") == 0)))
                 .cls("java-actions")),
         el(
                 "article",
+                filters(c, plants),
+                c.text("filterError").isEmpty()
+                    ? null
+                    : el("p", c.text("filterError")).attr("role", "alert"),
+                el("p", c.number("total") + " API result(s) found.").cls("api-history-note"),
                 el(
                         "p",
                         "One latest result per plant and API. Use Test all APIs to recheck"
@@ -82,9 +89,64 @@ final class ApiHistoryPage {
                         "Test duration",
                         "Message"),
                     rows,
-                    "No tests recorded yet. Press Test in Plant Config to create the"
-                        + " first result."),
-                OperationsPages.pagination(c, "Test history pages"))
+                    c.number("historyTotal") == 0
+                        ? "No tests recorded yet. Press Test in Plant Config to create the first"
+                            + " result."
+                        : "No results match these filters. Try different filters or Clear."),
+                OperationsPages.pagination(
+                    c,
+                    "Test history pages",
+                    "filterPlant",
+                    "filterApi",
+                    "filterResult",
+                    "dateFrom",
+                    "dateTo"))
             .cls("panel"));
+  }
+
+  private static Element filterValues(PageContext c) {
+    var values = el("div");
+    for (String name : List.of("filterPlant", "filterApi", "filterResult", "dateFrom", "dateTo"))
+      values.add(input(name, "hidden", c.text(name)));
+    return values;
+  }
+
+  private static Element filters(PageContext c, Map<Integer, LssPlant> plants) {
+    var plantOptions =
+        el("select")
+            .attr("name", "filterPlant")
+            .add(option(0, "All plants", c.text("filterPlant")));
+    plants.values().stream()
+        .sorted(Comparator.comparing(plant -> plant.name, String.CASE_INSENSITIVE_ORDER))
+        .forEach(
+            plant ->
+                plantOptions.add(
+                    option(plant.id, plant.name + " · " + plant.plantId, c.text("filterPlant"))));
+    var apiOptions =
+        el("select").attr("name", "filterApi").add(option("", "All APIs", c.text("filterApi")));
+    c.<String>list("historyDatasets")
+        .forEach(dataset -> apiOptions.add(option(dataset, dataset, c.text("filterApi"))));
+    var resultOptions =
+        el("select")
+            .attr("name", "filterResult")
+            .add(
+                option("", "All results", c.text("filterResult")),
+                option("Success", "Success", c.text("filterResult")),
+                option("Failed", "Failed", c.text("filterResult")));
+    return el(
+            "form",
+            field("Plant", plantOptions),
+            field("API", apiOptions),
+            field("Result", resultOptions),
+            field("From date (MYT)", input("dateFrom", "date", c.text("dateFrom"))),
+            field("To date (MYT)", input("dateTo", "date", c.text("dateTo"))),
+            el(
+                    "div",
+                    button("Apply filters", true),
+                    action("Clear", "/admin/api-test-history", false))
+                .cls("java-actions"))
+        .attr("method", "get")
+        .attr("action", "/admin/api-test-history")
+        .cls("java-filters");
   }
 }

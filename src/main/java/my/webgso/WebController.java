@@ -694,14 +694,47 @@ public class WebController {
   }
 
   @GetMapping("/admin/api-test-history")
-  public String apiTestHistory(@RequestParam(defaultValue = "0") int page, Model model) {
+  public String apiTestHistory(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "0") int filterPlant,
+      @RequestParam(defaultValue = "") String filterApi,
+      @RequestParam(defaultValue = "") String filterResult,
+      @RequestParam(defaultValue = "") String dateFrom,
+      @RequestParam(defaultValue = "") String dateTo,
+      Model model) {
     int safePage = Math.clamp(page, 0, 100000);
     model.addAttribute("title", "API test history");
     var plants = new HashMap<Integer, LssPlant>();
     db.list(LssPlant.class, "").forEach(plant -> plants.put(plant.id, plant));
     model.addAttribute("historyPlants", plants);
-    model.addAttribute("testHistory", testHistory.allHistory(safePage));
-    model.addAttribute("total", testHistory.countAll());
+    LocalDate from = null, to = null;
+    boolean validDates = true;
+    try {
+      from = dateFrom.isBlank() ? null : LocalDate.parse(dateFrom);
+      to = dateTo.isBlank() ? null : LocalDate.parse(dateTo);
+      if (from != null && to != null && from.isAfter(to)) throw new IllegalArgumentException();
+    } catch (DateTimeException | IllegalArgumentException e) {
+      validDates = false;
+      model.addAttribute(
+          "filterError", "Choose valid dates. From date must be on or before To date.");
+    }
+    var filter = new ApiTestHistoryService.Filter(filterPlant, filterApi, filterResult, from, to);
+    model.addAttribute("filterPlant", filterPlant);
+    model.addAttribute("filterApi", filterApi);
+    model.addAttribute("filterResult", filterResult);
+    model.addAttribute("dateFrom", dateFrom);
+    model.addAttribute("dateTo", dateTo);
+    model.addAttribute(
+        "historyDatasets",
+        testHistory.latest().values().stream()
+            .map(ApiTestHistoryService.Entry::dataset)
+            .distinct()
+            .sorted()
+            .toList());
+    model.addAttribute(
+        "testHistory", validDates ? testHistory.allHistory(safePage, filter) : List.of());
+    model.addAttribute("total", validDates ? testHistory.countAll(filter) : 0L);
+    model.addAttribute("historyTotal", testHistory.countAll());
     model.addAttribute("page", safePage);
     return "api-history";
   }
@@ -717,10 +750,17 @@ public class WebController {
       @RequestParam int plantId,
       @RequestParam String dataType,
       @RequestParam(defaultValue = "0") int page,
+      @RequestParam Map<String, String> filters,
       Authentication auth,
       RedirectAttributes flash) {
     addApiTestResult(plantId, dataType, auth, flash, true);
-    return "redirect:/admin/api-test-history?page=" + Math.clamp(page, 0, 100000);
+    var redirect =
+        org.springframework.web.util.UriComponentsBuilder.fromPath("/admin/api-test-history")
+            .queryParam("page", Math.clamp(page, 0, 100000));
+    for (String key : List.of("filterPlant", "filterApi", "filterResult", "dateFrom", "dateTo"))
+      if (filters.containsKey(key) && !filters.get(key).isBlank())
+        redirect.queryParam(key, filters.get(key));
+    return "redirect:" + redirect.build().encode().toUriString();
   }
 
   @GetMapping("/admin/api-test-history/checks/{id}")

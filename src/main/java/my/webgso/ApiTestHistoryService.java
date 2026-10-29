@@ -126,17 +126,58 @@ public class ApiTestHistoryService {
   }
 
   public List<Entry> allHistory(int page) {
-    return query(
-        "WHERE \"Id\" IN (SELECT MAX(\"Id\") FROM \"ApiTestHistory\" GROUP BY"
-            + " \"PlantId\",\"Dataset\") ORDER BY \"Id\" DESC LIMIT 25 OFFSET ?",
-        page * 25);
+    return allHistory(page, new Filter(0, "", "", null, null));
   }
 
   public long countAll() {
+    return countAll(new Filter(0, "", "", null, null));
+  }
+
+  public record Filter(int plantId, String dataset, String outcome, LocalDate from, LocalDate to) {}
+
+  private record Clause(String sql, List<Object> args) {}
+
+  private Clause filtered(Filter filter) {
+    String sql =
+        "WHERE \"Id\" IN (SELECT MAX(\"Id\") FROM \"ApiTestHistory\" GROUP BY"
+            + " \"PlantId\",\"Dataset\")";
+    var args = new ArrayList<Object>();
+    if (filter.plantId() > 0) {
+      sql += " AND \"PlantId\"=?";
+      args.add(filter.plantId());
+    }
+    if (!filter.dataset().isBlank()) {
+      sql += " AND \"Dataset\"=?";
+      args.add(filter.dataset());
+    }
+    if (!filter.outcome().isBlank()) {
+      sql += " AND \"Outcome\"=?";
+      args.add(filter.outcome());
+    }
+    if (filter.from() != null) {
+      sql += " AND \"TestedAt\">=?";
+      args.add(filter.from().atStartOfDay(Policies.LOCAL).toOffsetDateTime());
+    }
+    if (filter.to() != null) {
+      sql += " AND \"TestedAt\"<?";
+      args.add(filter.to().plusDays(1).atStartOfDay(Policies.LOCAL).toOffsetDateTime());
+    }
+    return new Clause(sql, args);
+  }
+
+  public List<Entry> allHistory(int page, Filter filter) {
+    var clause = filtered(filter);
+    var args = new ArrayList<>(clause.args());
+    args.add(Math.clamp(page, 0, 100000) * 25);
+    return query(clause.sql() + " ORDER BY \"Id\" DESC LIMIT 25 OFFSET ?", args.toArray());
+  }
+
+  public long countAll(Filter filter) {
+    var clause = filtered(filter);
     return jdbc.queryForObject(
-        "SELECT COUNT(*) FROM (SELECT \"PlantId\",\"Dataset\" FROM \"ApiTestHistory\" GROUP BY"
-            + " \"PlantId\",\"Dataset\") latest",
-        Long.class);
+        "SELECT COUNT(*) FROM \"ApiTestHistory\" " + clause.sql(),
+        Long.class,
+        clause.args().toArray());
   }
 
   private List<Entry> query(String predicate, Object... args) {
