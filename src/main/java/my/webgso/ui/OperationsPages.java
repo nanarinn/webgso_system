@@ -43,7 +43,9 @@ final class OperationsPages {
     var filters =
         el(
                 "form",
-                field("Plant", plants(c, "plantIds", c.text("plantIds"), "All plants")),
+                c.list("plants").isEmpty()
+                    ? null
+                    : field("Plant", plants(c, "plantIds", c.text("plantIds"), "All plants")),
                 field("State", stateOptions))
             .cls("panel java-filters")
             .attr("method", "get");
