@@ -208,6 +208,9 @@ public class AdminService {
       if (!p.ddqApiEndpoint.isBlank()) client.validate(p.ddqApiEndpoint);
       if (!p.mmfApiEndpoint.isBlank()) client.validate(p.mmfApiEndpoint);
       var original = create ? new LssPlant() : db.find(LssPlant.class, p.id).orElseThrow();
+      if ((create || !p.plantId.equals(original.plantId)) && !p.plantId.matches("[0-9]{1,20}"))
+        throw new IllegalArgumentException(
+            "Plant ID must contain numbers only, for example 01 or 02.");
       if (!p.ddqApiEndpoint.isBlank() && !p.ddqApiEndpoint.equals(original.ddqApiEndpoint))
         probe.verify(p.ddqApiEndpoint, "DDQ", "Rolling 24 Hour", p.id);
       if (!p.mmfApiEndpoint.isBlank() && !p.mmfApiEndpoint.equals(original.mmfApiEndpoint))

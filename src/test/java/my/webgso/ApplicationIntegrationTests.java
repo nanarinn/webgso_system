@@ -331,6 +331,43 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void plantIdAcceptsOnlyDigitsAndPreservesLeadingZeros() throws Exception {
+    long before = db.count(LssPlant.class);
+    for (String invalid : List.of("BDNS", "1.5", "-1", "1e3")) {
+      mvc.perform(
+              post("/admin/lss-plants/save")
+                  .with(authentication(adminAuth))
+                  .with(csrf())
+                  .param("plantId", invalid)
+                  .param("name", "KMPR")
+                  .param("capacityMw", "10"))
+          .andExpect(status().isBadRequest())
+          .andExpect(view().name("edit"))
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString("Plant ID must contain numbers only")));
+    }
+    assertThat(db.count(LssPlant.class)).isEqualTo(before);
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("plantId", "0093001")
+                .param("name", "KMPR")
+                .param("capacityMw", "10"))
+        .andExpect(redirectedUrl("/admin/lss-plants"));
+    var saved = db.list(LssPlant.class, "WHERE \"PlantId\"=?", "0093001").getFirst();
+    assertThat(saved.name).isEqualTo("KMPR");
+    mvc.perform(
+            get("/admin/lss-plants/edit")
+                .param("id", saved.id.toString())
+                .with(authentication(adminAuth)))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("pattern=\"[0-9]+\"")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("e.g. BDNS or KMPR")));
+  }
+
+  @Test
   void generalApiFailureStaysOnPlantFormWithDismissiblePopup() throws Exception {
     var plant = apiSavePlant("Popup original plant");
     when(client.fetch("https://example.test/popup-offline"))
@@ -415,14 +452,14 @@ class ApplicationIntegrationTests {
                 .with(authentication(adminAuth))
                 .with(csrf())
                 .param("saveApi", "apiMonth4")
-                .param("plantId", "NEW-CARD-API")
+                .param("plantId", "900001")
                 .param("name", "New card plant")
                 .param("capacityMw", "10")
                 .param("apiMonth4", "https://example.test/new/month4")
                 .param("apiMonth1", "https://example.test/not-yet-saved"))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Plant and API saved.")));
-    var plant = db.list(LssPlant.class, "WHERE \"PlantId\"=?", "NEW-CARD-API").getFirst();
+    var plant = db.list(LssPlant.class, "WHERE \"PlantId\"=?", "900001").getFirst();
     assertThat(db.list(PlantApiConfiguration.class, "WHERE \"PlantId\"=?", plant.id)).hasSize(1);
     verify(client, never()).fetch("https://example.test/not-yet-saved");
   }
@@ -850,7 +887,7 @@ class ApplicationIntegrationTests {
             post("/admin/lss-plants/save")
                 .with(authentication(adminAuth))
                 .with(csrf())
-                .param("plantId", "JAVA-TEST")
+                .param("plantId", "900002")
                 .param("name", "Java Test Plant")
                 .param("state", "Selangor")
                 .param("capacityMw", "50")
@@ -858,7 +895,7 @@ class ApplicationIntegrationTests {
                 .param("ddqApiEndpoint", "https://example.test/data")
                 .param("mmfApiEndpoint", ""))
         .andExpect(redirectedUrl("/admin/lss-plants"));
-    var plant = db.list(LssPlant.class, "WHERE \"PlantId\"='JAVA-TEST'").getFirst();
+    var plant = db.list(LssPlant.class, "WHERE \"PlantId\"='900002'").getFirst();
     clearInvocations(client);
     var now = LocalDate.now(Policies.LOCAL).atStartOfDay();
     String payload =
@@ -954,7 +991,7 @@ class ApplicationIntegrationTests {
             post("/admin/lss-plants/save")
                 .with(authentication(adminAuth))
                 .with(csrf())
-                .param("plantId", "NOAPI-" + System.nanoTime() % 1000000)
+                .param("plantId", "91" + System.nanoTime() % 1000000)
                 .param("name", "Plant without APIs")
                 .param("capacityMw", "30")
                 .param("isActive", "true"))
@@ -973,7 +1010,7 @@ class ApplicationIntegrationTests {
             post("/admin/lss-plants/save")
                 .with(authentication(adminAuth))
                 .with(csrf())
-                .param("plantId", "API-" + System.nanoTime() % 1000000)
+                .param("plantId", "92" + System.nanoTime() % 1000000)
                 .param("name", "Plant with API slots")
                 .param("capacityMw", "30")
                 .param("isActive", "true")

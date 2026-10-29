@@ -409,17 +409,20 @@ final class AdminPages {
                 el(
                         "div",
                         field(
-                            "Plant ID / mnemonic",
+                            "Plant ID",
                             input("plantId", "text", plant.plantId)
                                 .attr("maxlength", 20)
+                                .attr("inputmode", "numeric")
+                                .attr("pattern", "[0-9]+")
+                                .attr("title", "Use numbers only, for example 01 or 02.")
                                 .flag("required", true)
-                                .attr("placeholder", "e.g. KMPR")),
+                                .attr("placeholder", "e.g. 01")),
                         field(
                             "Plant name",
                             input("name", "text", plant.name)
                                 .attr("maxlength", 160)
                                 .flag("required", true)
-                                .attr("placeholder", "Enter the registered plant name")),
+                                .attr("placeholder", "e.g. BDNS or KMPR")),
                         field(
                             "State",
                             input("state", "text", plant.state)
@@ -609,7 +612,7 @@ final class AdminPages {
             "section",
             heading(
                 "Plant configuration",
-                plant.id == 0 ? "Add LSS plant" : "Edit LSS plant",
+                plant.id == 0 ? "Add plant" : "Edit plant",
                 "Manage plant information and connect the APIs available for this site.",
                 action("Back to plants", "/admin/lss-plants", false)),
             form,
