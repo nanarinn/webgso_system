@@ -64,8 +64,32 @@ final class OperationsPages {
         el(
                 "div",
                 button("Apply filters", true),
+                button("Show available data", false)
+                    .attr("type", "submit")
+                    .attr("name", "available")
+                    .attr("value", "true"),
                 action("Clear", mmf ? "/mmf-analytics" : "/ddq-analytics", false))
             .cls("java-actions"));
+    ReadingService.AvailableRange range = c.value("availableRange");
+    var availableText =
+        el(
+                "p",
+                range == null
+                    ? "No saved data is available for this plant, dataset and selected filters."
+                    : "Data available: "
+                        + range
+                            .first()
+                            .format(
+                                java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm"))
+                        + " – "
+                        + range
+                            .last()
+                            .format(
+                                java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm"))
+                        + " (MYT). Use Show available data to fill the date range.")
+            .cls("page-subtitle analytics-available-data")
+            .attr("role", "status");
+    filters.add(availableText);
     var chart =
         el(
                 "article",
@@ -207,6 +231,10 @@ final class OperationsPages {
             el("details", el("summary", "Collect a dataset from all active plants"), batchForm)
                 .cls("panel java-panel"));
     ManualBatchService.Batch batch = c.value("batch");
+    if (!c.text("collectionAnalyticsUrl").isBlank())
+      page.add(
+          el("div", action("View analytics", c.text("collectionAnalyticsUrl"), true))
+              .cls("java-actions"));
     if (batch != null) {
       page.add(
           el(
@@ -228,7 +256,10 @@ final class OperationsPages {
               job.mode,
               job.submissionDateTime,
               el("span", job.status).cls("status-pill"),
-              job.errorMessage == null ? job.responseMessage : job.errorMessage));
+              job.errorMessage == null ? job.responseMessage : job.errorMessage,
+              job.status.equals("Completed")
+                  ? action("View analytics", "/collections/" + job.id + "/analytics", false)
+                  : null));
     return page.add(
         el(
                 "article",
@@ -241,7 +272,8 @@ final class OperationsPages {
                         "Mode",
                         "Submission",
                         "Status",
-                        "Outcome"),
+                        "Outcome",
+                        "Analytics"),
                     rows,
                     "No collections yet."),
                 pagination(c, "Collection pages", "batch"))
@@ -253,7 +285,19 @@ final class OperationsPages {
     var rows = new ArrayList<Element>();
     batch.items.values().stream()
         .sorted(Comparator.comparingInt(ManualBatchService.Item::plantId))
-        .forEach(item -> rows.add(row(item.plantName(), item.status(), item.message())));
+        .forEach(
+            item ->
+                rows.add(
+                    row(
+                        item.plantName(),
+                        item.status(),
+                        item.message(),
+                        item.status().equals("Completed") && item.collectionJobId() != null
+                            ? link(
+                                    "View analytics",
+                                    "/collections/" + item.collectionJobId() + "/analytics")
+                                .attr("target", "_top")
+                            : null)));
     return el(
             "main",
             el(
@@ -261,7 +305,7 @@ final class OperationsPages {
                 batch.complete()
                     ? "Batch completed"
                     : "Collection is running. Status updates automatically every five seconds."),
-            table(List.of("Plant", "Status", "Outcome"), rows, "No batch items."),
+            table(List.of("Plant", "Status", "Outcome", "Analytics"), rows, "No batch items."),
             link("Refresh status", "/collections/batches/" + batch.id + "/status"))
         .cls("java-batch-status");
   }
@@ -294,7 +338,10 @@ final class OperationsPages {
             "Collection details",
             job.collectionId,
             job.dataType + " · " + job.status,
-            action("Collection history", "/collection-management", false)),
+            action("Collection history", "/collection-management", false),
+            job.status.equals("Completed")
+                ? action("View analytics", "/collections/" + job.id + "/analytics", true)
+                : null),
         el(
                 "article",
                 el("h2", "Outcome"),

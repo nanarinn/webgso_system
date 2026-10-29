@@ -313,3 +313,5 @@
 @keyframes api-loading-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .api-loading-spinner { animation: none; } }
 .app-content .plant-table-api-test button { min-height: 34px; padding: 5px 12px; border-radius: 7px; font-size: 12px; white-space: nowrap; }
+
+.analytics-available-data { grid-column: 1 / -1; margin: 0; }

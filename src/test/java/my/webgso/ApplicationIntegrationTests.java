@@ -173,6 +173,93 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void availableAnalyticsDatesAndCollectionLinksUseSavedReadings() throws Exception {
+    var plant = apiSavePlant("Available dates plant");
+    for (String type : List.of("Day Ahead", "MMF")) {
+      var job = new CollectionJobEntity();
+      job.collectionId = "AVAILABLE-" + UUID.randomUUID();
+      job.plantId = plant.id;
+      job.dataType = type;
+      job.status = "Completed";
+      job.submissionDateTime = LocalDateTime.of(2032, 10, 29, 9, 0);
+      db.insert(job);
+      for (var time :
+          List.of(LocalDateTime.of(2032, 10, 31, 0, 0), LocalDateTime.of(2032, 11, 8, 23, 45))) {
+        var r = new SolarApiReading();
+        r.plantId = plant.id;
+        r.collectionJobId = job.id;
+        r.dataType = type;
+        r.parameter = type.equals("MMF") ? "Humidity" : "ForecastValue";
+        r.value = BigDecimal.ONE;
+        r.intervalStart = time;
+        r.intervalEnd = time.plusMinutes(15);
+        r.submissionDateTime = job.submissionDateTime;
+        db.insert(r);
+      }
+      String route = type.equals("MMF") ? "/mmf-analytics" : "/ddq-analytics";
+      mvc.perform(
+              get(route)
+                  .with(authentication(adminAuth))
+                  .param("plantIds", plant.id.toString())
+                  .param("dataType", type)
+                  .param("parameter", type.equals("MMF") ? "Humidity" : "")
+                  .param("from", "2032-10-29T00:00")
+                  .param("to", "2032-10-30T00:00"))
+          .andExpect(status().isOk())
+          .andExpect(model().attribute("total", 0))
+          .andExpect(
+              content()
+                  .string(org.hamcrest.Matchers.containsString("Data available: 31 Oct 2032")));
+      mvc.perform(
+              get(route)
+                  .with(authentication(adminAuth))
+                  .param("plantIds", plant.id.toString())
+                  .param("dataType", type)
+                  .param("parameter", type.equals("MMF") ? "Humidity" : "")
+                  .param("available", "true")
+                  .param("from", "invalid-old-date"))
+          .andExpect(status().isOk())
+          .andExpect(model().attribute("total", 2))
+          .andExpect(model().attribute("from", LocalDateTime.of(2032, 10, 31, 0, 0)))
+          .andExpect(model().attribute("to", LocalDateTime.of(2032, 11, 9, 0, 0)));
+      var redirect =
+          mvc.perform(get("/collections/" + job.id + "/analytics").with(authentication(adminAuth)))
+              .andExpect(status().is3xxRedirection())
+              .andReturn()
+              .getResponse()
+              .getRedirectedUrl();
+      assertThat(redirect).startsWith(route + "?");
+      var redirectedRequest = get(route).with(authentication(adminAuth));
+      org.springframework.web.util.UriComponentsBuilder.fromUriString(redirect)
+          .build()
+          .getQueryParams()
+          .forEach(
+              (key, values) ->
+                  values.forEach(
+                      value ->
+                          redirectedRequest.param(
+                              key,
+                              java.net.URLDecoder.decode(
+                                  value, java.nio.charset.StandardCharsets.UTF_8))));
+      mvc.perform(redirectedRequest)
+          .andExpect(status().isOk())
+          .andExpect(model().attribute("total", 2));
+      mvc.perform(get("/collections/" + job.id).with(authentication(adminAuth)))
+          .andExpect(content().string(org.hamcrest.Matchers.containsString("View analytics")));
+    }
+    var empty = apiSavePlant("No available readings");
+    mvc.perform(
+            get("/ddq-analytics")
+                .with(authentication(adminAuth))
+                .param("plantIds", empty.id.toString())
+                .param("available", "true"))
+        .andExpect(status().isOk())
+        .andExpect(model().attribute("total", 0))
+        .andExpect(
+            content().string(org.hamcrest.Matchers.containsString("No saved data is available")));
+  }
+
+  @Test
   void generalApiFailureStaysOnPlantFormWithDismissiblePopup() throws Exception {
     var plant = apiSavePlant("Popup original plant");
     when(client.fetch("https://example.test/popup-offline"))

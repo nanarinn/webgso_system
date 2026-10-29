@@ -209,6 +209,7 @@ public class WebController {
       @RequestParam(defaultValue = "") String state,
       @RequestParam(defaultValue = "") String region,
       @RequestParam(defaultValue = "Plant") String scope,
+      @RequestParam(defaultValue = "false") boolean available,
       @RequestParam(defaultValue = "0") int page) {
     boolean mmf = request.getRequestURI().equals("/mmf-analytics");
     String type = mmf ? "MMF" : Policies.canonical(dataType);
@@ -217,8 +218,8 @@ public class WebController {
         submittedAt = null;
     String filterError = "";
     try {
-      if (!from.isBlank()) start = parseTime(from);
-      end = to.isBlank() ? start.plusDays(1) : parseTime(to);
+      if (!available && !from.isBlank()) start = parseTime(from);
+      end = available || to.isBlank() ? start.plusDays(1) : parseTime(to);
       if (!submission.isBlank()) submittedAt = parseTime(submission);
       if (!start.isBefore(end))
         filterError =
@@ -242,11 +243,23 @@ public class WebController {
     var filteredIds = new LinkedHashSet<Integer>();
     selectedPlants.forEach(p -> filteredIds.add(p.id));
     if (filteredIds.isEmpty()) filteredIds.add(-1);
+    String activeParameter = mmf ? (parameter.isBlank() ? "AmbientTemp" : parameter) : parameter;
+    var availableRange =
+        filterError.isEmpty()
+            ? readings.availableRange(type, filteredIds, submittedAt, activeParameter, null)
+            : null;
+    model.addAttribute("availableRange", availableRange);
+    if (available && availableRange != null) {
+      start = availableRange.start();
+      end = availableRange.end();
+      from = "";
+      to = "";
+      page = 0;
+    }
     var source =
         filterError.isEmpty()
             ? readings.select(type, filteredIds, submittedAt, start, end)
             : List.<SolarApiReading>of();
-    String activeParameter = mmf ? (parameter.isBlank() ? "AmbientTemp" : parameter) : parameter;
     if (!activeParameter.isBlank())
       source = source.stream().filter(r -> r.parameter.equalsIgnoreCase(activeParameter)).toList();
     var grouped = AnalyticsService.aggregate(selectedPlants, source, scope, mmf);
@@ -379,7 +392,32 @@ public class WebController {
     flash.addFlashAttribute(
         "message",
         job.status + ": " + (job.errorMessage == null ? job.responseMessage : job.errorMessage));
+    if (job.status.equals("Completed"))
+      flash.addFlashAttribute("collectionAnalyticsUrl", "/collections/" + job.id + "/analytics");
     return "redirect:/collection-management";
+  }
+
+  @GetMapping("/collections/{id}/analytics")
+  public String collectedAnalytics(@PathVariable long id) {
+    var job =
+        db.find(CollectionJobEntity.class, id)
+            .orElseThrow(() -> new IllegalArgumentException("Collection not found"));
+    var plant =
+        db.find(LssPlant.class, job.plantId)
+            .orElseThrow(() -> new IllegalArgumentException("Plant not found"));
+    var range = readings.availableRange(job.dataType, Set.of(job.plantId), null, "", id);
+    boolean mmf = job.dataType.equals("MMF");
+    var params = new LinkedHashMap<String, Object>();
+    params.put("plantIds", plant.id);
+    params.put("dataType", job.dataType);
+    if (range != null) {
+      params.put("from", range.start());
+      params.put("to", range.end());
+      if (mmf) params.put("parameter", range.parameter());
+    }
+    if (job.submissionDateTime != null) params.put("submission", job.submissionDateTime);
+    return "redirect:"
+        + my.webgso.ui.PageContext.url(mmf ? "/mmf-analytics" : "/ddq-analytics", params);
   }
 
   @PostMapping("/collections/batch")
