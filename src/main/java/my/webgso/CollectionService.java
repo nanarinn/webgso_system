@@ -324,7 +324,7 @@ public class CollectionService {
             parsed.readings().size()
                 + " readable value(s); "
                 + issues.size()
-                + " anomaly/anomalies";
+                + " anomaly/anomalies. Data structure valid.";
         plant.lastApiTestSource = apiType;
         plant.lastApiTestAt = OffsetDateTime.now(ZoneOffset.UTC);
         db.update(plant);

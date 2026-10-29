@@ -703,7 +703,9 @@ public class WebController {
         message =
             link.isBlank()
                 ? "API connection removed."
-                : "Connection test passed: " + count + " readable value(s). API saved.";
+                : "Connection test passed: "
+                    + count
+                    + " readable value(s). Data structure valid. API saved.";
       }
       success = true;
     } catch (IllegalArgumentException e) {
@@ -831,7 +833,7 @@ public class WebController {
           result.readings()
               + " readable measurements; "
               + result.issues()
-              + " anomalies detected. "
+              + " anomalies detected. Data structure valid. "
               + (result.rules() == 0
                   ? "No active validation rules are configured for this data type."
                   : "Checked against " + result.rules() + " active validation rules."));

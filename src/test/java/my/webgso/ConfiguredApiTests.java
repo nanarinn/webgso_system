@@ -101,6 +101,25 @@ class ConfiguredApiTests {
   }
 
   @Test
+  void http200WithBadStructureIsFailedWithoutImportingReadings() {
+    long readings = db.count(SolarApiReading.class);
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "[{\"timestamp\":\"2026-10-28T00:00\",\"value\":1},{\"timestamp\":\"bad\",\"value\":2}]"));
+    assertThatThrownBy(() -> collection.test(plant.id, "Day Ahead", "configured.admin"))
+        .isInstanceOf(PlantApiClient.Failure.class)
+        .hasMessageContaining("timestamp");
+    assertThat(db.count(SolarApiReading.class)).isEqualTo(readings);
+    var latest = testHistory.latest().get(ApiTestHistoryService.key(plant.id, "Day Ahead"));
+    assertThat(latest.outcome()).isEqualTo("Failed");
+    assertThat(latest.httpStatus()).isEqualTo(200);
+    assertThat(latest.message()).contains("structure is invalid");
+  }
+
+  @Test
   void wrongDatasetDoesNotFetchOrOverwriteSuccessfulConnectionState() {
     assertThatThrownBy(() -> collection.test(plant.id, "Rolling 24 Hour", "configured.admin"))
         .isInstanceOf(IllegalArgumentException.class)

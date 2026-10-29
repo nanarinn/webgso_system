@@ -17,6 +17,16 @@ import org.xml.sax.InputSource;
 
 @Component
 public class PayloadTranslator {
+  public static final class StructureFailure extends IllegalArgumentException {
+    StructureFailure(String message) {
+      super("API data structure is invalid: " + message);
+    }
+  }
+
+  private static LocalDateTime shifted(LocalDateTime time, long minutes) {
+    return time == null ? null : time.plusMinutes(minutes);
+  }
+
   public record Issue(String code, String field, String value, String reason) {}
 
   public record Result(List<SolarApiReading> readings, List<Issue> issues, String format) {}
@@ -86,12 +96,17 @@ public class PayloadTranslator {
     }
     for (String pattern : List.of("d/M/uuuu H:mm:ss", "d/M/uuuu H:mm", "uuuu-MM-dd HH:mm:ss"))
       try {
-        return LocalDateTime.parse(value.trim(), DateTimeFormatter.ofPattern(pattern));
+        return LocalDateTime.parse(
+            value.trim(),
+            DateTimeFormatter.ofPattern(pattern).withResolverStyle(ResolverStyle.STRICT));
       } catch (Exception ignored) {
       }
     for (String pattern : List.of("uuuu-MM-dd", "d/M/uuuu"))
       try {
-        return LocalDate.parse(value.trim(), DateTimeFormatter.ofPattern(pattern)).atStartOfDay();
+        return LocalDate.parse(
+                value.trim(),
+                DateTimeFormatter.ofPattern(pattern).withResolverStyle(ResolverStyle.STRICT))
+            .atStartOfDay();
       } catch (Exception ignored) {
       }
     return null;
@@ -123,7 +138,13 @@ public class PayloadTranslator {
 
   private void fields(
       Map<String, String> fields, LocalDateTime inherited, int interval, List<Candidate> result) {
-    LocalDateTime time = timestamp(first(fields, TIMES));
+    String suppliedTime = first(fields, TIMES);
+    LocalDateTime time = timestamp(suppliedTime);
+    if (suppliedTime != null && time == null)
+      throw new StructureFailure(
+          "A timestamp is missing or has an invalid date/time format. Provide a valid timestamp for"
+              + " every measurement.");
+    boolean composite = first(fields, List.of("year", "month", "day", "period")) != null;
     if (time == null)
       try {
         time =
@@ -135,12 +156,59 @@ public class PayloadTranslator {
                 .plusMinutes((Integer.parseInt(first(fields, List.of("period"))) - 1L) * interval);
       } catch (Exception ignored) {
       }
+    if (composite && time == null)
+      throw new StructureFailure(
+          "Year, month, day and period must form a valid forecast date and interval.");
+    if (composite
+        && number(first(fields, List.of("period"))) != null
+        && number(first(fields, List.of("period"))).signum() <= 0)
+      throw new StructureFailure("Forecast period must be a positive whole number.");
     if (time == null) time = inherited;
     LocalDateTime end =
         timestamp(first(fields, List.of("endTime", "intervalEnd", "intervalEndTime")));
     String parameter = first(fields, PARAMS),
         unit = Objects.toString(first(fields, List.of("unit", "valueUnit", "measurementUnit")), "");
     BigDecimal value = number(first(fields, VALUES));
+    String suppliedValue = first(fields, VALUES);
+    if (suppliedValue != null && value == null)
+      throw new StructureFailure(
+          "A measurement value is missing or is not numeric. Check value, forecastValue or reading"
+              + " fields.");
+    if (parameter != null && parameter.isBlank())
+      throw new StructureFailure(
+          "A measurement parameter is blank. Provide its field or sensor name.");
+    String suppliedEnd = first(fields, List.of("endTime", "intervalEnd", "intervalEndTime"));
+    if (suppliedEnd != null && end == null)
+      throw new StructureFailure("An interval end has an invalid date/time format.");
+    if (end != null && time != null && !end.isAfter(time))
+      throw new StructureFailure("Interval end must be after interval start.");
+    for (var item : fields.entrySet()) {
+      String name = key(item.getKey());
+      boolean measurement =
+          name.matches("(?:mmf|sensor|value|reading)[1-9][0-9]*")
+              || Set.of(
+                      "power",
+                      "forecastvalue",
+                      "ambienttemp",
+                      "humidity",
+                      "windspeed",
+                      "irradiance")
+                  .contains(name)
+              || Policies.MMF_UNITS.keySet().stream().anyMatch(p -> key(p).equals(name));
+      if (measurement && number(item.getValue()) == null)
+        throw new StructureFailure(
+            "A measurement or sensor field contains a missing or non-numeric value.");
+    }
+    if (first(
+                fields,
+                List.of(
+                    "parameter", "forecastResultParameter", "metric", "measurement", "sensorType"))
+            != null
+        && suppliedValue == null
+        && fields.keySet().stream()
+            .noneMatch(k -> key(k).matches("(?:mmf|sensor|value|reading)[1-9][0-9]*")))
+      throw new StructureFailure(
+          "A measurement parameter has no numeric value or sensor readings.");
     if (parameter != null && value != null) {
       result.add(new Candidate(time, end, parameter, value, unit));
       return;
@@ -157,7 +225,7 @@ public class PayloadTranslator {
         }
     if (sensors) return;
     for (var item : fields.entrySet())
-      if (!metadata(item.getKey())) {
+      if (!metadata(item.getKey()) && timestamp(item.getKey()) == null) {
         var n = number(item.getValue());
         if (n != null) result.add(new Candidate(time, end, item.getKey(), n, unit));
       }
@@ -177,7 +245,7 @@ public class PayloadTranslator {
         for (var child : node)
           result.add(
               new Candidate(
-                  inherited.plusMinutes((long) i++ * interval),
+                  shifted(inherited, (long) i++ * interval),
                   null,
                   parameter,
                   number(child.asText()),
@@ -207,7 +275,7 @@ public class PayloadTranslator {
         Map<String, String> f = new LinkedHashMap<>();
         for (int j = 0; j < headers.size(); j++)
           f.put(headers.get(j).asText(), j < row.size() ? row.get(j).asText() : "");
-        fields(f, inherited.plusMinutes((long) i++ * interval), interval, result);
+        fields(f, shifted(inherited, (long) i++ * interval), interval, result);
       }
       return;
     }
@@ -228,7 +296,7 @@ public class PayloadTranslator {
         var f = new LinkedHashMap<>(scalars);
         for (var e : arrays.entrySet())
           if (i < e.getValue().size()) f.put(e.getKey(), e.getValue().get(i).asText());
-        fields(f, inherited.plusMinutes((long) i * interval), interval, result);
+        fields(f, shifted(inherited, (long) i * interval), interval, result);
       }
       return;
     }
@@ -290,7 +358,16 @@ public class PayloadTranslator {
     try {
       if (text.startsWith("{") || text.startsWith("[")) {
         format = "JSON";
-        json(mapper.readTree(text), submission, null, interval, candidates);
+        var root = mapper.readTree(text);
+        String declared = root.path("data_type").asText("").toUpperCase(Locale.ROOT);
+        if (Set.of("DDQ", "MMF").contains(declared) && !declared.equals(apiType))
+          throw new StructureFailure(
+              "The response declares "
+                  + declared
+                  + " data, but the selected API type is "
+                  + apiType
+                  + ". Check the URL and dataset.");
+        json(root, null, null, interval, candidates);
       } else if (text.startsWith("<")) {
         format = "XML";
         var factory = DocumentBuilderFactory.newInstance();
@@ -305,7 +382,7 @@ public class PayloadTranslator {
                 .newDocumentBuilder()
                 .parse(new InputSource(new StringReader(text)))
                 .getDocumentElement(),
-            submission,
+            null,
             interval,
             candidates);
       } else {
@@ -323,12 +400,21 @@ public class PayloadTranslator {
                 .setSkipHeaderRecord(true)
                 .get()
                 .parse(new StringReader(text))) {
-          for (var row : parser) fields(row.toMap(), submission, interval, candidates);
+          for (var row : parser) fields(row.toMap(), null, interval, candidates);
         }
       }
+    } catch (StructureFailure e) {
+      throw e;
     } catch (Exception e) {
-      throw new IllegalArgumentException("Invalid API payload: " + e.getClass().getSimpleName(), e);
+      throw new IllegalArgumentException(
+          "Invalid API payload. Expected readable JSON, XML or CSV measurement data. Check response"
+              + " syntax and field layout.",
+          e);
     }
+    if (candidates.stream().anyMatch(c -> c.time == null))
+      throw new StructureFailure(
+          "A measurement is missing its timestamp. Supply timestamp/date-time, a dated parent"
+              + " object, or year/month/day/period fields.");
     if (candidates.size() > 250_000)
       throw new IllegalArgumentException("The payload contains too many readings.");
     var times = candidates.stream().map(Candidate::time).distinct().sorted().toList();

@@ -10,6 +10,58 @@ class PayloadTranslatorTests {
   final PayloadTranslator parser = new PayloadTranslator(new ObjectMapper());
   final LocalDateTime submission = LocalDateTime.of(2026, 10, 22, 8, 0);
 
+  @Test
+  void rejectsInvalidStructureEvenWhenOtherRowsAreReadable() {
+    for (String row :
+        java.util.List.of(
+            "{\"timestamp\":\"2026-10-22T08:00\",\"value\":\"bad\"}",
+            "{\"timestamp\":\"2026-02-30T08:00\",\"value\":2}",
+            "{\"value\":2}",
+            "{\"timestamp\":\"2026-10-22T08:00\",\"parameter\":\"Power\"}",
+            "{\"timestamp\":\"2026-10-22T08:00\",\"parameter\":\"\",\"value\":2}",
+            "{\"timestamp\":\"2026-10-22T08:00\",\"endTime\":\"2026-10-22T07:00\",\"value\":2}",
+            "{\"year\":2026,\"month\":2,\"day\":30,\"period\":1,\"value\":2}")) {
+      assertThatThrownBy(
+              () -> parse("[{\"timestamp\":\"2026-10-22T08:00\",\"value\":1}," + row + "]", "DDQ"))
+          .isInstanceOf(PayloadTranslator.StructureFailure.class)
+          .hasMessageContaining("API data structure is invalid");
+    }
+  }
+
+  @Test
+  void validatesMmfSensorsAndDeclaredTypeAndKeepsDatedNestedReadings() {
+    assertThat(
+            parse("{\"power\":{\"2026-10-22T08:00\":2,\"2026-10-22T08:15\":3}}", "DDQ").readings())
+        .hasSize(2);
+    assertThat(parse("{\"timestamp\":\"2026-10-22T08:00\",\"power\":[2,3]}", "DDQ").readings())
+        .hasSize(2);
+    assertThatThrownBy(
+            () ->
+                parse(
+                    "{\"timestamp\":\"2026-10-22T08:00\",\"parameter\":\"AmbientTemp\",\"value1\":20,\"value2\":null}",
+                    "MMF"))
+        .isInstanceOf(PayloadTranslator.StructureFailure.class);
+    assertThatThrownBy(
+            () ->
+                parse(
+                    "{\"data_type\":\"MMF\",\"timestamp\":\"2026-10-22T08:00\",\"value\":2}",
+                    "DDQ"))
+        .hasMessageContaining("declares MMF");
+    assertThat(
+            parse(
+                    "{\"timestamp\":\"2026-10-22T08:00\",\"readings\":[{\"parameter\":\"Power\",\"value\":2}]}",
+                    "DDQ")
+                .readings())
+        .hasSize(1);
+    assertThatThrownBy(
+            () -> parse("timestamp,parameter,value\n2026-10-22T08:00,Power,bad\n", "DDQ"))
+        .isInstanceOf(PayloadTranslator.StructureFailure.class);
+    assertThatThrownBy(
+            () ->
+                parse("<rows><row><timestamp>bad</timestamp><value>1</value></row></rows>", "DDQ"))
+        .isInstanceOf(PayloadTranslator.StructureFailure.class);
+  }
+
   PayloadTranslator.Result parse(String payload, String api) {
     return parser.translate(
         payload, "application/octet-stream", api, "Day Ahead", 1, 2, submission, 15);
