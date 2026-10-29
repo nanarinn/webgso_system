@@ -78,7 +78,7 @@ final class AdminPages {
                         el("label", "Search records").attr("for", "search"),
                         input("q", "text", c.text("q")).attr("id", "search").attr("maxlength", 100),
                         button("Search", false),
-                        link("Clear", resource.path()))
+                        action("Clear", resource.path(), false))
                     .cls("java-search")
                     .attr("method", "get"),
                 table(headers, rows, "No records found.").attr("data-plant-table", plants),
