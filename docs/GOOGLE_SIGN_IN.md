@@ -37,16 +37,12 @@ The script prompts locally and saves a Windows DPAPI-encrypted credential outsid
 
 For a hosted service, set `GOOGLE_LOGIN_ENABLED=true`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REDIRECT_URI` through the service secret store. Register the exact HTTPS callback URL in Google Cloud. The Windows script is for localhost port 5187; other ports need a matching `GOOGLE_REDIRECT_URI`.
 
-## Approval and email
+## Activation and email
 
-- First Google sign-in verifies the identity through Google and creates a **Pending** request. It does not grant workspace access.
-- Only the designated reviewer, Affiqah's existing account, receives approval request emails and can review requests. Apply `database/20261030-access-reviewer.sql` on an existing database to establish this assignment.
-- The new user receives a request-received email and an approval/rejection email after review in **Access requests**.
-- Repeated Google sign-ins while pending do not create duplicate users or approval requests.
-- After approval, Google login establishes the same local security-stamped session used by email login. Rejected, inactive or locked accounts cannot enter.
-- Existing email/password accounts are not automatically linked by matching email. They must continue using email/password; an authenticated account-linking flow would be needed to add Google to those existing accounts.
-- Email delivery requires GSO and Gmail SMTP to be running/configured; SMTP acceptance does not guarantee inbox placement.
+Google verifies the user's identity and email before the account is activated. No manual Admin approval is needed. Unverified Google email claims are rejected. Existing email/password accounts are not automatically linked by matching email; use email/password for those existing accounts.
+
+Local email/password sign-up uses its own email verification link. See `EMAIL_VERIFICATION.md`. Existing inactive/rejected accounts remain blocked.
 
 ## Verify
 
-Use a test Google account whose email is not already registered. Confirm the pending page appears and protected pages remain inaccessible. Sign in as Affiqah, approve the request, check the user's email, and retry Google sign-in. Verify rejected users remain blocked. Never share Client secrets or Gmail App Passwords in screenshots.
+Use a test Google account whose email is not already registered. After Google's consent/login, confirm the workspace opens and only one local account is created. Repeated login must reuse the same account. Check inactive/rejected accounts remain blocked. Keep OAuth secrets out of screenshots and GitHub.

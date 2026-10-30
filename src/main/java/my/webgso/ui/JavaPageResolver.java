@@ -14,6 +14,7 @@ public final class JavaPageResolver implements ViewResolver, Ordered {
       Set.of(
           "login",
           "register",
+          "email-verification",
           "error-page",
           "dashboard",
           "admin-overview",

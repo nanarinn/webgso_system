@@ -89,17 +89,24 @@ final class AuthPages {
     if (c.parameter("registered"))
       access.add(
           alert(
-              "Account created. An Admin must approve your access before you can sign in.",
+              "Account created. Check your inbox and verify your email before signing in.",
               "success"));
     if (c.parameter("reason")) access.add(alert("Your session ended. Sign in to continue.", ""));
     if (c.parameter("logout")) access.add(alert("You have signed out successfully.", "success"));
+    if (c.parameter("verification"))
+      access.add(
+          alert(
+              "If this email has an unverified account, a verification link will be sent. Check"
+                  + " your inbox and spam folder. Wait one minute before requesting another link.",
+              "success"));
     String google = c.request().getParameter("google");
     if (google != null)
       access.add(
           alert(
               switch (google) {
                 case "pending" ->
-                    "Your account is pending Admin approval. Check your email for updates.";
+                    "Verify your email before signing in. Check your inbox for a verification"
+                        + " link.";
                 case "existing" ->
                     "This email already has an account. Sign in using your email and password.";
                 case "unavailable" ->
@@ -121,6 +128,20 @@ final class AuthPages {
             authField("Password", "password", "password", "current-password"),
             el("button", "Login").cls("auth-submit").attr("type", "submit")),
         el("p", "Don't have an account? ", link("Sign up", "/register")).cls("auth-signup"),
+        el(
+                "details",
+                el("summary", "Resend verification email"),
+                c.post(
+                    "/account/resend-verification",
+                    "auth-form",
+                    field(
+                        "Email address",
+                        input("email", "email", null)
+                            .attr("autocomplete", "email")
+                            .attr("maxlength", 256)
+                            .flag("required", true)),
+                    button("Send verification link", false).cls("auth-submit")))
+            .cls("auth-resend"),
         el(
                 "details",
                 el("summary", "Information protection notice"),
@@ -208,13 +229,13 @@ final class AuthPages {
                 .cls("signup-password-help signup-wide"),
             el(
                     "div",
-                    el("strong", "Approval required"),
+                    el("strong", "Verify your email"),
                     el(
                         "p",
-                        "An Admin must approve your account before you can sign in. We will email"
-                            + " you after the review."))
+                        "We will send a verification link to your email. Verify your email to"
+                            + " activate your account."))
                 .cls("signup-approval signup-wide"),
-            button("Request access", true).cls("primary-action signup-submit signup-wide"),
+            button("Create account", true).cls("primary-action signup-submit signup-wide"),
             el("p", "Already have an account? ", link("Sign in", "/login"))
                 .cls("signup-signin signup-wide"));
     var story =
@@ -241,13 +262,11 @@ final class AuthPages {
                 el(
                         "ol",
                         signupStep(
-                            "01", "Create your profile", "Enter your details and request access."),
+                            "01", "Create your profile", "Enter your details and email address."),
                         signupStep(
-                            "02", "Admin review", "Your request is reviewed before activation."),
+                            "02", "Verify your email", "Open the verification link in your inbox."),
                         signupStep(
-                            "03",
-                            "Start your workspace",
-                            "Sign in after your account is approved."))
+                            "03", "Start your workspace", "Sign in once your email is verified."))
                     .cls("signup-steps"),
                 el("p", "GRID SYSTEM OPERATOR", el("span", "Solar data management"))
                     .cls("signup-story-footer"))
@@ -270,6 +289,49 @@ final class AuthPages {
         "Create an account",
         "register-page",
         el("main", story, card).cls("signup-layout"),
+        false,
+        false);
+  }
+
+  static String verification(PageContext c) {
+    String result = c.text("verificationResult");
+    String token = c.text("verificationToken");
+    boolean success = result.equals("success");
+    boolean landing = result.isBlank() && !token.isBlank();
+    return JavaPages.document(
+        "Verify your email",
+        "register-page",
+        el(
+                "main",
+                el("img")
+                    .attr("src", Branding.LOGO)
+                    .attr("alt", Branding.LOGO_DESCRIPTION)
+                    .cls("verification-logo"),
+                el("p", "GSO WEB SERVICES").cls("section-label"),
+                el(
+                    "h1",
+                    success
+                        ? "Email verified"
+                        : landing ? "Verify your email" : "Verification link unavailable"),
+                el(
+                    "p",
+                    success
+                        ? "Your account is active. You can now sign in with your email and"
+                              + " password."
+                        : landing
+                            ? "Confirm your email address to activate your account. This will not"
+                                  + " sign you in automatically."
+                            : "This link is invalid, expired or already used. Sign in if your"
+                                  + " account is already verified, or request a new link."),
+                landing
+                    ? c.post(
+                        "/account/verify-email",
+                        "java-actions",
+                        input("token", "hidden", token),
+                        button("Verify email", true))
+                    : null,
+                action("Back to sign in", "/login", !landing))
+            .cls("registration-shell verification-shell"),
         false,
         false);
   }

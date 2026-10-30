@@ -1,9 +1,7 @@
-# Access request owner
+# Retired manual approval flow
 
-Only Affiqah's designated existing account can view `/admin/users` or approve/reject requests. An approved account can use the workspace without gaining approval authority. Admin remains the only application role.
+Manual approval is no longer part of sign-up. The Access requests menu is removed and its GET/POST routes deny all access, including Affiqah's account. The historical reviewer table is retained for database compatibility and is not used to activate new registrations.
 
-Apply `database/20261030-access-reviewer.sql` once on an existing PostgreSQL database. It creates a singleton reviewer record and selects the existing approved account with email `affiqahadrianna@gmail.com`. It grants no access to new registrations and does not replace an existing reviewer assignment.
+Local sign-up activates through a single-use email verification link. Google sign-in activates after Google verifies the identity and email. Existing approved accounts are preserved; inactive/rejected accounts are not reactivated by email links or Google login.
 
-The assignment stores the immutable user ID. Changing display names, usernames or emails does not grant reviewer privileges to another account. There is no public or profile endpoint to change this assignment. Restoring a lost reviewer requires a deliberate database administrator operation; absence of a reviewer fails closed.
-
-The server checks the designated account, current approval status, role and security stamp. Both GET and POST access to the approval routes are denied to other users, even when they enter URLs manually. New-request emails go only to the approved designated reviewer. User request-received and decision emails continue using the user's email.
+See `EMAIL_VERIFICATION.md` for configuration and verification steps.

@@ -156,28 +156,6 @@ public class Accounts implements AuthenticationProvider {
     db.insert(user);
     setRole(user.id, ADMIN);
     audit(name, "Account created", "User", user.id, "Success", "Local account registration");
-    for (var approver : db.list(ApplicationUser.class, "WHERE \"AccessStatus\"='Approved'")) {
-      if (isReviewer(approver.id) && roles(approver.id).contains(ADMIN))
-        queueNotification(
-            approver.id,
-            user.id,
-            "GSO Web Services - New account approval required",
-            "A new user has requested access.\nName: "
-                + displayName
-                + "\nEmail: "
-                + email
-                + "\n\n"
-                + "Sign in to GSO Web Services and open Access requests to approve or reject this"
-                + " account. The user cannot sign in until approved.",
-            "AccessRequest");
-    }
-    queueNotification(
-        user.id,
-        user.id,
-        "GSO Web Services - Access request received",
-        "Your account request has been received and is pending Admin approval. You cannot sign in"
-            + " yet. We will email you when your request is approved or rejected.",
-        "AccessDecision");
     return user;
   }
 
@@ -255,7 +233,7 @@ public class Accounts implements AuthenticationProvider {
     queueNotification(userId, relatedId, subject, body, "AccessDecision");
   }
 
-  private void queueNotification(
+  void queueNotification(
       String userId, String relatedId, String subject, String body, String type) {
     var user = db.find(ApplicationUser.class, userId).orElseThrow();
     var notification = new UserAccessNotification();

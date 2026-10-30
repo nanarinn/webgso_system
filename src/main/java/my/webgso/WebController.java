@@ -30,6 +30,7 @@ public class WebController {
   private final DatabaseConnectionStatus databaseConnection;
   private final ApiBatchReports apiBatchReports;
   private final PlantApiProbe probe;
+  private final EmailVerification emailVerification;
 
   public WebController(
       Store db,
@@ -45,7 +46,9 @@ public class WebController {
       ApiTestTiming testTiming,
       DatabaseConnectionStatus databaseConnection,
       ApiBatchReports apiBatchReports,
-      PlantApiProbe probe) {
+      PlantApiProbe probe,
+      EmailVerification emailVerification) {
+    this.emailVerification = emailVerification;
     this.probe = probe;
     this.apiBatchReports = apiBatchReports;
     this.db = db;
@@ -72,7 +75,6 @@ public class WebController {
 
   @ModelAttribute
   public void common(Model model, Authentication auth) {
-    model.addAttribute("canReviewAccess", accounts.canReview(auth));
     model.addAttribute(
         "navigation",
         Resources.ALL.stream()
@@ -129,8 +131,36 @@ public class WebController {
       @RequestParam String confirmPassword) {
     if (!password.equals(confirmPassword))
       throw new IllegalArgumentException("The passwords do not match.");
-    accounts.register(username.trim(), email.trim(), displayName.trim(), password);
+    emailVerification.register(username.trim(), email.trim(), displayName.trim(), password);
     return "redirect:/login?registered=success";
+  }
+
+  @GetMapping("/account/verify-email")
+  public String verifyEmailLanding(
+      @RequestParam(defaultValue = "") String token,
+      Model model,
+      jakarta.servlet.http.HttpServletResponse response) {
+    response.setHeader("Referrer-Policy", "no-referrer");
+    response.setHeader("Cache-Control", "no-store");
+    model.addAttribute("verificationToken", token.matches("[A-Za-z0-9_-]{43}") ? token : "");
+    return "email-verification";
+  }
+
+  @PostMapping("/account/verify-email")
+  public String verifyEmail(
+      @RequestParam String token, Model model, jakarta.servlet.http.HttpServletResponse response) {
+    response.setHeader("Referrer-Policy", "no-referrer");
+    response.setHeader("Cache-Control", "no-store");
+    boolean verified = emailVerification.verify(token);
+    model.addAttribute("verificationResult", verified ? "success" : "invalid");
+    if (!verified) response.setStatus(400);
+    return "email-verification";
+  }
+
+  @PostMapping("/account/resend-verification")
+  public String resendVerification(@RequestParam String email) {
+    emailVerification.resend(email);
+    return "redirect:/login?verification=sent";
   }
 
   @GetMapping("/")

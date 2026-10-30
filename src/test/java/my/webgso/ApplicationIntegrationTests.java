@@ -31,6 +31,7 @@ class ApplicationIntegrationTests {
   @Autowired Store db;
   @Autowired Accounts accounts;
   @Autowired GoogleAccounts googleAccounts;
+  @Autowired EmailVerification emailVerification;
   @Autowired CollectionService collection;
   @Autowired ReportService reports;
   @Autowired ApiTestHistoryService overviewHistory;
@@ -690,8 +691,7 @@ class ApplicationIntegrationTests {
             "/collection-management",
             "/on-demand-analysis",
             "/api/status",
-            "/api/dashboard",
-            "/admin/users"))
+            "/api/dashboard"))
       mvc.perform(get(path).with(authentication(adminAuth))).andExpect(status().isOk());
     for (var resource : Resources.ALL) {
       mvc.perform(get(resource.path()).with(authentication(adminAuth))).andExpect(status().isOk());
@@ -934,86 +934,101 @@ class ApplicationIntegrationTests {
   }
 
   @Test
-  void registrationRequiresApprovalAndQueuesEmails() throws Exception {
-    String name = "new." + System.nanoTime();
+  void registrationRequiresOwnEmailVerificationWithoutAnotherUserApproval() throws Exception {
+    String name = "verify." + System.nanoTime();
     String email = name + "@example.test";
     mvc.perform(
             post("/account/register")
                 .with(csrf())
                 .param("username", name)
                 .param("email", email)
-                .param("displayName", "New Admin")
+                .param("displayName", "New user")
                 .param("password", "StrongPassword123!")
                 .param("confirmPassword", "StrongPassword123!"))
         .andExpect(redirectedUrl("/login?registered=success"));
-    var target = db.list(ApplicationUser.class, "WHERE \"UserName\"=?", name).getFirst();
-    assertThat(target.accessStatus).isEqualTo("Pending");
+    var user =
+        db.list(
+                ApplicationUser.class,
+                "WHERE \"NormalizedEmail\"=?",
+                email.toUpperCase(Locale.ROOT))
+            .getFirst();
+    assertThat(user.accessStatus).isEqualTo("Pending");
+    assertThat(user.emailConfirmed).isFalse();
     assertThat(
             db.list(
                 UserAccessNotification.class,
                 "WHERE \"RelatedUserId\"=? AND \"NotificationType\"='AccessRequest'",
-                target.id))
-        .isNotEmpty();
-    assertThat(accounts.roles(target.id)).containsExactly(Accounts.ADMIN);
+                user.id))
+        .isEmpty();
+    String token = verificationToken(user.id);
+    assertThat(
+            db.jdbc()
+                .queryForObject(
+                    "SELECT \"TokenHash\" FROM \"GsoEmailVerifications\" WHERE \"UserId\"=?",
+                    String.class,
+                    user.id))
+        .hasSize(64)
+        .isNotEqualTo(token);
     mvc.perform(
             post("/account/login")
                 .with(csrf())
                 .param("identifier", email)
                 .param("password", "StrongPassword123!"))
         .andExpect(redirectedUrl("/login?error=true"));
-    mvc.perform(get("/admin/users").with(authentication(adminAuth)))
+    mvc.perform(get("/account/verify-email").param("token", token))
         .andExpect(status().isOk())
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Approve")))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Reject")));
-    accounts.review(adminAuth, target.id, "Approved", Accounts.ADMIN, "Approved for testing");
+        .andExpect(header().string("Referrer-Policy", "no-referrer"));
+    assertThat(db.find(ApplicationUser.class, user.id).orElseThrow().accessStatus)
+        .isEqualTo("Pending");
+    mvc.perform(post("/account/verify-email").param("token", token))
+        .andExpect(status().isForbidden());
+    mvc.perform(post("/account/verify-email").with(csrf()).param("token", token))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Email verified")));
+    var verified = db.find(ApplicationUser.class, user.id).orElseThrow();
+    assertThat(verified.emailConfirmed).isTrue();
+    assertThat(verified.accessStatus).isEqualTo("Approved");
+    assertThat(verified.securityStamp).isNotEqualTo(user.securityStamp);
     mvc.perform(
             post("/account/login")
                 .with(csrf())
                 .param("identifier", email)
                 .param("password", "StrongPassword123!"))
         .andExpect(redirectedUrl("/"));
-    assertThat(
-            db.list(
+    assertThat(emailVerification.verify(token)).isFalse();
+    mvc.perform(get("/register"))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Admin review"))));
+  }
+
+  private String verificationToken(String userId) {
+    var note =
+        db.list(
                 UserAccessNotification.class,
-                "WHERE \"UserId\"=? AND \"NotificationType\"='AccessDecision'",
-                target.id))
-        .isNotEmpty();
-    String html =
-        mvc.perform(get("/login").param("registered", "success"))
-            .andExpect(status().isOk())
-            .andReturn()
-            .getResponse()
-            .getContentAsString();
-    assertThat(html).contains("must approve").doesNotContain("You can sign in now.");
+                "WHERE \"UserId\"=? AND \"NotificationType\"='EmailVerification' ORDER BY \"Id\""
+                    + " DESC",
+                userId)
+            .getFirst();
+    var matcher = java.util.regex.Pattern.compile("token=([A-Za-z0-9_-]{43})").matcher(note.body);
+    assertThat(matcher.find()).isTrue();
+    return matcher.group(1);
   }
 
   @Test
-  void googleRegistrationStaysPendingAndRepeatedVisitsDoNotDuplicateRequests() throws Exception {
+  void googleRegistrationActivatesOnlyVerifiedIdentitiesWithoutApproval() throws Exception {
     String subject = "google" + System.nanoTime();
     String email = subject + "@gmail.com";
     var user = googleAccounts.resolve(subject, email, true, "Google User");
-    assertThat(user.accessStatus).isEqualTo("Pending");
+    assertThat(user.accessStatus).isEqualTo("Approved");
     assertThat(user.passwordHash).isNull();
     assertThat(user.emailConfirmed).isTrue();
-    long notices =
-        db.jdbc()
-            .queryForObject(
-                "SELECT COUNT(*) FROM \"UserAccessNotifications\" WHERE \"RelatedUserId\"=?",
-                Long.class,
-                user.id);
     assertThat(googleAccounts.resolve(subject, email, true, "Google User").id).isEqualTo(user.id);
-    assertThat(
-            db.jdbc()
-                .queryForObject(
-                    "SELECT COUNT(*) FROM \"UserAccessNotifications\" WHERE \"RelatedUserId\"=?",
-                    Long.class,
-                    user.id))
-        .isEqualTo(notices);
-    mvc.perform(get("/").with(authentication(accounts.token(user))))
-        .andExpect(redirectedUrl("/login?reason=session-timeout"));
-    accounts.review(adminAuth, user.id, "Approved", Accounts.ADMIN, "Access approved");
-    var approved = googleAccounts.resolve(subject, email, true, "Google User");
-    mvc.perform(get("/").with(authentication(accounts.token(approved)))).andExpect(status().isOk());
+    assertThat(db.list(UserAccessNotification.class, "WHERE \"RelatedUserId\"=?", user.id))
+        .isEmpty();
+    mvc.perform(get("/").with(authentication(accounts.token(user)))).andExpect(status().isOk());
     accounts.review(adminAuth, user.id, "Rejected", Accounts.ADMIN, "Access removed");
     assertThatThrownBy(() -> googleAccounts.resolve(subject, email, true, "Google User"))
         .isInstanceOf(org.springframework.security.authentication.DisabledException.class);
@@ -1046,57 +1061,37 @@ class ApplicationIntegrationTests {
   }
 
   @Test
-  void adminApprovalsUseOneRoleAndRevokedAccountsLoseTheirSession() throws Exception {
-    var reviewer =
-        accounts.register(
-            "reviewer." + System.nanoTime(),
-            "reviewer." + System.nanoTime() + "@example.test",
-            "Reviewer",
-            "StrongPassword123!");
-    reviewer.accessStatus = "Approved";
-    db.update(reviewer);
-    accounts.setRole(reviewer.id, "Admin");
-    assertThatThrownBy(
-            () ->
-                accounts.review(
-                    accounts.token(reviewer), reviewer.id, "Inactive", "Admin", "Not allowed"))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
-    var target =
-        accounts.register(
-            "revoke." + System.nanoTime(),
-            "revoke." + System.nanoTime() + "@example.test",
-            "Temporary Admin",
-            "StrongPassword123!");
-    mvc.perform(
-            post("/admin/users/" + target.id + "/review")
-                .with(authentication(adminAuth))
-                .with(csrf())
-                .param("decision", "Approved")
-                .param("role", "Staff"))
-        .andExpect(status().isBadRequest());
-    assertThat(db.find(ApplicationUser.class, target.id).orElseThrow().accessStatus)
-        .isEqualTo("Pending");
-    mvc.perform(
-            post("/admin/users/" + target.id + "/review")
-                .with(authentication(adminAuth))
-                .with(csrf())
-                .param("decision", "Approved"))
-        .andExpect(redirectedUrl("/admin/users"));
-    assertThat(accounts.roles(target.id)).containsExactly(Accounts.ADMIN);
-    target = db.find(ApplicationUser.class, target.id).orElseThrow();
-    var oldAuth = accounts.token(target);
-    accounts.review(adminAuth, target.id, "Inactive", "Admin", "Access ended");
-    mvc.perform(get("/api/status").with(authentication(oldAuth)))
-        .andExpect(status().isUnauthorized());
-    String page =
-        mvc.perform(get("/admin/users").with(authentication(adminAuth)))
-            .andExpect(status().isOk())
-            .andReturn()
-            .getResponse()
-            .getContentAsString();
-    assertThat(page)
-        .contains("Access requests")
-        .doesNotContain("SuperAdministrator", "Super Admin", "Staff", "name=\"role\"");
+  void verificationRejectsExpiredChangedEmailAndInactiveAccounts() {
+    String suffix = "expiry." + System.nanoTime();
+    var user =
+        emailVerification.register(
+            suffix, suffix + "@example.test", "Expiry user", "StrongPassword123!");
+    String token = verificationToken(user.id);
+    db.jdbc()
+        .update(
+            "UPDATE \"GsoEmailVerifications\" SET \"ExpiresAt\"=? WHERE \"UserId\"=?",
+            OffsetDateTime.now().minusMinutes(1),
+            user.id);
+    assertThat(emailVerification.verify(token)).isFalse();
+    db.jdbc()
+        .update(
+            "UPDATE \"GsoEmailVerifications\" SET \"RequestedAt\"=? WHERE \"UserId\"=?",
+            OffsetDateTime.now().minusMinutes(2),
+            user.id);
+    emailVerification.resend(user.email);
+    String replacement = verificationToken(user.id);
+    assertThat(replacement).isNotEqualTo(token);
+    assertThat(emailVerification.verify(token)).isFalse();
+    user.normalizedEmail = "CHANGED@EXAMPLE.TEST";
+    db.update(user);
+    assertThat(emailVerification.verify(replacement)).isFalse();
+    user.normalizedEmail = user.email.toUpperCase(Locale.ROOT);
+    user.accessStatus = "Inactive";
+    db.update(user);
+    assertThat(emailVerification.verify(replacement)).isFalse();
+    assertThat(emailVerification.verify("forged-token")).isFalse();
+    assertThat(db.find(ApplicationUser.class, user.id).orElseThrow().accessStatus)
+        .isEqualTo("Inactive");
   }
 
   @Test
@@ -1122,65 +1117,39 @@ class ApplicationIntegrationTests {
   }
 
   @Test
-  void onlyDesignatedReviewerSeesMenuAndCanOpenOrSubmitAccessRequests() throws Exception {
-    mvc.perform(get("/").with(authentication(adminAuth)))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("href=\"/admin/users\"")));
-    mvc.perform(get("/").with(authentication(otherAdminAuth)))
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("href=\"/admin/users\""))));
-    mvc.perform(get("/admin/users").with(authentication(otherAdminAuth)))
-        .andExpect(status().isForbidden());
-    String suffix = "review.only." + System.nanoTime();
-    var target =
-        accounts.register(suffix, suffix + "@example.test", "New request", "StrongPassword123!");
-    var notices =
-        db.list(
-            UserAccessNotification.class,
-            "WHERE \"RelatedUserId\"=? AND \"NotificationType\"='AccessRequest'",
-            target.id);
-    assertThat(notices).hasSize(1);
-    assertThat(notices.getFirst().userId).isEqualTo(admin.id);
-    mvc.perform(
-            post("/admin/users/" + target.id + "/review")
-                .with(authentication(otherAdminAuth))
-                .with(csrf())
-                .param("decision", "Approved"))
-        .andExpect(status().isForbidden());
-    assertThatThrownBy(
-            () ->
-                accounts.review(
-                    otherAdminAuth, target.id, "Approved", Accounts.ADMIN, "Forged approval"))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
-    assertThat(db.find(ApplicationUser.class, target.id).orElseThrow().accessStatus)
-        .isEqualTo("Pending");
-    mvc.perform(
-            post("/admin/users/" + target.id + "/review")
-                .with(authentication(adminAuth))
-                .with(csrf())
-                .param("decision", "Approved"))
-        .andExpect(redirectedUrl("/admin/users"));
-    mvc.perform(
-            get("/admin/users")
-                .with(
-                    authentication(
-                        accounts.token(db.find(ApplicationUser.class, target.id).orElseThrow()))))
-        .andExpect(status().isForbidden());
+  void approvalRoutesAreRetiredAndResendIsGenericAndRateLimited() throws Exception {
+    for (var actor : List.of(adminAuth, otherAdminAuth)) {
+      mvc.perform(get("/").with(authentication(actor)))
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.not(
+                          org.hamcrest.Matchers.containsString("href=\"/admin/users\""))));
+      mvc.perform(get("/admin/users").with(authentication(actor)))
+          .andExpect(status().isForbidden());
+      mvc.perform(
+              post("/admin/users/anything/review")
+                  .with(authentication(actor))
+                  .with(csrf())
+                  .param("decision", "Approved"))
+          .andExpect(status().isForbidden());
+    }
+    String suffix = "resend." + System.nanoTime();
+    var user =
+        emailVerification.register(
+            suffix, suffix + "@example.test", "Resend user", "StrongPassword123!");
+    String first = verificationToken(user.id);
+    for (String email : List.of(user.email, "unknown@example.test", admin.email)) {
+      mvc.perform(post("/account/resend-verification").with(csrf()).param("email", email))
+          .andExpect(redirectedUrl("/login?verification=sent"));
+    }
+    assertThat(verificationToken(user.id)).isEqualTo(first);
     assertThat(
             db.list(
                 UserAccessNotification.class,
-                "WHERE \"UserId\"=? AND \"NotificationType\"='AccessDecision'",
-                target.id))
-        .anyMatch(note -> note.subject.equals("Access Approved"));
-    var stale =
-        org.springframework.security.authentication.UsernamePasswordAuthenticationToken
-            .authenticated(
-                new Accounts.Principal(admin.id, admin.userName, admin.displayName, "wrong-stamp"),
-                null,
-                adminAuth.getAuthorities());
-    assertThat(accounts.canReview(stale)).isFalse();
+                "WHERE \"UserId\"=? AND \"NotificationType\"='EmailVerification'",
+                user.id))
+        .hasSize(1);
   }
 
   @Test

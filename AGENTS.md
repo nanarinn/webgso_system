@@ -5,7 +5,7 @@
 - Keep credentials in process/service environment or the existing local secret store. Never commit real passwords or tokens.
 - Use the explicit `demo` profile for isolated synthetic data. Never enable schema initialization against the existing database as a migration shortcut.
 - Preserve quoted PostgreSQL table/column names, local forecast timestamps and UTC lifecycle instants.
-- Admin is the only application role. Read former assignments through Accounts compatibility mapping; never offer other roles or approve registrations automatically. Enforce CSRF, report/batch ownership and current account approval/security stamps on the server.
+- Admin is the only application role. Read former assignments through Accounts compatibility mapping; never offer other roles. New local registrations activate only through their own single-use email verification link; verified Google identities can activate without another user's approval. Keep manual approval routes retired. Enforce CSRF, report/batch ownership and current account status/security stamps on the server.
 - Preserve plant API HTTPS, DNS, private-host, redirect and response-size restrictions.
 - Test changes to business rules, permissions, parsing, scheduling and reports.
 - Preserve GSO branding and responsive layouts. Keep product flows focused on repository operations.

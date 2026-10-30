@@ -77,3 +77,8 @@ body.auth-page .auth-access-content { max-width:500px; }
 .auth-google-button { display:flex; gap:12px; justify-content:center; align-items:center; width:100%; min-height:46px; margin-top:24px; padding:10px 16px; border:1px solid #d6e2d5; border-radius:9px; text-decoration:none; color:#294c39; font-size:13px; font-weight:600; background:#fff; }
 .auth-google-button:hover { background:#f4f8ee; border-color:#a8bfa0; }
 .auth-google-button > span:first-child { font-size:19px; font-weight:700; color:#4285f4; }
+.auth-resend { margin:0 0 18px; color:#6f8077; font-size:11px; text-align:center; }
+.auth-resend summary { cursor:pointer; }
+.auth-resend .auth-form { text-align:left; padding:18px 0 4px; }
+.auth-resend label { display:grid; gap:8px; }
+.auth-resend input { width:100%; min-height:44px; border:1px solid #d6e2d5; border-radius:8px; padding:10px; background:#fbfcfa; }

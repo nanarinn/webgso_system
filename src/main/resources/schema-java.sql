@@ -27,6 +27,15 @@ CREATE TABLE IF NOT EXISTS "GsoGoogleIdentities" (
  "Subject" varchar(255) PRIMARY KEY,
  "UserId" text NOT NULL UNIQUE REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS "GsoEmailVerifications" (
+ "UserId" text PRIMARY KEY REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE,
+ "TokenHash" varchar(64) NOT NULL UNIQUE,
+ "Email" text NOT NULL,
+ "SecurityStamp" text NOT NULL,
+ "ExpiresAt" timestamp with time zone NOT NULL,
+ "RequestedAt" timestamp with time zone NOT NULL,
+ "UsedAt" timestamp with time zone
+);
 CREATE TABLE IF NOT EXISTS "GsoAccessReviewer" (
  "Id" integer PRIMARY KEY CHECK ("Id" = 1),
  "UserId" text NOT NULL UNIQUE REFERENCES "AspNetUsers"("Id")

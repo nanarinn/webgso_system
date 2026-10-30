@@ -15,6 +15,7 @@ public final class JavaPages {
   public static String render(String name, PageContext c) {
     if (name.equals("login")) return AuthPages.login(c);
     if (name.equals("register")) return AuthPages.register(c);
+    if (name.equals("email-verification")) return AuthPages.verification(c);
     if (name.equals("error-page")) return AuthPages.error(c);
     if (name.equals("batch-progress"))
       return document("Batch progress", "", OperationsPages.batchProgress(c), false, refresh(c));
@@ -62,7 +63,7 @@ public final class JavaPages {
             el("link").attr("rel", "icon").attr("type", "image/png").attr("href", Branding.LOGO));
     List<String> styles =
         login
-            ? List.of("/styles/login.css?v=6")
+            ? List.of("/styles/login.css?v=7")
             : List.of(
                 "/bootstrap/bootstrap.min.css",
                 "/styles/app.css",
@@ -73,7 +74,7 @@ public final class JavaPages {
                 "/styles/plant-editor.css?v=4",
                 "/styles/workspace-polish.css?v=2",
                 "/styles/workspace-finish.css?v=1",
-                "/styles/signup.css?v=2");
+                "/styles/signup.css?v=3");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
       head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));
@@ -148,8 +149,6 @@ public final class JavaPages {
           continue;
         workspaceNav.add(navigation(c, item.title(), item.path()));
       }
-      if (c.yes("canReviewAccess"))
-        workspaceNav.add(navigation(c, "Access requests", "/admin/users"));
       workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
     }
     nav.add(

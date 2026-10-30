@@ -41,6 +41,7 @@ public class GoogleAccounts {
         throw new DisabledException("Account access is inactive.");
       if (user.lockoutEnd != null && user.lockoutEnd.isAfter(OffsetDateTime.now()))
         throw new DisabledException("Account access is temporarily locked.");
+      activateVerified(user);
       return user;
     }
     if (!db.list(
@@ -51,10 +52,9 @@ public class GoogleAccounts {
     var user =
         accounts.register(
             "google." + UUID.randomUUID(), email, displayName, "Gg1!" + UUID.randomUUID());
-    // A Google-only account has no password login until the user sets one through an authenticated
-    // flow.
+    // Google-only accounts cannot sign in with a local password.
     user.passwordHash = null;
-    user.emailConfirmed = true;
+    activateVerified(user);
     db.update(user);
     db.jdbc()
         .update(
@@ -62,6 +62,16 @@ public class GoogleAccounts {
             subject,
             user.id);
     return user;
+  }
+
+  private void activateVerified(ApplicationUser user) {
+    if (!"Pending".equals(user.accessStatus)) return;
+    user.emailConfirmed = true;
+    user.accessStatus = "Approved";
+    user.accessReviewedAt = OffsetDateTime.now(java.time.ZoneOffset.UTC);
+    user.accessReviewedBy = "Google email verification";
+    user.securityStamp = UUID.randomUUID().toString();
+    db.update(user);
   }
 
   public static final class ExistingEmailException extends IllegalArgumentException {}

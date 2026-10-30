@@ -31,6 +31,8 @@ public class SecurityConfiguration {
                         "/register",
                         "/account/register",
                         "/account/google",
+                        "/account/verify-email",
+                        "/account/resend-verification",
                         "/oauth2/**",
                         "/login/oauth2/**",
                         "/styles/**",
@@ -43,10 +45,7 @@ public class SecurityConfiguration {
                         "/error")
                     .permitAll()
                     .requestMatchers("/admin/users", "/admin/users/**")
-                    .access(
-                        (authentication, context) ->
-                            new org.springframework.security.authorization.AuthorizationDecision(
-                                accounts.canReview(authentication.get())))
+                    .denyAll()
                     .requestMatchers("/admin/**", "/api/admin/**")
                     .hasRole("Admin")
                     .anyRequest()

@@ -77,7 +77,7 @@ public class ApiEmailAlerts {
         db.list(
             UserAccessNotification.class,
             "WHERE \"NotificationType\" IN"
-                + " ('ApiTestAlert','ApiDailySummary','AccessRequest','AccessDecision') AND"
+                + " ('ApiTestAlert','ApiDailySummary','EmailVerification','AccessDecision') AND"
                 + " \"DeliveryStatus\"='Pending' ORDER BY \"Id\" LIMIT 10")) {
       if (db.jdbc()
               .update(
