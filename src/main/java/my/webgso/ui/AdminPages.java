@@ -53,7 +53,7 @@ final class AdminPages {
       case "/admin/lss-plants" ->
           tabs.add(
               action("Plant API links", "/admin/api-configurations", false),
-              action("Test API without saving", "/admin/api-quick-test", false));
+              action("Test API", "/admin/api-quick-test", false));
       case "/admin/report-automation" ->
           tabs.add(
               link("Recipients", "/admin/report-recipients"),
