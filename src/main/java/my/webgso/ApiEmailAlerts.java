@@ -56,6 +56,9 @@ public class ApiEmailAlerts {
             + (success ? "Success - recovered" : "Failed")
             + "\nHTTP: "
             + (http == null ? "No response" : http)
+            + (success
+                ? "\nAction: The API is working again. No immediate action is required."
+                : "\nAction: " + guidance(http))
             + "\nTime (MYT): "
             + OffsetDateTime.now()
                 .atZoneSameInstant(Policies.LOCAL)
@@ -74,8 +77,8 @@ public class ApiEmailAlerts {
     for (var note :
         db.list(
             UserAccessNotification.class,
-            "WHERE \"NotificationType\"='ApiTestAlert' AND \"DeliveryStatus\"='Pending' ORDER BY"
-                + " \"Id\" LIMIT 10")) {
+            "WHERE \"NotificationType\" IN ('ApiTestAlert','ApiDailySummary') AND"
+                + " \"DeliveryStatus\"='Pending' ORDER BY \"Id\" LIMIT 10")) {
       if (db.jdbc()
               .update(
                   "UPDATE \"UserAccessNotifications\" SET \"DeliveryStatus\"='Sending' WHERE"
@@ -93,5 +96,23 @@ public class ApiEmailAlerts {
       }
       db.update(note);
     }
+  }
+
+  static String guidance(Integer http) {
+    if (http == null)
+      return "Check the API service, hostname, port and network/VPN connection. Open test history"
+                 + " for the specific connection error.";
+    if (http >= 200 && http < 300)
+      return "The server responded, but data validation failed. Check for empty readings, invalid"
+                 + " timestamps or unsupported data structure in test history.";
+    return switch (http) {
+      case 401, 403 -> "Check the API authentication and access permissions with the provider.";
+      case 404 -> "Check the API URL and endpoint path.";
+      case 429 -> "The API rate limit was reached. Wait before retrying.";
+      default ->
+          http >= 500
+              ? "The API server reported an error. Contact the provider or retry later."
+              : "Open API test history and review the HTTP response before retrying.";
+    };
   }
 }

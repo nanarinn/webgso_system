@@ -21,6 +21,41 @@ class ApiEmailAlertsTests {
   }
 
   @Test
+  void guidanceDistinguishesNoResponseInvalidDataAndHttpErrors() {
+    assertThat(ApiEmailAlerts.guidance(null)).contains("network/VPN");
+    assertThat(ApiEmailAlerts.guidance(200)).contains("data validation failed");
+    assertThat(ApiEmailAlerts.guidance(401)).contains("authentication");
+    assertThat(ApiEmailAlerts.guidance(404)).contains("endpoint path");
+    assertThat(ApiEmailAlerts.guidance(429)).contains("rate limit");
+    assertThat(ApiEmailAlerts.guidance(503)).contains("provider");
+  }
+
+  @Test
+  void sendsQueuedDailySummaryAndRecordsAcceptance() {
+    var db = mock(Store.class);
+    var mail = mock(MailDelivery.class);
+    var jdbc = mock(JdbcTemplate.class);
+    var env =
+        new MockEnvironment()
+            .withProperty("webgso.mail.enabled", "true")
+            .withProperty("webgso.api-alerts.enabled", "true");
+    var note = new UserAccessNotification();
+    note.id = 2L;
+    note.email = "admin@example.test";
+    note.subject = "Daily API summary";
+    note.body = "Summary";
+    note.notificationType = "ApiDailySummary";
+    when(db.list(eq(UserAccessNotification.class), anyString())).thenReturn(List.of(note));
+    when(db.jdbc()).thenReturn(jdbc);
+    when(jdbc.update(anyString(), eq(2L))).thenReturn(1);
+    new ApiEmailAlerts(db, mail, env).deliver();
+    verify(mail).send(List.of("admin@example.test"), "Daily API summary", "Summary", null);
+    assertThat(note.deliveryStatus).isEqualTo("Delivered");
+    assertThat(note.sentAt).isNotNull();
+    verify(db).update(note);
+  }
+
+  @Test
   void queuesOnlyForConfiguredApprovedRecipientAndNoRawResponse() {
     var db = mock(Store.class);
     var mail = mock(MailDelivery.class);
