@@ -30,6 +30,7 @@ class ApplicationIntegrationTests {
   @Autowired MockMvc mvc;
   @Autowired Store db;
   @Autowired Accounts accounts;
+  @Autowired GoogleAccounts googleAccounts;
   @Autowired CollectionService collection;
   @Autowired ReportService reports;
   @Autowired ApiTestHistoryService overviewHistory;
@@ -931,6 +932,64 @@ class ApplicationIntegrationTests {
             .getResponse()
             .getContentAsString();
     assertThat(html).contains("must approve").doesNotContain("You can sign in now.");
+  }
+
+  @Test
+  void googleRegistrationStaysPendingAndRepeatedVisitsDoNotDuplicateRequests() throws Exception {
+    String subject = "google" + System.nanoTime();
+    String email = subject + "@gmail.com";
+    var user = googleAccounts.resolve(subject, email, true, "Google User");
+    assertThat(user.accessStatus).isEqualTo("Pending");
+    assertThat(user.passwordHash).isNull();
+    assertThat(user.emailConfirmed).isTrue();
+    long notices =
+        db.jdbc()
+            .queryForObject(
+                "SELECT COUNT(*) FROM \"UserAccessNotifications\" WHERE \"RelatedUserId\"=?",
+                Long.class,
+                user.id);
+    assertThat(googleAccounts.resolve(subject, email, true, "Google User").id).isEqualTo(user.id);
+    assertThat(
+            db.jdbc()
+                .queryForObject(
+                    "SELECT COUNT(*) FROM \"UserAccessNotifications\" WHERE \"RelatedUserId\"=?",
+                    Long.class,
+                    user.id))
+        .isEqualTo(notices);
+    mvc.perform(get("/").with(authentication(accounts.token(user))))
+        .andExpect(redirectedUrl("/login?reason=session-timeout"));
+    accounts.review(adminAuth, user.id, "Approved", Accounts.ADMIN, "Access approved");
+    var approved = googleAccounts.resolve(subject, email, true, "Google User");
+    mvc.perform(get("/").with(authentication(accounts.token(approved)))).andExpect(status().isOk());
+    accounts.review(adminAuth, user.id, "Rejected", Accounts.ADMIN, "Access removed");
+    assertThatThrownBy(() -> googleAccounts.resolve(subject, email, true, "Google User"))
+        .isInstanceOf(org.springframework.security.authentication.DisabledException.class);
+  }
+
+  @Test
+  void googleCannotLinkAnExistingEmailOrUseAnUnverifiedIdentity() {
+    assertThatThrownBy(() -> googleAccounts.resolve("otherSubject", admin.email, true, "Other"))
+        .isInstanceOf(GoogleAccounts.ExistingEmailException.class);
+    assertThatThrownBy(
+            () ->
+                googleAccounts.resolve("unverifiedSubject", "unverified@gmail.com", false, "Other"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(
+            db.jdbc()
+                .queryForObject(
+                    "SELECT COUNT(*) FROM \"GsoGoogleIdentities\" WHERE \"Subject\" IN"
+                        + " ('otherSubject','unverifiedSubject')",
+                    Long.class))
+        .isZero();
+  }
+
+  @Test
+  void googleDisabledShowsSetupMessageAndButtonsWithoutStartingAnOAuthRequest() throws Exception {
+    mvc.perform(get("/account/google")).andExpect(redirectedUrl("/login?google=unavailable"));
+    mvc.perform(get("/login").param("google", "unavailable"))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("not configured yet")));
+    mvc.perform(get("/register"))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Continue with Google")));
   }
 
   @Test

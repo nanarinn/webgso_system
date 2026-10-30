@@ -6,6 +6,7 @@ import java.math.*;
 import java.time.*;
 import java.util.*;
 import my.webgso.Models.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
@@ -111,6 +112,11 @@ public class WebController {
   public String registration(Model model) {
     model.addAttribute("title", "Create an account");
     return "register";
+  }
+
+  @GetMapping("/account/google")
+  public String googleLogin(@Value("${webgso.google.enabled:false}") boolean enabled) {
+    return enabled ? "redirect:/oauth2/authorization/google" : "redirect:/login?google=unavailable";
   }
 
   @PostMapping("/account/register")

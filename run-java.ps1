@@ -8,6 +8,17 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
 
+# Google OAuth uses a separate Windows-encrypted credential, not the Gmail App Password.
+$googleCredentialPath = Join-Path $env:LOCALAPPDATA 'GSO Web Services\google.oauth.xml'
+if (-not $Demo -and -not $env:GOOGLE_CLIENT_SECRET -and (Test-Path -LiteralPath $googleCredentialPath)) {
+    $googleCredential = Import-Clixml -LiteralPath $googleCredentialPath
+    if ($googleCredential -isnot [System.Management.Automation.PSCredential]) { throw 'Invalid local Google OAuth credential file.' }
+    $env:GOOGLE_CLIENT_ID = $googleCredential.UserName
+    $env:GOOGLE_CLIENT_SECRET = $googleCredential.GetNetworkCredential().Password
+    if (-not $env:GOOGLE_LOGIN_ENABLED) { $env:GOOGLE_LOGIN_ENABLED = 'true' }
+    $googleCredential = $null
+}
+
 # Windows DPAPI-encrypted credential, entered locally and never stored in Git.
 $gmailCredentialPath = Join-Path $env:LOCALAPPDATA 'GSO Web Services\gmail.credential.xml'
 if (-not $Demo -and -not $env:SMTP_PASSWORD -and (Test-Path -LiteralPath $gmailCredentialPath)) {

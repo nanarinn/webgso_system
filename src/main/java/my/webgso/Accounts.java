@@ -150,6 +150,13 @@ public class Accounts implements AuthenticationProvider {
                 + " account. The user cannot sign in until approved.",
             "AccessRequest");
     }
+    queueNotification(
+        user.id,
+        user.id,
+        "GSO Web Services - Access request received",
+        "Your account request has been received and is pending Admin approval. You cannot sign in"
+            + " yet. We will email you when your request is approved or rejected.",
+        "AccessDecision");
     return user;
   }
 

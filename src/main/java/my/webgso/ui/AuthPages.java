@@ -93,10 +93,26 @@ final class AuthPages {
               "success"));
     if (c.parameter("reason")) access.add(alert("Your session ended. Sign in to continue.", ""));
     if (c.parameter("logout")) access.add(alert("You have signed out successfully.", "success"));
+    String google = c.request().getParameter("google");
+    if (google != null)
+      access.add(
+          alert(
+              switch (google) {
+                case "pending" ->
+                    "Your account is pending Admin approval. Check your email for updates.";
+                case "existing" ->
+                    "This email already has an account. Sign in using your email and password.";
+                case "unavailable" ->
+                    "Google sign-in is not configured yet. Please use email sign-in for now.";
+                default ->
+                    "Google sign-in could not be completed. Please try again or use email sign-in.";
+              },
+              google.equals("pending") ? "success" : "error"));
     var identifier = authField("Email", "identifier", "email", "username");
     // Controls retain their native browser validation, password-manager support and keyboard
     // behavior.
     access.add(
+        googleButton().cls("auth-google-button"),
         el("div", el("span", "Account credentials")).cls("auth-divider"),
         c.post(
             "/account/login",
@@ -245,6 +261,8 @@ final class AuthPages {
                         el("h1", "Create your account"),
                         el("p", "Get started with your GSO workspace."))
                     .cls("signup-heading"),
+                googleButton().cls("signup-google-button"),
+                el("p", "or register with email").cls("signup-email-divider"),
                 form)
             .cls("signup-card")
             .attr("aria-label", "Account registration");
@@ -261,6 +279,11 @@ final class AuthPages {
         "li",
         el("span", number).cls("signup-step-number").attr("aria-hidden", "true"),
         el("div", el("strong", title), el("p", detail)));
+  }
+
+  private static Element googleButton() {
+    return link("", "/account/google")
+        .add(el("span", "G").attr("aria-hidden", "true"), el("span", "Continue with Google"));
   }
 
   static String error(PageContext c) {
