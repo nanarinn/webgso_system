@@ -143,12 +143,13 @@ final class AuthPages {
     var form =
         c.post(
             "/account/register",
-            "java-form",
+            "java-form signup-form",
             field(
-                "Display name",
+                "Full name",
                 input("displayName", "text", null)
                     .attr("autocomplete", "name")
                     .attr("maxlength", 160)
+                    .attr("placeholder", "Enter your full name")
                     .flag("required", true)),
             field(
                 "Username",
@@ -157,48 +158,109 @@ final class AuthPages {
                     .attr("minlength", 3)
                     .attr("maxlength", 100)
                     .attr("pattern", "[a-zA-Z0-9_.@-]+")
+                    .attr("placeholder", "Choose a username")
                     .flag("required", true)),
             field(
-                "Email",
-                input("email", "email", null)
-                    .attr("autocomplete", "email")
-                    .attr("maxlength", 256)
-                    .flag("required", true)),
+                    "Email address",
+                    input("email", "email", null)
+                        .attr("autocomplete", "email")
+                        .attr("maxlength", 256)
+                        .attr("placeholder", "you@example.com")
+                        .flag("required", true))
+                .cls("signup-wide"),
             field(
                 "Password",
                 input("password", "password", null)
                     .attr("autocomplete", "new-password")
                     .attr("minlength", 12)
                     .attr("maxlength", 72)
+                    .attr("placeholder", "Create a password")
+                    .attr("aria-describedby", "signup-password-help")
                     .flag("required", true)),
-            el("p", "Use 12–72 characters including uppercase, lowercase, a number and a symbol.")
-                .cls("page-subtitle"),
             field(
                 "Confirm password",
                 input("confirmPassword", "password", null)
                     .attr("autocomplete", "new-password")
+                    .attr("maxlength", 72)
+                    .attr("placeholder", "Re-enter your password")
                     .flag("required", true)),
-            button("Create account", true),
-            link("Back to sign in", "/login"));
+            el(
+                    "p",
+                    "Use 12–72 characters with uppercase and lowercase letters, a number and a"
+                        + " symbol.")
+                .attr("id", "signup-password-help")
+                .cls("signup-password-help signup-wide"),
+            el(
+                    "div",
+                    el("strong", "Approval required"),
+                    el(
+                        "p",
+                        "An Admin must approve your account before you can sign in. We will email"
+                            + " you after the review."))
+                .cls("signup-approval signup-wide"),
+            button("Request access", true).cls("primary-action signup-submit signup-wide"),
+            el("p", "Already have an account? ", link("Sign in", "/login"))
+                .cls("signup-signin signup-wide"));
+    var story =
+        el(
+                "aside",
+                link("", "/login")
+                    .add(
+                        el("img").attr("src", Branding.LOGO).attr("alt", Branding.LOGO_DESCRIPTION))
+                    .cls("signup-logo"),
+                el(
+                        "div",
+                        el("p", "GSO WEB SERVICES").cls("signup-eyebrow"),
+                        el(
+                            "h2",
+                            "One workspace.",
+                            el("br"),
+                            el("span", "Connected possibilities.")),
+                        el(
+                                "p",
+                                "Your access to plant connections, API testing and data quality"
+                                    + " insights.")
+                            .cls("signup-story-description"))
+                    .cls("signup-story-copy"),
+                el(
+                        "ol",
+                        signupStep(
+                            "01", "Create your profile", "Enter your details and request access."),
+                        signupStep(
+                            "02", "Admin review", "Your request is reviewed before activation."),
+                        signupStep(
+                            "03",
+                            "Start your workspace",
+                            "Sign in after your account is approved."))
+                    .cls("signup-steps"),
+                el("p", "GRID SYSTEM OPERATOR", el("span", "Solar data management"))
+                    .cls("signup-story-footer"))
+            .cls("signup-story");
+    var card =
+        el(
+                "section",
+                el(
+                        "header",
+                        el("p", "ACCOUNT REGISTRATION").cls("signup-eyebrow"),
+                        el("h1", "Create your account"),
+                        el("p", "Get started with your GSO workspace."))
+                    .cls("signup-heading"),
+                form)
+            .cls("signup-card")
+            .attr("aria-label", "Account registration");
     return JavaPages.document(
         "Create an account",
-        "",
-        el(
-                "main",
-                el("img")
-                    .cls("brand-logo")
-                    .attr("src", Branding.LOGO)
-                    .attr("alt", Branding.LOGO_DESCRIPTION),
-                el("p", "Authorised access").cls("section-label"),
-                el("h1", "Create an Admin account"),
-                el(
-                    "p",
-                    "Create your account. An Admin must approve your access before you can sign"
-                        + " in."),
-                form)
-            .cls("registration-shell"),
+        "register-page",
+        el("main", story, card).cls("signup-layout"),
         false,
         false);
+  }
+
+  private static Element signupStep(String number, String title, String detail) {
+    return el(
+        "li",
+        el("span", number).cls("signup-step-number").attr("aria-hidden", "true"),
+        el("div", el("strong", title), el("p", detail)));
   }
 
   static String error(PageContext c) {
