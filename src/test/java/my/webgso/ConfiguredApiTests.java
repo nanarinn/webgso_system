@@ -86,6 +86,22 @@ class ConfiguredApiTests {
     assertThat(response.getResponse().getContentAsString())
         .contains("Plant configuration filters", "location-mode-region", "location-mode-zone")
         .contains("name=\"locationZones\" type=\"checkbox\" value=\"West\" checked=\"checked\"");
+    String lockedHtml = response.getResponse().getContentAsString();
+    for (String group : java.util.List.of("plant", "state", "region", "all")) {
+      assertThat(lockedHtml)
+          .containsPattern("id=\"location-mode-" + group + "\"[^>]*disabled=\"disabled\"");
+    }
+    assertThat(lockedHtml)
+        .contains("Locked", "Change location filter")
+        .doesNotContain("name=\"locationStates\" type=\"checkbox\"");
+    var unlocked =
+        mvc.perform(
+                get("/admin/lss-plants").param("locationMode", "all").with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(unlocked).doesNotContainPattern("id=\"location-mode-state\"[^>]*disabled");
     var excluded =
         mvc.perform(
                 get("/admin/lss-plants")

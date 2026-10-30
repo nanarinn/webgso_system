@@ -439,13 +439,17 @@ final class AdminPages {
                 "footer",
                 el(
                         "p",
-                        "Only the selected location group is applied. Use All locations to remove"
-                            + " the location filter.")
+                        "Other location filters are locked after selecting a group. Use Change"
+                            + " location filter to unlock them.")
                     .cls("filter-hint"),
                 el(
                         "div",
                         action("Clear", "/admin/lss-plants", false),
-                        button("Apply filters", true))
+                        button("Apply filters", true)
+                            .attr("name", "locationMode")
+                            .attr(
+                                "value",
+                                c.text("locationMode").isBlank() ? "all" : c.text("locationMode")))
                     .cls("java-actions")))
         .attr("method", "get")
         .attr("action", "/admin/lss-plants")
@@ -461,17 +465,33 @@ final class AdminPages {
       Map<String, String> options) {
     String selected = c.text("locationMode");
     if (selected.isBlank()) selected = "all";
+    boolean active = selected.equals(mode);
+    boolean locked = !selected.equals("all") && !active;
     var card =
         el(
                 "section",
-                input("locationMode", "radio", mode)
+                el(
+                        "button",
+                        el("span", active ? "●" : "○")
+                            .cls("location-indicator")
+                            .attr("aria-hidden", "true"),
+                        el("span", el("strong", title), el("small", hint))
+                            .cls("location-mode-label"),
+                        locked ? el("span", "Locked").cls("location-lock-badge") : null)
+                    .attr("type", "submit")
+                    .attr("name", "locationMode")
+                    .attr("value", mode)
                     .attr("id", "location-mode-" + mode)
-                    .flag("checked", selected.equals(mode)),
-                el("label", el("strong", title), el("small", hint))
-                    .attr("for", "location-mode-" + mode)
-                    .cls("location-mode-label"))
-            .cls("location-choice");
-    if (!mode.equals("all")) {
+                    .flag("disabled", locked || active)
+                    .attr("aria-pressed", active)
+                    .attr(
+                        "title",
+                        locked
+                            ? "Use Change location filter to unlock this option."
+                            : "Select " + title)
+                    .cls("location-mode-button"))
+            .cls("location-choice" + (active ? " is-active" : "") + (locked ? " is-locked" : ""));
+    if (active && !mode.equals("all")) {
       var choices = el("div").cls("location-values");
       var picked = Arrays.asList(c.text(name).split(","));
       options.forEach(
@@ -494,6 +514,12 @@ final class AdminPages {
                         + " values available. Add them in Plant Config.")
                 .cls("filter-hint"));
       card.add(choices);
+      card.add(
+          el("button", "Change location filter")
+              .attr("type", "submit")
+              .attr("name", "locationMode")
+              .attr("value", "all")
+              .cls("secondary-action location-unlock"));
     }
     return card;
   }
