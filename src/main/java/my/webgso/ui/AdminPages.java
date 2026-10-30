@@ -689,29 +689,39 @@ final class AdminPages {
       Element review =
           user.id.equals(account.id())
               ? el("span", "Your account")
-              : c.post(
-                  "/admin/users/" + user.id + "/review",
-                  "java-user-review",
-                  field(
-                      "Account status",
-                      el(
-                              "select",
-                              option("Approved", "Active", user.accessStatus),
-                              option("Inactive", "Inactive", user.accessStatus))
-                          .attr("name", "decision")),
-                  button("Save status", false));
+              : user.accessStatus.equals("Pending")
+                  ? c.post(
+                      "/admin/users/" + user.id + "/review",
+                      "java-user-review",
+                      button("Approve", true).attr("name", "decision").attr("value", "Approved"),
+                      button("Reject", false).attr("name", "decision").attr("value", "Rejected"))
+                  : c.post(
+                      "/admin/users/" + user.id + "/review",
+                      "java-user-review",
+                      field(
+                          "Account status",
+                          el(
+                                  "select",
+                                  option("Approved", "Active", user.accessStatus),
+                                  option("Rejected", "Rejected", user.accessStatus),
+                                  option("Inactive", "Inactive", user.accessStatus))
+                              .attr("name", "decision")),
+                      button("Save status", false));
       rows.add(
           row(
               el("strong", Accounts.displayName(user.displayName))
                   .add(el("small", user.userName).cls("java-block")),
               user.email,
-              "Approved".equals(user.accessStatus) ? "Active" : "Inactive",
+              "Approved".equals(user.accessStatus) ? "Active" : user.accessStatus,
               roles.get(user.id).isBlank() ? "Unassigned" : Accounts.ADMIN,
               review));
     }
     return el(
         "section",
-        heading("Access control", "Admin Accounts", "Manage Admin accounts and account status."),
+        heading(
+            "Access control",
+            "Access requests",
+            "Approve or reject new accounts and manage existing access."),
         el(
                 "article",
                 table(

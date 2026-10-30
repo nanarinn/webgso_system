@@ -72,12 +72,12 @@ public class ApiEmailAlerts {
 
   @Scheduled(fixedDelay = 10000, initialDelay = 10000)
   public void deliver() {
-    if (!env.getProperty("webgso.api-alerts.enabled", Boolean.class, false)
-        || !env.getProperty("webgso.mail.enabled", Boolean.class, false)) return;
+    if (!env.getProperty("webgso.mail.enabled", Boolean.class, false)) return;
     for (var note :
         db.list(
             UserAccessNotification.class,
-            "WHERE \"NotificationType\" IN ('ApiTestAlert','ApiDailySummary') AND"
+            "WHERE \"NotificationType\" IN"
+                + " ('ApiTestAlert','ApiDailySummary','AccessRequest','AccessDecision') AND"
                 + " \"DeliveryStatus\"='Pending' ORDER BY \"Id\" LIMIT 10")) {
       if (db.jdbc()
               .update(
@@ -101,10 +101,10 @@ public class ApiEmailAlerts {
   static String guidance(Integer http) {
     if (http == null)
       return "Check the API service, hostname, port and network/VPN connection. Open test history"
-                 + " for the specific connection error.";
+          + " for the specific connection error.";
     if (http >= 200 && http < 300)
       return "The server responded, but data validation failed. Check for empty readings, invalid"
-                 + " timestamps or unsupported data structure in test history.";
+          + " timestamps or unsupported data structure in test history.";
     return switch (http) {
       case 401, 403 -> "Check the API authentication and access permissions with the provider.";
       case 404 -> "Check the API URL and endpoint path.";

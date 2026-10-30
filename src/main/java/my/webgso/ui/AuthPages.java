@@ -87,7 +87,10 @@ final class AuthPages {
                   + " account is locked, try again after 15 minutes.",
               "error"));
     if (c.parameter("registered"))
-      access.add(alert("Account created successfully. You can sign in now.", "success"));
+      access.add(
+          alert(
+              "Account created. An Admin must approve your access before you can sign in.",
+              "success"));
     if (c.parameter("reason")) access.add(alert("Your session ended. Sign in to continue.", ""));
     if (c.parameter("logout")) access.add(alert("You have signed out successfully.", "success"));
     var identifier = authField("Email", "identifier", "email", "username");
@@ -188,7 +191,10 @@ final class AuthPages {
                     .attr("alt", Branding.LOGO_DESCRIPTION),
                 el("p", "Authorised access").cls("section-label"),
                 el("h1", "Create an Admin account"),
-                el("p", "Create your Admin account and sign in immediately."),
+                el(
+                    "p",
+                    "Create your account. An Admin must approve your access before you can sign"
+                        + " in."),
                 form)
             .cls("registration-shell"),
         false,

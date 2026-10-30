@@ -880,7 +880,7 @@ class ApplicationIntegrationTests {
   }
 
   @Test
-  void registrationCanSignInImmediatelyWithoutApproval() throws Exception {
+  void registrationRequiresApprovalAndQueuesEmails() throws Exception {
     String name = "new." + System.nanoTime();
     String email = name + "@example.test";
     mvc.perform(
@@ -893,21 +893,44 @@ class ApplicationIntegrationTests {
                 .param("confirmPassword", "StrongPassword123!"))
         .andExpect(redirectedUrl("/login?registered=success"));
     var target = db.list(ApplicationUser.class, "WHERE \"UserName\"=?", name).getFirst();
-    assertThat(target.accessStatus).isEqualTo("Approved");
+    assertThat(target.accessStatus).isEqualTo("Pending");
+    assertThat(
+            db.list(
+                UserAccessNotification.class,
+                "WHERE \"RelatedUserId\"=? AND \"NotificationType\"='AccessRequest'",
+                target.id))
+        .isNotEmpty();
     assertThat(accounts.roles(target.id)).containsExactly(Accounts.ADMIN);
     mvc.perform(
             post("/account/login")
                 .with(csrf())
                 .param("identifier", email)
                 .param("password", "StrongPassword123!"))
+        .andExpect(redirectedUrl("/login?error=true"));
+    mvc.perform(get("/admin/users").with(authentication(adminAuth)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Approve")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Reject")));
+    accounts.review(adminAuth, target.id, "Approved", Accounts.ADMIN, "Approved for testing");
+    mvc.perform(
+            post("/account/login")
+                .with(csrf())
+                .param("identifier", email)
+                .param("password", "StrongPassword123!"))
         .andExpect(redirectedUrl("/"));
+    assertThat(
+            db.list(
+                UserAccessNotification.class,
+                "WHERE \"UserId\"=? AND \"NotificationType\"='AccessDecision'",
+                target.id))
+        .isNotEmpty();
     String html =
         mvc.perform(get("/login").param("registered", "success"))
             .andExpect(status().isOk())
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat(html).contains("You can sign in now.").doesNotContain("must approve");
+    assertThat(html).contains("must approve").doesNotContain("You can sign in now.");
   }
 
   @Test
@@ -940,7 +963,7 @@ class ApplicationIntegrationTests {
                 .param("role", "Staff"))
         .andExpect(status().isBadRequest());
     assertThat(db.find(ApplicationUser.class, target.id).orElseThrow().accessStatus)
-        .isEqualTo("Approved");
+        .isEqualTo("Pending");
     mvc.perform(
             post("/admin/users/" + target.id + "/review")
                 .with(authentication(adminAuth))
@@ -960,8 +983,30 @@ class ApplicationIntegrationTests {
             .getResponse()
             .getContentAsString();
     assertThat(page)
-        .contains("Admin Accounts")
+        .contains("Access requests")
         .doesNotContain("SuperAdministrator", "Super Admin", "Staff", "name=\"role\"");
+  }
+
+  @Test
+  void rejectedRegistrationCannotAuthenticateAndPendingSessionCannotReview() throws Exception {
+    String name = "pending." + System.nanoTime();
+    var target =
+        accounts.register(name, name + "@example.test", "Pending user", "StrongPassword123!");
+    mvc.perform(
+            post("/admin/users/" + otherAdmin.id + "/review")
+                .with(authentication(accounts.token(target)))
+                .with(csrf())
+                .param("decision", "Approved"))
+        .andExpect(status().is3xxRedirection());
+    accounts.review(adminAuth, target.id, "Rejected", Accounts.ADMIN, "Access not approved");
+    assertThatThrownBy(
+            () ->
+                accounts.authenticate(
+                    org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+                        .unauthenticated(target.email, "StrongPassword123!")))
+        .isInstanceOf(org.springframework.security.authentication.DisabledException.class);
+    assertThat(db.find(ApplicationUser.class, admin.id).orElseThrow().accessStatus)
+        .isEqualTo("Approved");
   }
 
   @Test

@@ -79,7 +79,7 @@ public class Accounts implements AuthenticationProvider {
       throw new BadCredentialsException("Invalid credentials");
     }
     if (!"Approved".equals(user.accessStatus))
-      throw new DisabledException("This account is inactive");
+      throw new DisabledException("This account is pending approval or inactive");
     user.accessFailedCount = 0;
     user.lockoutEnd = null;
     if (passwords.upgradeEncoding(user.passwordHash))
@@ -131,10 +131,25 @@ public class Accounts implements AuthenticationProvider {
     user.securityStamp = UUID.randomUUID().toString();
     user.concurrencyStamp = UUID.randomUUID().toString();
     user.accessRequestedAt = OffsetDateTime.now(ZoneOffset.UTC);
-    user.accessStatus = "Approved";
+    user.accessStatus = "Pending";
     db.insert(user);
     setRole(user.id, ADMIN);
     audit(name, "Account created", "User", user.id, "Success", "Local account registration");
+    for (var approver : db.list(ApplicationUser.class, "WHERE \"AccessStatus\"='Approved'")) {
+      if (roles(approver.id).contains(ADMIN))
+        queueNotification(
+            approver.id,
+            user.id,
+            "GSO Web Services - New account approval required",
+            "A new user has requested access.\nName: "
+                + displayName
+                + "\nEmail: "
+                + email
+                + "\n\n"
+                + "Sign in to GSO Web Services and open Access requests to approve or reject this"
+                + " account. The user cannot sign in until approved.",
+            "AccessRequest");
+    }
     return user;
   }
 
@@ -153,6 +168,7 @@ public class Accounts implements AuthenticationProvider {
     if (!Set.of("Approved", "Rejected", "Inactive").contains(decision)
         || !ADMIN.equals(requestedRole))
       throw new IllegalArgumentException("Invalid access decision");
+    if (decision.equals(target.accessStatus)) return;
     target.accessStatus = decision;
     target.accessReviewedAt = OffsetDateTime.now(ZoneOffset.UTC);
     target.accessReviewedBy = reviewer.username;
@@ -165,7 +181,10 @@ public class Accounts implements AuthenticationProvider {
         targetId,
         reviewer.id,
         "Access " + decision,
-        "Your repository access request is " + decision.toLowerCase(Locale.ROOT) + ". " + note);
+        "Your GSO Web Services access request is "
+            + decision.toLowerCase(Locale.ROOT)
+            + ". "
+            + note);
   }
 
   public void setRole(String id, String role) {
@@ -204,15 +223,20 @@ public class Accounts implements AuthenticationProvider {
   }
 
   public void notify(String userId, String relatedId, String subject, String body) {
+    queueNotification(userId, relatedId, subject, body, "AccessDecision");
+  }
+
+  private void queueNotification(
+      String userId, String relatedId, String subject, String body, String type) {
     var user = db.find(ApplicationUser.class, userId).orElseThrow();
     var notification = new UserAccessNotification();
     notification.userId = userId;
     notification.relatedUserId = relatedId;
     notification.email = user.email;
-    notification.notificationType = "Access";
+    notification.notificationType = type;
     notification.subject = subject;
     notification.body = body;
-    notification.deliveryStatus = "InApp";
+    notification.deliveryStatus = "Pending";
     db.insert(notification);
   }
 }

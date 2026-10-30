@@ -1133,12 +1133,15 @@ public class WebController {
 
   @GetMapping("/admin/users")
   public String users(Model model) {
-    model.addAttribute("title", "Admin Accounts");
-    model.addAttribute(
-        "users", db.list(ApplicationUser.class, "ORDER BY \"AccessRequestedAt\" DESC LIMIT 500"));
+    model.addAttribute("title", "Access requests");
+    var users =
+        db.list(
+            ApplicationUser.class,
+            "ORDER BY CASE WHEN \"AccessStatus\"='Pending' THEN 0 ELSE 1 END, \"AccessRequestedAt\""
+                + " DESC LIMIT 500");
+    model.addAttribute("users", users);
     var roles = new HashMap<String, String>();
-    for (var u : db.list(ApplicationUser.class, "LIMIT 500"))
-      roles.put(u.id, String.join(", ", accounts.roles(u.id)));
+    for (var u : users) roles.put(u.id, String.join(", ", accounts.roles(u.id)));
     model.addAttribute("roles", roles);
     return "users";
   }

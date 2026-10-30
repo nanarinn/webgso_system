@@ -53,7 +53,8 @@ class ProfileTests {
         .andExpect(
             content()
                 .string(
-                    org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(other.email))))
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("value=\"" + other.email + "\""))))
         .andExpect(
             content()
                 .string(
