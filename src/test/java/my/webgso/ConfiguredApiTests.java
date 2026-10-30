@@ -92,7 +92,8 @@ class ConfiguredApiTests {
           .containsPattern("id=\"location-mode-" + group + "\"[^>]*disabled=\"disabled\"");
     }
     assertThat(lockedHtml)
-        .contains("Locked", "Remove Zone filter", "/scripts/plant-location-filters.js?v=1")
+        .doesNotContain(">Locked</span>")
+        .contains("Remove Zone filter", "/scripts/plant-location-filters.js?v=2")
         .contains(
             "class=\"location-values\" disabled=\"disabled\" hidden=\"hidden\" aria-label=\"State"
                 + " selections\"");

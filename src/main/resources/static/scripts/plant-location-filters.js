@@ -19,7 +19,6 @@
         button.setAttribute("aria-pressed", String(active));
         button.title = locked ? "Remove the selected filter with × to unlock." : "Select this location filter";
         card.querySelector(".location-indicator").textContent = active ? "●" : "○";
-        card.querySelector(".location-lock-badge").hidden = !locked;
         const values = card.querySelector("fieldset");
         const remove = card.querySelector(".location-unlock");
         if (values) {

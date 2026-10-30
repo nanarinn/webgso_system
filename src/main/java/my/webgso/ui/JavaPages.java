@@ -81,7 +81,7 @@ public final class JavaPages {
       head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));
     if (!login)
       head.add(
-          el("script").attr("src", "/scripts/plant-location-filters.js?v=1").flag("defer", true));
+          el("script").attr("src", "/scripts/plant-location-filters.js?v=2").flag("defer", true));
     if (refresh) head.add(el("meta").attr("http-equiv", "refresh").attr("content", "5"));
     return "<!doctype html>"
         + el("html", head, el("body", content, login ? null : apiLoading()).cls(bodyClass))

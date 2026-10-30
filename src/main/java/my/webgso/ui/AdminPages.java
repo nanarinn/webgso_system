@@ -439,7 +439,7 @@ final class AdminPages {
                 "footer",
                 el(
                         "p",
-                        "Other location filters are locked. Select × to remove your selection and"
+                        "Select × to remove your selection and"
                             + " choose another location filter.")
                     .cls("filter-hint"),
                 el(
@@ -476,8 +476,7 @@ final class AdminPages {
                             .cls("location-indicator")
                             .attr("aria-hidden", "true"),
                         el("span", el("strong", title), el("small", hint))
-                            .cls("location-mode-label"),
-                        el("span", "Locked").cls("location-lock-badge").flag("hidden", !locked))
+                            .cls("location-mode-label"))
                     .attr("type", "submit")
                     .attr("name", "locationMode")
                     .attr("value", mode)
