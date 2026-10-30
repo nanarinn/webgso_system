@@ -32,6 +32,7 @@ public final class JavaPages {
           case "profile" -> ProfilePages.profile(c);
           case "api-history" -> ApiHistoryPage.render(c);
           case "api-retest-progress" -> ApiRetestPage.render(c);
+          case "api-quick-test" -> QuickApiTestPage.render(c);
           default -> throw new IllegalArgumentException("Unknown page");
         };
     return document(

@@ -101,6 +101,78 @@ class ConfiguredApiTests {
   }
 
   @Test
+  void quickTestDoesNotSavePlantsLinksReadingsHistoryOrNotifications() throws Exception {
+    long plants = db.count(LssPlant.class),
+        links = db.count(PlantApiConfiguration.class),
+        readings = db.count(SolarApiReading.class),
+        tests = testHistory.countAll(),
+        notifications = db.count(UserAccessNotification.class);
+    when(client.fetch("https://example.test/quick"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200,
+                "application/json",
+                "{\"timestamp\":\"2026-10-30T08:00\",\"value\":2,\"token\":\"secret-value\"}"));
+    mvc.perform(
+            post("/admin/api-quick-test")
+                .with(authentication(auth))
+                .with(csrf())
+                .param("apiUrl", "https://example.test/quick")
+                .param("dataType", "Day Ahead"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("api-quick-test"))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Connection successful")))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("secret-value"))));
+    assertThat(db.count(LssPlant.class)).isEqualTo(plants);
+    assertThat(db.count(PlantApiConfiguration.class)).isEqualTo(links);
+    assertThat(db.count(SolarApiReading.class)).isEqualTo(readings);
+    assertThat(testHistory.countAll()).isEqualTo(tests);
+    assertThat(db.count(UserAccessNotification.class)).isEqualTo(notifications);
+    when(client.fetch("https://example.test/quick"))
+        .thenThrow(new IllegalArgumentException("API request timed out."));
+    mvc.perform(
+            post("/admin/api-quick-test")
+                .with(authentication(auth))
+                .with(csrf())
+                .param("apiUrl", "https://example.test/quick")
+                .param("dataType", "MMF"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("API test failed")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("timed out")));
+    assertThat(testHistory.countAll()).isEqualTo(tests);
+    assertThat(db.count(UserAccessNotification.class)).isEqualTo(notifications);
+  }
+
+  @Test
+  void quickTestRequiresCsrfAndRejectsUnknownDatasetsBeforeFetching() throws Exception {
+    mvc.perform(
+            post("/admin/api-quick-test")
+                .with(authentication(auth))
+                .param("apiUrl", "https://example.test/quick")
+                .param("dataType", "MMF"))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            post("/admin/api-quick-test")
+                .with(csrf())
+                .param("apiUrl", "https://example.test/quick")
+                .param("dataType", "MMF"))
+        .andExpect(status().is3xxRedirection());
+    mvc.perform(
+            post("/admin/api-quick-test")
+                .with(authentication(auth))
+                .with(csrf())
+                .param("apiUrl", "https://example.test/quick")
+                .param("dataType", "unknown"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Choose a supported")));
+    verifyNoInteractions(client);
+  }
+
+  @Test
   void plantFiltersUseConfiguredApisAndPreserveSelectedValues() throws Exception {
     mvc.perform(
             get("/admin/lss-plants")

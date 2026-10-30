@@ -16,6 +16,12 @@ public class PlantApiProbe {
   }
 
   public int verify(String url, String apiType, String dataType, int plantId) {
+    return inspect(url, apiType, dataType, plantId).readings();
+  }
+
+  public record ProbeResult(PlantApiClient.Response response, int readings) {}
+
+  public ProbeResult inspect(String url, String apiType, String dataType, int plantId) {
     client.validate(url);
     var now = LocalDateTime.now(Policies.LOCAL);
     String resolved =
@@ -26,12 +32,16 @@ public class PlantApiProbe {
     if (response == null || response.status() < 200 || response.status() >= 300)
       throw new IllegalArgumentException(
           "The API did not return a successful response. The URL was not saved.");
-    var parsed =
-        translator.translate(
-            response.payload(), response.contentType(), apiType, dataType, plantId, 0, now, 15);
-    if (parsed.readings().isEmpty())
-      throw new IllegalArgumentException(
-          ApiFailureGuide.noMeasurements(response) + " The URL was not saved.");
-    return parsed.readings().size();
+    try {
+      var parsed =
+          translator.translate(
+              response.payload(), response.contentType(), apiType, dataType, plantId, 0, now, 15);
+      if (parsed.readings().isEmpty())
+        throw new IllegalArgumentException(
+            ApiFailureGuide.noMeasurements(response) + " The URL was not saved.");
+      return new ProbeResult(response, parsed.readings().size());
+    } catch (IllegalArgumentException e) {
+      throw new PlantApiClient.Failure(e.getMessage(), response);
+    }
   }
 }

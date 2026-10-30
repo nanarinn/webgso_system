@@ -28,6 +28,7 @@ public class WebController {
   private final ApiTestTiming testTiming;
   private final DatabaseConnectionStatus databaseConnection;
   private final ApiBatchReports apiBatchReports;
+  private final PlantApiProbe probe;
 
   public WebController(
       Store db,
@@ -42,7 +43,9 @@ public class WebController {
       ApiRetestService apiRetests,
       ApiTestTiming testTiming,
       DatabaseConnectionStatus databaseConnection,
-      ApiBatchReports apiBatchReports) {
+      ApiBatchReports apiBatchReports,
+      PlantApiProbe probe) {
+    this.probe = probe;
     this.apiBatchReports = apiBatchReports;
     this.db = db;
     this.accounts = accounts;
@@ -1015,6 +1018,44 @@ public class WebController {
   @GetMapping("/admin/plants/{id}/test-history")
   public String oldApiTestHistory() {
     return "redirect:/admin/api-test-history";
+  }
+
+  @GetMapping("/admin/api-quick-test")
+  public String quickApiTest(Model model) {
+    model.addAttribute("title", "Test API without saving");
+    return "api-quick-test";
+  }
+
+  @PostMapping("/admin/api-quick-test")
+  public String runQuickApiTest(
+      @RequestParam String apiUrl, @RequestParam String dataType, Model model) {
+    model.addAttribute("title", "Test API without saving");
+    model.addAttribute("apiUrl", apiUrl);
+    model.addAttribute("dataType", dataType);
+    model.addAttribute("apiTestDataset", dataType);
+    var details = new org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap();
+    try {
+      if (apiUrl.length() > 2048) throw new IllegalArgumentException("API URL is too long.");
+      if (!ConfiguredDatasets.ALL.contains(dataType))
+        throw new IllegalArgumentException("Choose a supported DDQ or MMF dataset.");
+      var result =
+          probe.inspect(apiUrl.strip(), dataType.equals("MMF") ? "MMF" : "DDQ", dataType, 0);
+      ApiTestDetails.add(details, result.response());
+      model.addAttribute("apiTestTitle", "Connection successful");
+      model.addAttribute(
+          "apiTestMessage",
+          result.readings()
+              + " readable measurements. Data structure valid. Nothing was saved to Plant Config,"
+              + " readings or API test history. This test does not send email alerts.");
+    } catch (IllegalArgumentException e) {
+      if (e instanceof PlantApiClient.Failure failure && failure.response() != null)
+        ApiTestDetails.add(details, failure.response());
+      model.addAttribute("apiTestTitle", "API test failed");
+      model.addAttribute("apiTestMessage", e.getMessage() + " Nothing was saved.");
+      if (!(e instanceof PlantApiClient.Failure)) model.addAttribute("apiTestAlreadyTested", true);
+    }
+    model.addAllAttributes(details.getFlashAttributes());
+    return "api-quick-test";
   }
 
   @GetMapping("/admin/lss-plants/checks/{id}/export")
