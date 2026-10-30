@@ -63,7 +63,7 @@ public final class JavaPages {
             el("link").attr("rel", "icon").attr("type", "image/png").attr("href", Branding.LOGO));
     List<String> styles =
         login
-            ? List.of("/styles/login.css?v=7")
+            ? List.of("/styles/login.css?v=8")
             : List.of(
                 "/bootstrap/bootstrap.min.css",
                 "/styles/app.css",

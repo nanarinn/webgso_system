@@ -23,7 +23,21 @@ final class AuthPages {
           .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
           .attr("title", "Use your @gmail.com email address.")
           .attr("placeholder", "you@gmail.com");
-    return el("div", el("label", label).attr("for", name), control).cls("auth-field");
+    if (name.equals("identifier")) control.attr("aria-describedby", "gmail-address-hint");
+    return el(
+            "div",
+            el("label", label).attr("for", name),
+            control,
+            name.equals("identifier")
+                ? el(
+                        "small",
+                        el("span", "✓").attr("aria-hidden", "true"),
+                        "Gmail accounts only ",
+                        el("span", "@gmail.com").cls("gmail-domain"))
+                    .attr("id", "gmail-address-hint")
+                    .cls("auth-email-hint")
+                : null)
+        .cls("auth-field");
   }
 
   static String login(PageContext c) {
@@ -127,7 +141,6 @@ final class AuthPages {
     access.add(
         googleButton().cls("auth-google-button"),
         el("div", el("span", "Account credentials")).cls("auth-divider"),
-        el("p", "Only @gmail.com email addresses can sign in.").cls("auth-intro"),
         c.post(
             "/account/login",
             "auth-form",
