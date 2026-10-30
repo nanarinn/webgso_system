@@ -42,6 +42,11 @@ public class SecurityConfiguration {
                         "/api/test-data/mmf/**",
                         "/error")
                     .permitAll()
+                    .requestMatchers("/admin/users", "/admin/users/**")
+                    .access(
+                        (authentication, context) ->
+                            new org.springframework.security.authorization.AuthorizationDecision(
+                                accounts.canReview(authentication.get())))
                     .requestMatchers("/admin/**", "/api/admin/**")
                     .hasRole("Admin")
                     .anyRequest()

@@ -28,6 +28,27 @@ public class Accounts implements AuthenticationProvider {
     this.db = db;
   }
 
+  public boolean canReview(Authentication auth) {
+    if (auth == null
+        || !(auth.getPrincipal() instanceof Principal principal)
+        || !auth.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_" + ADMIN)))
+      return false;
+    var user = db.find(ApplicationUser.class, principal.id()).orElse(null);
+    return user != null
+        && "Approved".equals(user.accessStatus)
+        && Objects.equals(principal.stamp(), user.securityStamp)
+        && isReviewer(user.id);
+  }
+
+  private boolean isReviewer(String userId) {
+    return db.jdbc()
+            .queryForObject(
+                "SELECT COUNT(*) FROM \"GsoAccessReviewer\" WHERE \"Id\"=1 AND \"UserId\"=?",
+                Long.class,
+                userId)
+        == 1;
+  }
+
   public List<String> roles(String userId) {
     var assigned =
         db.jdbc()
@@ -136,7 +157,7 @@ public class Accounts implements AuthenticationProvider {
     setRole(user.id, ADMIN);
     audit(name, "Account created", "User", user.id, "Success", "Local account registration");
     for (var approver : db.list(ApplicationUser.class, "WHERE \"AccessStatus\"='Approved'")) {
-      if (roles(approver.id).contains(ADMIN))
+      if (isReviewer(approver.id) && roles(approver.id).contains(ADMIN))
         queueNotification(
             approver.id,
             user.id,
@@ -163,9 +184,10 @@ public class Accounts implements AuthenticationProvider {
   @Transactional
   public void review(
       Authentication actor, String targetId, String decision, String requestedRole, String note) {
+    if (!canReview(actor))
+      throw new AccessDeniedException(
+          "Only the designated account reviewer can manage access requests.");
     Principal reviewer = (Principal) actor.getPrincipal();
-    if (!actor.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_" + ADMIN)))
-      throw new AccessDeniedException("Admin access is required.");
     var target =
         db.list(ApplicationUser.class, "WHERE \"Id\"=? FOR UPDATE", targetId).stream()
             .findFirst()

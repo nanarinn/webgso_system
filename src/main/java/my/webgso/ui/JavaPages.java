@@ -148,7 +148,8 @@ public final class JavaPages {
           continue;
         workspaceNav.add(navigation(c, item.title(), item.path()));
       }
-      workspaceNav.add(navigation(c, "Access requests", "/admin/users"));
+      if (c.yes("canReviewAccess"))
+        workspaceNav.add(navigation(c, "Access requests", "/admin/users"));
       workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
     }
     nav.add(

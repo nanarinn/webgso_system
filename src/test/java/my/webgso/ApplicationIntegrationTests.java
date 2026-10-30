@@ -47,6 +47,8 @@ class ApplicationIntegrationTests {
     db.update(admin);
     accounts.setRole(admin.id, "Admin");
     adminAuth = accounts.token(admin);
+    db.jdbc()
+        .update("INSERT INTO \"GsoAccessReviewer\" (\"Id\",\"UserId\") VALUES (1,?)", admin.id);
     otherAdmin =
         accounts.register(
             "test.otherAdmin", "otherAdmin@example.test", "Other Admin", "StrongPassword123!");
@@ -1007,7 +1009,7 @@ class ApplicationIntegrationTests {
             () ->
                 accounts.review(
                     accounts.token(reviewer), reviewer.id, "Inactive", "Admin", "Not allowed"))
-        .isInstanceOf(IllegalArgumentException.class);
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     var target =
         accounts.register(
             "revoke." + System.nanoTime(),
@@ -1066,6 +1068,68 @@ class ApplicationIntegrationTests {
         .isInstanceOf(org.springframework.security.authentication.DisabledException.class);
     assertThat(db.find(ApplicationUser.class, admin.id).orElseThrow().accessStatus)
         .isEqualTo("Approved");
+  }
+
+  @Test
+  void onlyDesignatedReviewerSeesMenuAndCanOpenOrSubmitAccessRequests() throws Exception {
+    mvc.perform(get("/").with(authentication(adminAuth)))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("href=\"/admin/users\"")));
+    mvc.perform(get("/").with(authentication(otherAdminAuth)))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("href=\"/admin/users\""))));
+    mvc.perform(get("/admin/users").with(authentication(otherAdminAuth)))
+        .andExpect(status().isForbidden());
+    String suffix = "review.only." + System.nanoTime();
+    var target =
+        accounts.register(suffix, suffix + "@example.test", "New request", "StrongPassword123!");
+    var notices =
+        db.list(
+            UserAccessNotification.class,
+            "WHERE \"RelatedUserId\"=? AND \"NotificationType\"='AccessRequest'",
+            target.id);
+    assertThat(notices).hasSize(1);
+    assertThat(notices.getFirst().userId).isEqualTo(admin.id);
+    mvc.perform(
+            post("/admin/users/" + target.id + "/review")
+                .with(authentication(otherAdminAuth))
+                .with(csrf())
+                .param("decision", "Approved"))
+        .andExpect(status().isForbidden());
+    assertThatThrownBy(
+            () ->
+                accounts.review(
+                    otherAdminAuth, target.id, "Approved", Accounts.ADMIN, "Forged approval"))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThat(db.find(ApplicationUser.class, target.id).orElseThrow().accessStatus)
+        .isEqualTo("Pending");
+    mvc.perform(
+            post("/admin/users/" + target.id + "/review")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("decision", "Approved"))
+        .andExpect(redirectedUrl("/admin/users"));
+    mvc.perform(
+            get("/admin/users")
+                .with(
+                    authentication(
+                        accounts.token(db.find(ApplicationUser.class, target.id).orElseThrow()))))
+        .andExpect(status().isForbidden());
+    assertThat(
+            db.list(
+                UserAccessNotification.class,
+                "WHERE \"UserId\"=? AND \"NotificationType\"='AccessDecision'",
+                target.id))
+        .anyMatch(note -> note.subject.equals("Access Approved"));
+    var stale =
+        org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+            .authenticated(
+                new Accounts.Principal(admin.id, admin.userName, admin.displayName, "wrong-stamp"),
+                null,
+                adminAuth.getAuthorities());
+    assertThat(accounts.canReview(stale)).isFalse();
   }
 
   @Test

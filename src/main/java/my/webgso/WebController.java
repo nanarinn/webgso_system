@@ -72,6 +72,7 @@ public class WebController {
 
   @ModelAttribute
   public void common(Model model, Authentication auth) {
+    model.addAttribute("canReviewAccess", accounts.canReview(auth));
     model.addAttribute(
         "navigation",
         Resources.ALL.stream()

@@ -40,7 +40,7 @@ For a hosted service, set `GOOGLE_LOGIN_ENABLED=true`, `GOOGLE_CLIENT_ID`, `GOOG
 ## Approval and email
 
 - First Google sign-in verifies the identity through Google and creates a **Pending** request. It does not grant workspace access.
-- Existing approved Admin accounts, including Affiqah's account, receive an approval request email through the configured Gmail SMTP sender.
+- Only the designated reviewer, Affiqah's existing account, receives approval request emails and can review requests. Apply `database/20261030-access-reviewer.sql` on an existing database to establish this assignment.
 - The new user receives a request-received email and an approval/rejection email after review in **Access requests**.
 - Repeated Google sign-ins while pending do not create duplicate users or approval requests.
 - After approval, Google login establishes the same local security-stamped session used by email login. Rejected, inactive or locked accounts cannot enter.
