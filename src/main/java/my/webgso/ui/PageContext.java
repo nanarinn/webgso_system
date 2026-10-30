@@ -112,7 +112,28 @@ public record PageContext(Map<String, Object> model, HttpServletRequest request)
     var header = el("tr");
     headings.forEach(title -> header.add(el("th", title).attr("scope", "col")));
     if (rows.isEmpty() && empty != null)
-      rows = List.of(el("tr", el("td", empty).attr("colspan", headings.size()).cls("java-empty")));
+      rows =
+          List.of(
+              el(
+                  "tr",
+                  el(
+                          "td",
+                          el(
+                                  "div",
+                                  el(
+                                          "svg",
+                                          el("path").attr("d", "M4 5h16v14H4z M4 13h5l2 3h2l2-3h5"))
+                                      .attr("viewBox", "0 0 24 24")
+                                      .attr("fill", "none")
+                                      .attr("stroke", "currentColor")
+                                      .attr("stroke-width", "1.6")
+                                      .attr("aria-hidden", "true")
+                                      .cls("table-empty-icon"),
+                                  el("strong", "Nothing to display yet"),
+                                  el("p", empty))
+                              .cls("table-empty-state"))
+                      .attr("colspan", headings.size())
+                      .cls("java-empty")));
     return el("div", el("table", el("thead", header), el("tbody", rows)))
         .cls("java-table-wrap")
         .attr("data-columns", headings.size())

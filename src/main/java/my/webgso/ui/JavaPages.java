@@ -62,7 +62,7 @@ public final class JavaPages {
             el("link").attr("rel", "icon").attr("type", "image/png").attr("href", Branding.LOGO));
     List<String> styles =
         login
-            ? List.of("/styles/login.css?v=2")
+            ? List.of("/styles/login.css?v=3")
             : List.of(
                 "/bootstrap/bootstrap.min.css",
                 "/styles/app.css",
@@ -71,7 +71,8 @@ public final class JavaPages {
                 "/styles/workspace-theme.css?v=4",
                 "/styles/workspace-panels.css?v=27",
                 "/styles/plant-editor.css?v=4",
-                "/styles/workspace-polish.css?v=2");
+                "/styles/workspace-polish.css?v=2",
+                "/styles/workspace-finish.css?v=1");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
       head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));

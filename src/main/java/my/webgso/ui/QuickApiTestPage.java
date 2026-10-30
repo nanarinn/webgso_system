@@ -46,6 +46,6 @@ final class QuickApiTestPage {
                             button("Test API", true),
                             action("Clear", "/admin/api-quick-test", false))
                         .cls("java-actions")))
-            .cls("panel"));
+            .cls("panel quick-test-card"));
   }
 }

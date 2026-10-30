@@ -712,7 +712,15 @@ final class AdminPages {
               el("strong", Accounts.displayName(user.displayName))
                   .add(el("small", user.userName).cls("java-block")),
               user.email,
-              "Approved".equals(user.accessStatus) ? "Active" : user.accessStatus,
+              el("span", "Approved".equals(user.accessStatus) ? "Active" : user.accessStatus)
+                  .cls(
+                      "account-state account-state-"
+                          + switch (user.accessStatus) {
+                            case "Approved" -> "approved";
+                            case "Pending" -> "pending";
+                            case "Rejected" -> "rejected";
+                            default -> "inactive";
+                          }),
               roles.get(user.id).isBlank() ? "Unassigned" : Accounts.ADMIN,
               review));
     }

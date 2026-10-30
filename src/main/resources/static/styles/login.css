@@ -87,3 +87,27 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px soli
   .auth-access-footer { margin-top: 32px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+
+/* Match the finished workspace, with a compact layout on tablets and phones. */
+.auth-story { background:radial-gradient(ellipse at 0 0,#245e462e,transparent 65%),linear-gradient(155deg,#113d30,#0c3026); }
+.auth-brand-logo { width:210px; padding:7px; background:#fff; border-radius:12px; box-shadow:0 6px 24px #051f2418; }
+.auth-brand small { font-size:10px; color:#bbd0c0; letter-spacing:.17em; }
+.auth-access { background:radial-gradient(ellipse at 90% 0,#e8f0e4,transparent 60%),#f6f8f3; }
+.auth-access-content { max-width:500px; }
+.auth-access-eyebrow { color:#56715f; font-size:10px; font-weight:650; margin-bottom:22px; }
+.auth-form-heading { margin-top:32px; }
+.auth-form-heading p { font-size:14px; line-height:1.8; }
+.auth-tabs { border:1px solid #e0e7db; background:#eaf0e5; border-radius:11px; }
+.auth-tabs a { min-height:44px; font-size:13px; }
+.auth-tabs a[aria-current=page] { box-shadow:0 2px 6px #1b432f0a; }
+.auth-divider { margin:28px 0 24px; font-size:11px; color:#71836e; }
+.auth-form { gap:21px; }
+.auth-field input { height:50px; font-size:15px; border-color:#d5e0ce; border-radius:9px; }
+.auth-field input:focus { border-color:#7a9e65; box-shadow:0 0 0 3px #dcebcf; }
+.auth-submit { min-height:49px; border-radius:9px; font-size:14px; box-shadow:0 4px 12px #184f3c17; }
+.auth-signup { font-size:12px; margin-block:22px; }
+.auth-access-footer { font-size:10px; margin-top:28px; }
+.auth-alert { border-radius:10px; }
+@media(min-width:901px) and (max-width:1200px) { .auth-layout { grid-template-columns:.9fr 1.1fr; } .auth-story { padding-inline:32px; } .auth-story h1 { font-size:42px; } .auth-access { padding-inline:36px; } .auth-services { gap:18px; } }
+@media(max-width:900px) { .auth-story { padding:24px 28px 28px; } .auth-brand-logo { width:172px; } .auth-brand { gap:5px; } .auth-story-copy { padding-top:28px; } .auth-story h1 { font-size:clamp(29px,5vw,40px); } .auth-eyebrow { font-size:9px; margin-bottom:12px; } .auth-access { padding:30px 24px 38px; } .auth-access-content { background:#fff; border:1px solid #e0e8da; border-radius:16px; padding:26px; box-shadow:0 8px 28px #153e3010; } }
+@media(max-width:480px) { .auth-access { padding-inline:16px; } .auth-access-content { padding:22px 18px; } .auth-form-heading h2 { font-size:25px; } }
