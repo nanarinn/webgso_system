@@ -42,8 +42,7 @@ class ApplicationIntegrationTests {
 
   @BeforeAll
   void users() {
-    admin =
-        accounts.register("test.admin", "admin@example.test", "Test Admin", "StrongPassword123!");
+    admin = accounts.register("test.admin", "admin@gmail.com", "Test Admin", "StrongPassword123!");
     admin.accessStatus = "Approved";
     db.update(admin);
     accounts.setRole(admin.id, "Admin");
@@ -52,7 +51,7 @@ class ApplicationIntegrationTests {
         .update("INSERT INTO \"GsoAccessReviewer\" (\"Id\",\"UserId\") VALUES (1,?)", admin.id);
     otherAdmin =
         accounts.register(
-            "test.otherAdmin", "otherAdmin@example.test", "Other Admin", "StrongPassword123!");
+            "test.otherAdmin", "otherAdmin@gmail.com", "Other Admin", "StrongPassword123!");
     otherAdmin.accessStatus = "Approved";
     db.update(otherAdmin);
     accounts.setRole(otherAdmin.id, "Admin");
@@ -79,6 +78,58 @@ class ApplicationIntegrationTests {
     plant.name = name;
     plant.capacityMw = BigDecimal.TEN;
     return db.insert(plant);
+  }
+
+  @Test
+  void publicAccountsOnlyAcceptGmailAddresses() throws Exception {
+    for (String email :
+        List.of(
+            "someone@outlook.com",
+            "someone@gmail.com.evil.test",
+            "someone@company.test",
+            "someone@googlemail.com",
+            "someone@sub.gmail.com")) {
+      mvc.perform(
+              post("/account/register")
+                  .with(csrf())
+                  .param("username", "gmail.policy")
+                  .param("email", email)
+                  .param("displayName", "Gmail policy")
+                  .param("password", "StrongPassword123!")
+                  .param("confirmPassword", "StrongPassword123!"))
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(org.hamcrest.Matchers.containsString(GmailAccounts.MESSAGE)));
+      assertThatThrownBy(() -> googleAccounts.resolve("blockedSubject", email, true, "Blocked"))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessage(GmailAccounts.MESSAGE);
+      mvc.perform(
+              post("/account/login")
+                  .with(csrf())
+                  .param("identifier", email)
+                  .param("password", "StrongPassword123!"))
+          .andExpect(redirectedUrl("/login?error=true"));
+    }
+    assertThat(GmailAccounts.allowed("User.Name+tag@GMAIL.COM")).isTrue();
+    assertThat(GmailAccounts.allowed("user@@gmail.com")).isFalse();
+    assertThat(GmailAccounts.allowed("user@gmail.com ")).isFalse();
+    assertThat(GmailAccounts.allowed(null)).isFalse();
+    mvc.perform(
+            post("/account/login")
+                .with(csrf())
+                .param("identifier", admin.userName)
+                .param("password", "StrongPassword123!"))
+        .andExpect(redirectedUrl("/login?error=true"));
+    var legacy =
+        accounts.register("legacy.mail", "legacy@outlook.com", "Legacy", "StrongPassword123!");
+    legacy.accessStatus = "Approved";
+    db.update(legacy);
+    mvc.perform(
+            post("/account/login")
+                .with(csrf())
+                .param("identifier", legacy.email)
+                .param("password", "StrongPassword123!"))
+        .andExpect(redirectedUrl("/login?error=true"));
+    assertThat(db.list(ApplicationUser.class, "WHERE \"UserName\"=?", "gmail.policy")).isEmpty();
   }
 
   @Test
@@ -806,13 +857,13 @@ class ApplicationIntegrationTests {
     mvc.perform(
             post("/account/login")
                 .session(session)
-                .param("identifier", admin.userName)
+                .param("identifier", admin.email)
                 .param("password", "StrongPassword123!")
                 .param("_csrf", token.group(1)))
         .andExpect(redirectedUrl("/"));
     mvc.perform(
             post("/account/login")
-                .param("identifier", admin.userName)
+                .param("identifier", admin.email)
                 .param("password", "StrongPassword123!"))
         .andExpect(status().isForbidden());
   }
@@ -936,7 +987,7 @@ class ApplicationIntegrationTests {
   @Test
   void registrationRequiresOwnEmailVerificationWithoutAnotherUserApproval() throws Exception {
     String name = "verify." + System.nanoTime();
-    String email = name + "@example.test";
+    String email = name + "@gmail.com";
     mvc.perform(
             post("/account/register")
                 .with(csrf())
@@ -1065,7 +1116,7 @@ class ApplicationIntegrationTests {
     String suffix = "expiry." + System.nanoTime();
     var user =
         emailVerification.register(
-            suffix, suffix + "@example.test", "Expiry user", "StrongPassword123!");
+            suffix, suffix + "@gmail.com", "Expiry user", "StrongPassword123!");
     String token = verificationToken(user.id);
     db.jdbc()
         .update(
@@ -1097,8 +1148,7 @@ class ApplicationIntegrationTests {
   @Test
   void rejectedRegistrationCannotAuthenticateAndPendingSessionCannotReview() throws Exception {
     String name = "pending." + System.nanoTime();
-    var target =
-        accounts.register(name, name + "@example.test", "Pending user", "StrongPassword123!");
+    var target = accounts.register(name, name + "@gmail.com", "Pending user", "StrongPassword123!");
     mvc.perform(
             post("/admin/users/" + otherAdmin.id + "/review")
                 .with(authentication(accounts.token(target)))
@@ -1137,9 +1187,9 @@ class ApplicationIntegrationTests {
     String suffix = "resend." + System.nanoTime();
     var user =
         emailVerification.register(
-            suffix, suffix + "@example.test", "Resend user", "StrongPassword123!");
+            suffix, suffix + "@gmail.com", "Resend user", "StrongPassword123!");
     String first = verificationToken(user.id);
-    for (String email : List.of(user.email, "unknown@example.test", admin.email)) {
+    for (String email : List.of(user.email, "unknown@gmail.com", admin.email)) {
       mvc.perform(post("/account/resend-verification").with(csrf()).param("email", email))
           .andExpect(redirectedUrl("/login?verification=sent"));
     }
@@ -1159,7 +1209,7 @@ class ApplicationIntegrationTests {
       var legacy =
           accounts.register(
               "legacy." + previous,
-              previous + "@example.test",
+              previous + "@gmail.com",
               "Existing Admin",
               "StrongPassword123!");
       db.jdbc().update("DELETE FROM \"AspNetUserRoles\" WHERE \"UserId\"=?", legacy.id);
@@ -1199,7 +1249,7 @@ class ApplicationIntegrationTests {
   void approvedAccountWithoutAdminAssignmentCannotAccessProtectedPages() throws Exception {
     var unassigned =
         accounts.register(
-            "unassigned.admin", "unassigned@example.test", "Unassigned", "StrongPassword123!");
+            "unassigned.admin", "unassigned@gmail.com", "Unassigned", "StrongPassword123!");
     db.jdbc().update("DELETE FROM \"AspNetUserRoles\" WHERE \"UserId\"=?", unassigned.id);
     unassigned.accessStatus = "Approved";
     db.update(unassigned);
@@ -1216,7 +1266,7 @@ class ApplicationIntegrationTests {
     var target =
         accounts.register(
             "lock." + System.nanoTime(),
-            "lock." + System.nanoTime() + "@example.test",
+            "lock." + System.nanoTime() + "@gmail.com",
             "Lock Test",
             "StrongPassword123!");
     target.accessStatus = "Approved";
@@ -1225,14 +1275,13 @@ class ApplicationIntegrationTests {
       assertThatThrownBy(
               () ->
                   accounts.authenticate(
-                      UsernamePasswordAuthenticationToken.unauthenticated(
-                          target.userName, "wrong")))
+                      UsernamePasswordAuthenticationToken.unauthenticated(target.email, "wrong")))
           .isInstanceOf(org.springframework.security.authentication.BadCredentialsException.class);
     assertThatThrownBy(
             () ->
                 accounts.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(
-                        target.userName, "StrongPassword123!")))
+                        target.email, "StrongPassword123!")))
         .isInstanceOf(org.springframework.security.authentication.LockedException.class);
   }
 
@@ -1590,7 +1639,7 @@ class ApplicationIntegrationTests {
     db.insert(reportSchedule);
     var recipient = new ReportScheduleRecipient();
     recipient.reportScheduleId = reportSchedule.id;
-    recipient.email = "recipient@example.test";
+    recipient.email = "recipient@gmail.com";
     db.insert(recipient);
     workers.reports();
     workers.reports();
@@ -1599,6 +1648,6 @@ class ApplicationIntegrationTests {
     assertThat(attempts).hasSize(1);
     assertThat(attempts.getFirst().emailStatus).isEqualTo("Delivered");
     verify(mail, times(1))
-        .send(eq(List.of("recipient@example.test")), eq("Scheduled report"), anyString(), any());
+        .send(eq(List.of("recipient@gmail.com")), eq("Scheduled report"), anyString(), any());
   }
 }

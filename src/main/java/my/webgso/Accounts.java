@@ -77,17 +77,18 @@ public class Accounts implements AuthenticationProvider {
   @Transactional(noRollbackFor = AuthenticationException.class)
   public Authentication authenticate(Authentication request) throws AuthenticationException {
     String login = request.getName().trim().toUpperCase(Locale.ROOT);
-    var users =
-        db.list(
-            ApplicationUser.class,
-            "WHERE \"NormalizedUserName\"=? OR \"NormalizedEmail\"=? FOR UPDATE",
-            login,
-            login);
+    if (!GmailAccounts.allowed(login)) {
+      passwords.matches(request.getCredentials().toString(), DUMMY);
+      throw new BadCredentialsException(GmailAccounts.MESSAGE);
+    }
+    var users = db.list(ApplicationUser.class, "WHERE \"NormalizedEmail\"=? FOR UPDATE", login);
     if (users.isEmpty()) {
       passwords.matches(request.getCredentials().toString(), DUMMY);
       throw new BadCredentialsException("Invalid credentials");
     }
     var user = users.getFirst();
+    if (!GmailAccounts.allowed(user.email))
+      throw new BadCredentialsException(GmailAccounts.MESSAGE);
     if (user.lockoutEnd != null && user.lockoutEnd.isAfter(OffsetDateTime.now()))
       throw new LockedException("Account temporarily locked");
     if (!passwords.matches(request.getCredentials().toString(), user.passwordHash)) {

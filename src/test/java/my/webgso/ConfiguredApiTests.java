@@ -92,8 +92,10 @@ class ConfiguredApiTests {
           .containsPattern("id=\"location-mode-" + group + "\"[^>]*disabled=\"disabled\"");
     }
     assertThat(lockedHtml)
-        .contains("Locked", "Change location filter")
-        .doesNotContain("name=\"locationStates\" type=\"checkbox\"");
+        .contains("Locked", "Remove Zone filter", "/scripts/plant-location-filters.js?v=1")
+        .contains(
+            "class=\"location-values\" disabled=\"disabled\" hidden=\"hidden\" aria-label=\"State"
+                + " selections\"");
     var unlocked =
         mvc.perform(
                 get("/admin/lss-plants").param("locationMode", "all").with(authentication(auth)))

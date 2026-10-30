@@ -29,6 +29,7 @@ public class GoogleAccounts {
         || email.length() > 256
         || !email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))
       throw new IllegalArgumentException("Google identity could not be verified.");
+    GmailAccounts.require(email);
     var ids =
         db.jdbc()
             .queryForList(
@@ -37,6 +38,7 @@ public class GoogleAccounts {
                 subject);
     if (!ids.isEmpty()) {
       var user = db.find(ApplicationUser.class, ids.getFirst()).orElseThrow();
+      GmailAccounts.require(user.email);
       if (!"Approved".equals(user.accessStatus) && !"Pending".equals(user.accessStatus))
         throw new DisabledException("Account access is inactive.");
       if (user.lockoutEnd != null && user.lockoutEnd.isAfter(OffsetDateTime.now()))

@@ -439,8 +439,8 @@ final class AdminPages {
                 "footer",
                 el(
                         "p",
-                        "Other location filters are locked after selecting a group. Use Change"
-                            + " location filter to unlock them.")
+                        "Other location filters are locked. Select × to remove your selection and"
+                            + " choose another location filter.")
                     .cls("filter-hint"),
                 el(
                         "div",
@@ -477,7 +477,7 @@ final class AdminPages {
                             .attr("aria-hidden", "true"),
                         el("span", el("strong", title), el("small", hint))
                             .cls("location-mode-label"),
-                        locked ? el("span", "Locked").cls("location-lock-badge") : null)
+                        el("span", "Locked").cls("location-lock-badge").flag("hidden", !locked))
                     .attr("type", "submit")
                     .attr("name", "locationMode")
                     .attr("value", mode)
@@ -487,12 +487,17 @@ final class AdminPages {
                     .attr(
                         "title",
                         locked
-                            ? "Use Change location filter to unlock this option."
+                            ? "Remove the selected location filter with × to unlock this option."
                             : "Select " + title)
                     .cls("location-mode-button"))
             .cls("location-choice" + (active ? " is-active" : "") + (locked ? " is-locked" : ""));
-    if (active && !mode.equals("all")) {
-      var choices = el("div").cls("location-values");
+    if (!mode.equals("all")) {
+      var choices =
+          el("fieldset")
+              .cls("location-values")
+              .flag("disabled", !active)
+              .flag("hidden", !active)
+              .attr("aria-label", title + " selections");
       var picked = Arrays.asList(c.text(name).split(","));
       options.forEach(
           (value, label) ->
@@ -515,10 +520,13 @@ final class AdminPages {
                 .cls("filter-hint"));
       card.add(choices);
       card.add(
-          el("button", "Change location filter")
+          el("button", "×")
               .attr("type", "submit")
               .attr("name", "locationMode")
               .attr("value", "all")
+              .attr("aria-label", "Remove " + title + " filter")
+              .attr("title", "Remove " + title + " filter")
+              .flag("hidden", !active)
               .cls("secondary-action location-unlock"));
     }
     return card;

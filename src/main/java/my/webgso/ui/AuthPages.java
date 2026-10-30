@@ -16,7 +16,13 @@ final class AuthPages {
             .attr("autocomplete", autocomplete)
             .flag("required", true);
     if (name.equals("identifier"))
-      control.attr("maxlength", 256).attr("autocapitalize", "none").attr("spellcheck", "false");
+      control
+          .attr("maxlength", 256)
+          .attr("autocapitalize", "none")
+          .attr("spellcheck", "false")
+          .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
+          .attr("title", "Use your @gmail.com email address.")
+          .attr("placeholder", "you@gmail.com");
     return el("div", el("label", label).attr("for", name), control).cls("auth-field");
   }
 
@@ -115,12 +121,13 @@ final class AuthPages {
                     "Google sign-in could not be completed. Please try again or use email sign-in.";
               },
               google.equals("pending") ? "success" : "error"));
-    var identifier = authField("Email", "identifier", "email", "username");
+    var identifier = authField("Gmail address", "identifier", "email", "username");
     // Controls retain their native browser validation, password-manager support and keyboard
     // behavior.
     access.add(
         googleButton().cls("auth-google-button"),
         el("div", el("span", "Account credentials")).cls("auth-divider"),
+        el("p", "Only @gmail.com email addresses can sign in.").cls("auth-intro"),
         c.post(
             "/account/login",
             "auth-form",
@@ -135,8 +142,10 @@ final class AuthPages {
                     "/account/resend-verification",
                     "auth-form",
                     field(
-                        "Email address",
+                        "Gmail address",
                         input("email", "email", null)
+                            .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
+                            .attr("title", "Only @gmail.com email addresses are allowed.")
                             .attr("autocomplete", "email")
                             .attr("maxlength", 256)
                             .flag("required", true)),
@@ -198,11 +207,13 @@ final class AuthPages {
                     .attr("placeholder", "Choose a username")
                     .flag("required", true)),
             field(
-                    "Email address",
+                    "Gmail address",
                     input("email", "email", null)
+                        .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
+                        .attr("title", "Only @gmail.com email addresses are allowed.")
                         .attr("autocomplete", "email")
                         .attr("maxlength", 256)
-                        .attr("placeholder", "you@example.com")
+                        .attr("placeholder", "you@gmail.com")
                         .flag("required", true))
                 .cls("signup-wide"),
             field(
@@ -317,12 +328,12 @@ final class AuthPages {
                     "p",
                     success
                         ? "Your account is active. You can now sign in with your email and"
-                              + " password."
+                            + " password."
                         : landing
                             ? "Confirm your email address to activate your account. This will not"
-                                  + " sign you in automatically."
+                                + " sign you in automatically."
                             : "This link is invalid, expired or already used. Sign in if your"
-                                  + " account is already verified, or request a new link."),
+                                + " account is already verified, or request a new link."),
                 landing
                     ? c.post(
                         "/account/verify-email",

@@ -31,7 +31,7 @@ class ProfileTests {
   void setup() {
     own =
         accounts.register(
-            "profile.admin", "profile@example.test", "Own Profile", "StrongPassword123!");
+            "profile.admin", "profile@gmail.com", "Own Profile", "StrongPassword123!");
     own.accessStatus = "Approved";
     db.update(own);
     accounts.setRole(own.id, Accounts.ADMIN);
@@ -39,7 +39,7 @@ class ProfileTests {
     other =
         accounts.register(
             "profile.other",
-            "other-profile@example.test",
+            "other-profile@gmail.com",
             "Other Private Profile",
             "StrongPassword123!");
   }
@@ -70,7 +70,7 @@ class ProfileTests {
                 .with(csrf())
                 .param("displayName", "Updated Profile")
                 .param("username", "profile.updated")
-                .param("email", "updated-profile@example.test")
+                .param("email", "updated-profile@gmail.com")
                 .param("phone", "+60 12-3456789")
                 .param("id", other.id)
                 .param("accessStatus", "Rejected")
@@ -79,7 +79,7 @@ class ProfileTests {
         .andExpect(flash().attribute("message", "Your profile has been updated."));
     var saved = db.find(ApplicationUser.class, own.id).orElseThrow();
     assertThat(saved.userName).isEqualTo("profile.updated");
-    assertThat(saved.normalizedEmail).isEqualTo("UPDATED-PROFILE@EXAMPLE.TEST");
+    assertThat(saved.normalizedEmail).isEqualTo("UPDATED-PROFILE@GMAIL.COM");
     assertThat(saved.displayName).isEqualTo("Updated Profile");
     assertThat(saved.phoneNumber).isEqualTo("+60 12-3456789");
     assertThat(saved.passwordHash).isEqualTo(own.passwordHash);
@@ -92,7 +92,7 @@ class ProfileTests {
                     accounts
                         .authenticate(
                             UsernamePasswordAuthenticationToken.unauthenticated(
-                                "profile.updated", "StrongPassword123!"))
+                                "updated-profile@gmail.com", "StrongPassword123!"))
                         .getPrincipal())
                 .id())
         .isEqualTo(own.id);

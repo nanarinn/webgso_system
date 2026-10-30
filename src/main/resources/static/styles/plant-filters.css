@@ -33,3 +33,9 @@
 .location-lock-badge { padding:3px 8px; background:#e0e5df; border-radius:20px; font-size:10px; color:#6c786f; }
 .location-query .location-unlock { margin-top:12px; font-size:12px; padding:8px 12px; min-height:36px; }
 .location-mode-button:focus-visible { outline:2px solid #4f805c; outline-offset:5px; }
+.location-choice { position:relative; }
+.location-choice.is-active:not(:has(#location-mode-all)) .location-mode-button { padding-right:36px; }
+.location-query .location-unlock { position:absolute; top:10px; right:10px; width:28px; height:28px; min-height:28px; margin:0; padding:0; border-radius:50%; display:grid; place-items:center; font-size:21px; line-height:1; }
+.location-query [hidden] { display:none !important; }
+.location-values { min-width:0; }
+.location-value:has(input:checked) span::after { content:" ×"; margin-left:8px; color:#285b43; font-weight:700; }

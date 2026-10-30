@@ -21,6 +21,7 @@ public class ProfileService {
     displayName = displayName.trim();
     username = username.trim();
     email = email.trim();
+    GmailAccounts.require(email);
     phone = phone.trim();
     if (displayName.isBlank()
         || displayName.length() > 160

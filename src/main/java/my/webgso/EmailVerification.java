@@ -38,6 +38,7 @@ public class EmailVerification {
 
   @Transactional
   public ApplicationUser register(String username, String email, String name, String password) {
+    GmailAccounts.require(email);
     var user = accounts.register(username, email, name, password);
     send(user);
     return user;
@@ -45,7 +46,7 @@ public class EmailVerification {
 
   @Transactional
   public void resend(String email) {
-    if (email == null || email.length() > 256) return;
+    if (!GmailAccounts.allowed(email == null ? null : email.trim())) return;
     var users =
         db.list(
             ApplicationUser.class,
@@ -115,7 +116,7 @@ public class EmailVerification {
     var users = db.list(ApplicationUser.class, "WHERE \"Id\"=? FOR UPDATE", ids.getFirst());
     if (users.size() != 1) return false;
     var user = users.getFirst();
-    if (!"Pending".equals(user.accessStatus)) return false;
+    if (!"Pending".equals(user.accessStatus) || !GmailAccounts.allowed(user.email)) return false;
     var now = OffsetDateTime.now(ZoneOffset.UTC);
     int changed =
         db.jdbc()
