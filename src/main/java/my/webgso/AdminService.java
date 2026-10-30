@@ -145,7 +145,7 @@ public class AdminService {
                 case "apiLink", "ddqApiEndpoint", "mmfApiEndpoint" -> 1000;
                 case "description" -> 1000;
                 case "scheduleCode", "code" -> 40;
-                case "state" -> 60;
+                case "state", "zone" -> 60;
                 case "plantId" -> 20;
                 case "name" -> 160;
                 case "email" -> 320;

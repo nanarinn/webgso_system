@@ -23,7 +23,15 @@ final class AdminPages {
     if (plants)
       headers =
           new ArrayList<>(
-              List.of("ID", "Plant ID", "Plant Name", "State", "Capacity (MW)", "API", "Actions"));
+              List.of(
+                  "ID",
+                  "Plant ID",
+                  "Plant Name",
+                  "Zone",
+                  "State",
+                  "Capacity (MW)",
+                  "API",
+                  "Actions"));
     var rows = new ArrayList<Element>();
     for (Map<String, Object> record : c.<Map<String, Object>>list("rows")) {
       if (plants) {
@@ -305,6 +313,7 @@ final class AdminPages {
         plant.get("id"),
         plant.get("plantId"),
         plant.get("name"),
+        Objects.toString(plant.get("zone"), "").isBlank() ? "—" : plant.get("zone"),
         plant.get("state"),
         plant.get("capacityMw"),
         endpoints,
@@ -410,6 +419,42 @@ final class AdminPages {
         el("article", form).cls("panel"));
   }
 
+  private static Element plantState(String current) {
+    var states =
+        List.of(
+            "Johor",
+            "Kedah",
+            "Kelantan",
+            "Melaka",
+            "Negeri Sembilan",
+            "Pahang",
+            "Perak",
+            "Perlis",
+            "Pulau Pinang",
+            "Sabah",
+            "Sarawak",
+            "Selangor",
+            "Terengganu",
+            "Kuala Lumpur",
+            "Labuan",
+            "Putrajaya");
+    var control = el("select").attr("name", "state");
+    control.add(
+        el("option", "Select a state")
+            .attr("value", "")
+            .flag("selected", current == null || current.isBlank()));
+    for (String state : states)
+      control.add(
+          el("option", state)
+              .attr("value", state)
+              .flag("selected", state.equalsIgnoreCase(current)));
+    if (current != null
+        && !current.isBlank()
+        && states.stream().noneMatch(state -> state.equalsIgnoreCase(current)))
+      control.add(el("option", current).attr("value", current).flag("selected", true));
+    return control;
+  }
+
   private static Element plantEdit(PageContext c) {
     LssPlant plant = c.value("plant");
     Map<String, String> endpoints = c.value("plantApiEndpoints");
@@ -478,17 +523,26 @@ final class AdminPages {
                                 .flag("required", true)
                                 .attr("placeholder", "e.g. BDNS or KMPR")),
                         field(
-                            "State",
-                            input("state", "text", plant.state)
+                            "Zone",
+                            input("zone", "text", plant.zone)
                                 .attr("maxlength", 60)
-                                .attr("placeholder", "e.g. Perak")),
+                                .attr("list", "plant-zone-options")
+                                .attr("placeholder", "Select or enter a zone")),
+                        field("State", plantState(plant.state)),
                         field(
                             "Installed capacity (MW)",
                             input("capacityMw", "number", plant.capacityMw)
                                 .attr("step", "any")
                                 .attr("min", 0)
                                 .flag("required", true)))
-                    .cls("plant-detail-grid"))
+                    .cls("plant-detail-grid"),
+                el(
+                        "datalist",
+                        List.of("Northern", "Central", "Southern", "Eastern", "Sabah", "Sarawak")
+                            .stream()
+                            .map(zone -> el("option").attr("value", zone))
+                            .toList())
+                    .attr("id", "plant-zone-options"))
             .cls("plant-editor-card");
     var connections =
         el("details")

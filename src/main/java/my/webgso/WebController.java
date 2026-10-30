@@ -768,6 +768,7 @@ public class WebController {
       plant.plantId = form.get("plantId");
     if (form.containsKey("name")) plant.name = form.get("name");
     if (form.containsKey("state")) plant.state = form.get("state");
+    if (form.containsKey("zone")) plant.zone = form.get("zone");
     if (form.containsKey("capacityMw")) {
       try {
         plant.capacityMw = new BigDecimal(form.get("capacityMw"));

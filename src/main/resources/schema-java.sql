@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS "LssPlants" (
  "PlantId" text,
  "Name" text,
  "State" text,
+ "Zone" text NOT NULL DEFAULT '',
  "CapacityMw" numeric(18,6),
  "DdqApiEndpoint" text,
  "MmfApiEndpoint" text,

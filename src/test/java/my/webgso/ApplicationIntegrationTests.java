@@ -81,6 +81,57 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void plantZoneAndStateAreSavedDisplayedAndRetainedWhenAnApiDraftFails() throws Exception {
+    var plant = apiSavePlant("Zone state plant");
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", plant.id.toString())
+                .param("plantId", "80301")
+                .param("name", plant.name)
+                .param("zone", "GSO North")
+                .param("state", "Perak")
+                .param("capacityMw", "30"))
+        .andExpect(redirectedUrl("/admin/lss-plants"));
+    var saved = db.find(LssPlant.class, plant.id).orElseThrow();
+    assertThat(saved.zone).isEqualTo("GSO North");
+    assertThat(saved.state).isEqualTo("Perak");
+    mvc.perform(get("/admin/lss-plants").param("q", plant.name).with(authentication(adminAuth)))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("GSO North")));
+    mvc.perform(
+            get("/admin/lss-plants/edit")
+                .param("id", plant.id.toString())
+                .with(authentication(adminAuth)))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"zone\"")))
+        .andExpect(
+            content().string(org.hamcrest.Matchers.containsString("<select name=\"state\"")));
+    mvc.perform(
+            post("/admin/lss-plants/save-api")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", plant.id.toString())
+                .param("saveApi", "apiDayAhead")
+                .param("apiDayAhead", "not-a-url")
+                .param("zone", "Draft zone")
+                .param("state", "Selangor"))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("value=\"Draft zone\"")));
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().zone).isEqualTo("GSO North");
+    mvc.perform(
+            post("/admin/lss-plants/save")
+                .with(authentication(adminAuth))
+                .with(csrf())
+                .param("id", plant.id.toString())
+                .param("plantId", "80301")
+                .param("name", plant.name)
+                .param("zone", "x".repeat(61))
+                .param("state", "Perak")
+                .param("capacityMw", "30"))
+        .andExpect(status().isBadRequest());
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().zone).isEqualTo("GSO North");
+  }
+
+  @Test
   void cardSaveTestsAndPersistsOnlyTheChosenApiWithoutLosingDrafts() throws Exception {
     var plant = apiSavePlant("Card save target");
     readableApi("https://example.test/card/dayahead");

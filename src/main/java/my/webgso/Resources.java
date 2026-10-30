@@ -24,8 +24,8 @@ public final class Resources {
               "/admin/lss-plants",
               "Plant Config",
               LssPlant.class,
-              "plantId,name,state,capacityMw,ddqApiEndpoint,mmfApiEndpoint,isActive",
-              "plantId,name,state,capacityMw,ddqApiEndpoint,mmfApiEndpoint,isActive"),
+              "plantId,name,zone,state,capacityMw,ddqApiEndpoint,mmfApiEndpoint,isActive",
+              "plantId,name,zone,state,capacityMw,ddqApiEndpoint,mmfApiEndpoint,isActive"),
           def(
               "/admin/api-configurations",
               "Plant API Links",

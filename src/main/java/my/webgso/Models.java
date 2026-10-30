@@ -24,6 +24,7 @@ public final class Models {
     public String plantId = "";
     public String name = "";
     public String state = "";
+    public String zone = "";
     public BigDecimal capacityMw = BigDecimal.ZERO;
     public String ddqApiEndpoint = "";
     public String mmfApiEndpoint = "";
