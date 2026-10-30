@@ -101,6 +101,42 @@ class ConfiguredApiTests {
   }
 
   @Test
+  void plantFiltersUseConfiguredApisAndPreserveSelectedValues() throws Exception {
+    mvc.perform(
+            get("/admin/lss-plants")
+                .with(authentication(auth))
+                .param("filterPlant", "" + plant.id)
+                .param("filterType", "DDQ")
+                .param("filterResult", "Not tested"))
+        .andExpect(status().isOk())
+        .andExpect(model().attribute("total", 1L))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Apply filters")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"filterResult\"")));
+    mvc.perform(
+            get("/admin/lss-plants")
+                .with(authentication(auth))
+                .param("filterPlant", "" + plant.id)
+                .param("filterType", "MMF"))
+        .andExpect(status().isOk())
+        .andExpect(model().attribute("total", 0L));
+    testHistory.save(plant.id, "Day Ahead", "admin", false, null, System.nanoTime(), "Timeout");
+    mvc.perform(
+            get("/admin/lss-plants")
+                .with(authentication(auth))
+                .param("filterPlant", "" + plant.id)
+                .param("filterResult", "Failed"))
+        .andExpect(status().isOk())
+        .andExpect(model().attribute("total", 1L));
+    mvc.perform(
+            get("/admin/lss-plants")
+                .with(authentication(auth))
+                .param("filterPlant", "" + plant.id)
+                .param("q", "no-such-name"))
+        .andExpect(status().isOk())
+        .andExpect(model().attribute("total", 0L));
+  }
+
+  @Test
   void http200WithBadStructureIsFailedWithoutImportingReadings() {
     long readings = db.count(SolarApiReading.class);
     when(client.fetch("https://example.test/day-ahead"))

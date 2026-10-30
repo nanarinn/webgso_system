@@ -518,7 +518,10 @@ public class WebController {
       HttpServletRequest request,
       Model model,
       @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "") String q) {
+      @RequestParam(defaultValue = "") String q,
+      @RequestParam(defaultValue = "0") int filterPlant,
+      @RequestParam(defaultValue = "") String filterType,
+      @RequestParam(defaultValue = "") String filterResult) {
     var resource = Resources.get(request.getRequestURI());
     int safePage = Math.clamp(page, 0, 100000);
     String predicate = "";
@@ -543,16 +546,37 @@ public class WebController {
                       .toList());
       for (String c : resource.columns()) args.add("%" + q.toLowerCase(Locale.ROOT) + "%");
     }
-    long total =
-        db.jdbc()
-            .queryForObject(
-                "SELECT COUNT(*) FROM " + Store.table(resource.type()) + predicate,
-                Long.class,
-                args.toArray());
-    args.add(safePage * 25);
-    var records =
-        db.list(
-            resource.type(), predicate + " ORDER BY \"Id\" DESC LIMIT 25 OFFSET ?", args.toArray());
+    long total;
+    List<?> records;
+    if (resource.type() == LssPlant.class) {
+      var filter = new PlantConfigFilter(filterPlant, filterType, filterResult);
+      var allPlants = db.list(LssPlant.class, "ORDER BY \"Name\"");
+      var links = db.list(PlantApiConfiguration.class, "");
+      var latest = testHistory.latest();
+      var matching =
+          db.list(LssPlant.class, predicate + " ORDER BY \"Id\" DESC", args.toArray()).stream()
+              .filter(p -> filter.matches(p, links, latest))
+              .toList();
+      total = matching.size();
+      records = matching.stream().skip((long) safePage * 25).limit(25).toList();
+      model.addAttribute("filterPlants", allPlants);
+      model.addAttribute("filterPlant", filterPlant);
+      model.addAttribute("filterType", filterType);
+      model.addAttribute("filterResult", filterResult);
+    } else {
+      total =
+          db.jdbc()
+              .queryForObject(
+                  "SELECT COUNT(*) FROM " + Store.table(resource.type()) + predicate,
+                  Long.class,
+                  args.toArray());
+      args.add(safePage * 25);
+      records =
+          db.list(
+              resource.type(),
+              predicate + " ORDER BY \"Id\" DESC LIMIT 25 OFFSET ?",
+              args.toArray());
+    }
     var table = new ArrayList<Map<String, Object>>();
     for (Object record : records) {
       var row = AdminService.values(record, resource.columns());

@@ -79,16 +79,21 @@ final class AdminPages {
     page.add(
         el(
                 "article",
-                el(
-                        "form",
-                        el("label", "Search records").attr("for", "search"),
-                        input("q", "text", c.text("q")).attr("id", "search").attr("maxlength", 100),
-                        button("Search", false),
-                        action("Clear", resource.path(), false))
-                    .cls("java-search")
-                    .attr("method", "get"),
+                plants
+                    ? plantFilters(c)
+                    : el(
+                            "form",
+                            el("label", "Search records").attr("for", "search"),
+                            input("q", "text", c.text("q"))
+                                .attr("id", "search")
+                                .attr("maxlength", 100),
+                            button("Search", false),
+                            action("Clear", resource.path(), false))
+                        .cls("java-search")
+                        .attr("method", "get"),
                 table(headers, rows, "No records found.").attr("data-plant-table", plants),
-                OperationsPages.pagination(c, "Record pages", "q"))
+                OperationsPages.pagination(
+                    c, "Record pages", "q", "filterPlant", "filterType", "filterResult"))
             .cls("panel"));
     return page;
   }
@@ -311,6 +316,10 @@ final class AdminPages {
       Map<String, Object> plant,
       String label,
       Object endpoint) {
+    Map<String, ApiTestHistoryService.Entry> latest = c.value("latestApiTests");
+    if (latest != null
+        && !new PlantConfigFilter(0, c.text("filterType"), c.text("filterResult"))
+            .api(((Number) plant.get("id")).intValue(), label, latest)) return;
     if (endpoint != null && !endpoint.toString().isBlank()) {
       names.add(label);
       container.add(
@@ -326,6 +335,37 @@ final class AdminPages {
                           .attr("aria-label", "Test " + label + " API for " + plant.get("name"))))
               .cls("plant-api-item"));
     }
+  }
+
+  private static Element plantFilters(PageContext c) {
+    var plants =
+        el("select")
+            .attr("id", "filter-plant")
+            .attr("name", "filterPlant")
+            .add(option(0, "All plants", c.text("filterPlant")));
+    for (LssPlant plant : c.<LssPlant>list("filterPlants"))
+      plants.add(option(plant.id, plant.plantId + " · " + plant.name, c.text("filterPlant")));
+    var types = el("select").attr("id", "filter-type").attr("name", "filterType");
+    for (String type : List.of("", "DDQ", "MMF"))
+      types.add(option(type, type.isEmpty() ? "All API types" : type, c.text("filterType")));
+    var results = el("select").attr("id", "filter-result").attr("name", "filterResult");
+    for (String result : List.of("", "Success", "Failed", "Not tested"))
+      results.add(
+          option(result, result.isEmpty() ? "All results" : result, c.text("filterResult")));
+    return el(
+            "form",
+            el(
+                "div",
+                el("label", "Search records").attr("for", "search"),
+                input("q", "text", c.text("q")).attr("id", "search").attr("maxlength", 100)),
+            el("div", el("label", "Plant").attr("for", "filter-plant"), plants),
+            el("div", el("label", "API type").attr("for", "filter-type"), types),
+            el("div", el("label", "Test result").attr("for", "filter-result"), results),
+            el("div", button("Apply filters", true), action("Clear", "/admin/lss-plants", false))
+                .cls("java-actions"))
+        .attr("method", "get")
+        .attr("action", "/admin/lss-plants")
+        .cls("plant-config-filters");
   }
 
   static Element edit(PageContext c) {
