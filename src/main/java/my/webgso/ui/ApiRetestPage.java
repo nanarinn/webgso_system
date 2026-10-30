@@ -57,7 +57,7 @@ final class ApiRetestPage {
                         ? c.post(
                             "/admin/lss-plants/checks/" + job.id + "/email",
                             "api-retest-form",
-                            button("Email CSV", true)
+                            button("Email Excel", true)
                                 .flag(
                                     "disabled",
                                     job.reportStatus.equals("Sent")
@@ -72,16 +72,16 @@ final class ApiRetestPage {
                 job.complete
                     ? el(
                             "p",
-                            "CSV email: "
+                            "Excel email: "
                                 + switch (job.reportStatus) {
                                   case "Sent" ->
                                       "Accepted by the email service. Check Inbox or Spam.";
                                   case "Failed" ->
-                                      "Delivery failed. Check Gmail settings and press Email CSV to"
-                                          + " retry.";
+                                      "Delivery failed. Check Gmail settings and press Email Excel"
+                                          + " to retry.";
                                   case "Not configured" ->
                                       "Email is not configured. Download CSV is still available.";
-                                  default -> "Not sent. Use Email CSV to send these results.";
+                                  default -> "Not sent. Use Email Excel to send these results.";
                                 })
                         .cls("api-history-note")
                         .attr("role", "status")

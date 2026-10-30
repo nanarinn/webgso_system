@@ -80,10 +80,12 @@ public class ApiBatchReports {
           passed
               + " of "
               + job.items.size()
-              + " APIs passed. The attached CSV contains results from this test run and can be"
-              + " opened in Excel.",
+              + " APIs passed. The attached Excel workbook (.xlsx) contains the API test results"
+              + " from this run. Times use Malaysia Standard Time (UTC+8).",
           new ReportService.Download(
-              csv(job), "gso-api-test-results.csv", "text/csv;charset=UTF-8"));
+              ApiResultsExcel.create(job),
+              "gso-api-test-results.xlsx",
+              ApiResultsExcel.CONTENT_TYPE));
       job.reportStatus = "Sent";
     } catch (RuntimeException e) {
       job.reportStatus = "Failed";
