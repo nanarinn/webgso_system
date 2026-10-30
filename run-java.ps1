@@ -8,6 +8,22 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
 
+# Windows DPAPI-encrypted credential, entered locally and never stored in Git.
+$gmailCredentialPath = Join-Path $env:LOCALAPPDATA 'GSO Web Services\gmail.credential.xml'
+if (-not $Demo -and -not $env:SMTP_PASSWORD -and (Test-Path -LiteralPath $gmailCredentialPath)) {
+    $gmailCredential = Import-Clixml -LiteralPath $gmailCredentialPath
+    if ($gmailCredential -isnot [System.Management.Automation.PSCredential]) { throw 'Invalid local Gmail credential file.' }
+    $env:SMTP_HOST = 'smtp.gmail.com'
+    $env:SMTP_PORT = '587'
+    $env:SMTP_USERNAME = $gmailCredential.UserName
+    $env:SMTP_PASSWORD = $gmailCredential.GetNetworkCredential().Password
+    $env:WEBGSO_MAIL_FROM = $gmailCredential.UserName
+    $env:WEBGSO_MAIL_ENABLED = 'true'
+    $env:WEBGSO_API_ALERTS_ENABLED = 'true'
+    $env:WEBGSO_API_ALERTS_RECIPIENT = $gmailCredential.UserName
+    $gmailCredential = $null
+}
+
 # Credentials remain in the environment or the existing local secret store.
 # Reading the former connection string allows migration without a password reset;
 # .NET is not required to run the Java application.

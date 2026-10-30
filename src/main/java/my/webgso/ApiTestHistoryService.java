@@ -24,9 +24,11 @@ public class ApiTestHistoryService {
       String message) {}
 
   private final DataSource source;
+  private final ApiEmailAlerts alerts;
   private final JdbcTemplate jdbc;
 
-  public ApiTestHistoryService(DataSource source) {
+  public ApiTestHistoryService(DataSource source, ApiEmailAlerts alerts) {
+    this.alerts = alerts;
     this.source = source;
     this.jdbc = new JdbcTemplate(source);
   }
@@ -85,6 +87,7 @@ public class ApiTestHistoryService {
       PlantApiClient.Response response,
       long started,
       String message) {
+    var previous = history(plantId, dataset, 0);
     jdbc.update(
         "INSERT INTO \"ApiTestHistory\""
             + " (\"PlantId\",\"Dataset\",\"TestedAt\",\"Actor\",\"Outcome\",\"HttpStatus\",\"ResponseMillis\",\"DurationMillis\",\"Message\")"
@@ -98,6 +101,19 @@ public class ApiTestHistoryService {
         response == null ? null : response.elapsedMillis(),
         (System.nanoTime() - started) / 1_000_000,
         Objects.requireNonNullElse(message, "Test failed"));
+    try {
+      alerts.record(
+          plantId,
+          dataset,
+          previous.isEmpty() ? null : previous.getFirst().outcome(),
+          success,
+          response == null ? null : response.status());
+    } catch (RuntimeException e) {
+      org.slf4j.LoggerFactory.getLogger(ApiTestHistoryService.class)
+          .warn(
+              "API result saved, but its email alert could not be queued ({})",
+              e.getClass().getSimpleName());
+    }
   }
 
   public Map<String, Entry> latest() {
