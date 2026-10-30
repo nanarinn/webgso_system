@@ -2,11 +2,24 @@ param(
     [switch]$Demo,
     [switch]$Production,
     [int]$Port = 5186,
+    [string]$PublicBaseUrl,
     [switch]$Build
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
+
+# Explicit trusted origin for temporary HTTPS phone-verification tests.
+if ($PublicBaseUrl) {
+    $publicOrigin = [Uri]$PublicBaseUrl
+    if (-not $publicOrigin.IsAbsoluteUri -or $publicOrigin.Scheme -ne 'https' -or
+        -not $publicOrigin.Host -or $publicOrigin.UserInfo -or $publicOrigin.Query -or
+        $publicOrigin.Fragment -or $publicOrigin.AbsolutePath -ne '/') {
+        throw 'PublicBaseUrl must be an HTTPS origin without credentials, path, query or fragment.'
+    }
+    $env:WEBGSO_PUBLIC_BASE_URL = $publicOrigin.GetLeftPart([UriPartial]::Authority)
+    $env:WEBGSO_SECURE_COOKIE = 'true'
+}
 
 # Google OAuth uses a separate Windows-encrypted credential, not the Gmail App Password.
 $googleCredentialPath = Join-Path $env:LOCALAPPDATA 'GSO Web Services\google.oauth.xml'

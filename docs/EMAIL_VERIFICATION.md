@@ -10,7 +10,7 @@ Set `WEBGSO_PUBLIC_BASE_URL` to the trusted application origin used in emailed l
 
 ## User flow
 
-1. Sign up using name, username, email and password.
+1. Sign up using username, Gmail address and password. The username is used as the initial display name.
 2. Open the verification email and its link, then select **Verify email**. Opening the GET link alone does not activate an account, preventing email scanners from consuming it.
 3. The account becomes active and the user signs in normally. Verification does not sign the user in automatically.
 4. The link expires in 24 hours and is single-use. The server stores a SHA-256 token hash, binds it to the account's email/security stamp and atomically consumes it. A replaced link cannot be used.
@@ -19,3 +19,5 @@ Set `WEBGSO_PUBLIC_BASE_URL` to the trusted application origin used in emailed l
 Previously approved accounts remain active. Rejected/inactive accounts cannot activate through verification. Verified Google accounts activate directly through Google's validated OpenID Connect identity. Existing email/password accounts are not linked to Google automatically by matching email.
 
 Verification URLs must not be posted in chat or public logs. Verification pages send `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. The outbox necessarily contains the email body for delivery; protect database access as with other mail credentials and user data.
+
+For temporary HTTPS testing from a phone over mobile data, see [PHONE_VERIFICATION.md](PHONE_VERIFICATION.md).
