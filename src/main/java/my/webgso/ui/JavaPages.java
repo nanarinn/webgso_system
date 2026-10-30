@@ -136,12 +136,7 @@ public final class JavaPages {
 
   private static Element shell(PageContext c, Element content) {
     Accounts.Principal account = c.value("account");
-    var workspaceNav =
-        el(
-            "nav",
-            navigation(c, "◫ Overview", "/"),
-            navigation(c, "↗ DDQ Analytics", "/ddq-analytics"),
-            navigation(c, "☀ MMF Analytics", "/mmf-analytics"));
+    var workspaceNav = el("nav", navigation(c, "◫ Overview", "/"));
     var nav =
         el("div", el("p", "Workspace").cls("nav-section-title"), workspaceNav).cls("nav-body");
     if (c.yes("isAdmin")) {
