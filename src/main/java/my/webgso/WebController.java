@@ -27,6 +27,7 @@ public class WebController {
   private final ApiRetestService apiRetests;
   private final ApiTestTiming testTiming;
   private final DatabaseConnectionStatus databaseConnection;
+  private final ApiBatchReports apiBatchReports;
 
   public WebController(
       Store db,
@@ -40,7 +41,9 @@ public class WebController {
       ApiTestHistoryService testHistory,
       ApiRetestService apiRetests,
       ApiTestTiming testTiming,
-      DatabaseConnectionStatus databaseConnection) {
+      DatabaseConnectionStatus databaseConnection,
+      ApiBatchReports apiBatchReports) {
+    this.apiBatchReports = apiBatchReports;
     this.db = db;
     this.accounts = accounts;
     this.admin = admin;
@@ -1012,6 +1015,30 @@ public class WebController {
   @GetMapping("/admin/plants/{id}/test-history")
   public String oldApiTestHistory() {
     return "redirect:/admin/api-test-history";
+  }
+
+  @GetMapping("/admin/lss-plants/checks/{id}/export")
+  public ResponseEntity<byte[]> exportApiCheck(@PathVariable String id, Authentication auth) {
+    var job = apiRetests.get(id, principal(auth).id());
+    if (!job.complete)
+      throw new IllegalArgumentException(
+          "Wait until all API tests finish before exporting results.");
+    return ResponseEntity.ok()
+        .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"gso-api-test-results.csv\"")
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .body(ApiBatchReports.csv(job));
+  }
+
+  @PostMapping("/admin/lss-plants/checks/{id}/email")
+  public String emailApiCheck(@PathVariable String id, Authentication auth) {
+    var job = apiRetests.get(id, principal(auth).id());
+    if (!job.complete)
+      throw new IllegalArgumentException(
+          "Wait until all API tests finish before emailing results.");
+    apiBatchReports.send(job);
+    return "redirect:/admin/lss-plants/checks/" + job.id;
   }
 
   @GetMapping("/admin/anomaly-reports")

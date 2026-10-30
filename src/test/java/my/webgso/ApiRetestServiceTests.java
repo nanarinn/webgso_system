@@ -37,7 +37,7 @@ class ApiRetestServiceTests {
     when(collection.retestWithAnomalies(1, "Day Ahead", "admin"))
         .thenThrow(new IllegalArgumentException("Unavailable"));
     when(collection.testWithAnomalies(1, "MMF", "admin")).thenReturn(success());
-    var service = new ApiRetestService(db, history, collection);
+    var service = new ApiRetestService(db, history, collection, mock(ApiBatchReports.class));
     try {
       var job = service.startConfigured("owner", "admin");
       complete(job);
@@ -97,7 +97,7 @@ class ApiRetestServiceTests {
             new PlantApiClient.Failure(
                 "HTTP 503", new PlantApiClient.Response(503, "text/plain", "unavailable", 15)));
     when(collection.retestWithAnomalies(1, "MMF", "admin")).thenReturn(success());
-    var service = new ApiRetestService(db, history, collection);
+    var service = new ApiRetestService(db, history, collection, mock(ApiBatchReports.class));
     try {
       var job = service.start("owner", "admin");
       complete(job);
@@ -142,7 +142,7 @@ class ApiRetestServiceTests {
                 saved(2, 1, "Day Ahead")));
     when(collection.retestWithAnomalies(1, "MMF", "admin")).thenReturn(success());
     when(collection.retestWithAnomalies(1, "Day Ahead", "admin")).thenReturn(success());
-    var service = new ApiRetestService(db, history, collection);
+    var service = new ApiRetestService(db, history, collection, mock(ApiBatchReports.class));
     try {
       var job = service.startSingle("owner", "admin", 1, "MMF");
       complete(job);
@@ -180,7 +180,7 @@ class ApiRetestServiceTests {
               release.await(3, TimeUnit.SECONDS);
               return success();
             });
-    var service = new ApiRetestService(db, history, collection);
+    var service = new ApiRetestService(db, history, collection, mock(ApiBatchReports.class));
     try {
       var job = service.start("owner", "admin");
       assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();

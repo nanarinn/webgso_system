@@ -25,6 +25,8 @@ public class ApiRetestService {
     public volatile List<Item> items;
     public volatile boolean complete;
     public boolean configured;
+    public volatile String reportStatus = "Not sent";
+    public volatile java.time.OffsetDateTime finishedAt;
 
     Job(String owner, List<Item> items) {
       this.owner = owner;
@@ -35,10 +37,16 @@ public class ApiRetestService {
   private final Store db;
   private final ApiTestHistoryService history;
   private final CollectionService collection;
+  private final ApiBatchReports reports;
   private final LinkedHashMap<String, Job> jobs = new LinkedHashMap<>();
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-  public ApiRetestService(Store db, ApiTestHistoryService history, CollectionService collection) {
+  public ApiRetestService(
+      Store db,
+      ApiTestHistoryService history,
+      CollectionService collection,
+      ApiBatchReports reports) {
+    this.reports = reports;
     this.db = db;
     this.history = history;
     this.collection = collection;
@@ -180,6 +188,12 @@ public class ApiRetestService {
         job.items = List.copyOf(results);
       }
     } finally {
+      job.finishedAt = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC);
+      try {
+        reports.automatically(job);
+      } catch (RuntimeException e) {
+        job.reportStatus = "Failed";
+      }
       job.complete = true;
     }
   }

@@ -47,11 +47,45 @@ final class ApiRetestPage {
                 + " success · "
                 + failed
                 + " failed",
-            job.configured
-                ? action("Back to Plant Config", "/admin/lss-plants", false)
-                : action("Back to API test history", "/admin/api-test-history", false)),
+            el(
+                    "div",
+                    job.complete
+                        ? action(
+                            "Download CSV", "/admin/lss-plants/checks/" + job.id + "/export", false)
+                        : null,
+                    job.complete
+                        ? c.post(
+                            "/admin/lss-plants/checks/" + job.id + "/email",
+                            "api-retest-form",
+                            button("Email CSV", true)
+                                .flag(
+                                    "disabled",
+                                    job.reportStatus.equals("Sent")
+                                        || job.reportStatus.equals("Sending")))
+                        : null,
+                    job.configured
+                        ? action("Back to Plant Config", "/admin/lss-plants", false)
+                        : action("Back to API test history", "/admin/api-test-history", false))
+                .cls("java-actions")),
         el(
                 "article",
+                job.complete
+                    ? el(
+                            "p",
+                            "CSV email: "
+                                + switch (job.reportStatus) {
+                                  case "Sent" ->
+                                      "Accepted by the email service. Check Inbox or Spam.";
+                                  case "Failed" ->
+                                      "Delivery failed. Check Gmail settings and press Email CSV to"
+                                          + " retry.";
+                                  case "Not configured" ->
+                                      "Email is not configured. Download CSV is still available.";
+                                  default -> "Not sent. Use Email CSV to send these results.";
+                                })
+                        .cls("api-history-note")
+                        .attr("role", "status")
+                    : null,
                 el(
                         "p",
                         job.complete

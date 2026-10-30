@@ -464,6 +464,10 @@ class ConfiguredApiTests {
 
   @Test
   void testAllRequiresAuthenticationAndCsrf() throws Exception {
+    mvc.perform(post("/admin/lss-plants/checks/example/email").with(authentication(auth)))
+        .andExpect(status().isForbidden());
+    mvc.perform(post("/admin/lss-plants/checks/example/email").with(csrf()))
+        .andExpect(status().is3xxRedirection());
     mvc.perform(post("/admin/lss-plants/test-all").with(authentication(auth)))
         .andExpect(status().isForbidden());
     mvc.perform(post("/admin/lss-plants/test-all").with(csrf()))
