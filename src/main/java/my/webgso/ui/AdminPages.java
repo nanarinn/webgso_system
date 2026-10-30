@@ -103,7 +103,16 @@ final class AdminPages {
                         .attr("method", "get"),
                 table(headers, rows, "No records found.").attr("data-plant-table", plants),
                 OperationsPages.pagination(
-                    c, "Record pages", "q", "filterPlant", "filterType", "filterResult"))
+                    c,
+                    "Record pages",
+                    "q",
+                    "filterType",
+                    "filterResult",
+                    "locationMode",
+                    "locationPlants",
+                    "locationStates",
+                    "locationRegions",
+                    "locationZones"))
             .cls("panel"));
     return page;
   }
@@ -349,13 +358,45 @@ final class AdminPages {
   }
 
   private static Element plantFilters(PageContext c) {
-    var plants =
-        el("select")
-            .attr("id", "filter-plant")
-            .attr("name", "filterPlant")
-            .add(option(0, "All plants", c.text("filterPlant")));
-    for (LssPlant plant : c.<LssPlant>list("filterPlants"))
-      plants.add(option(plant.id, plant.plantId + " · " + plant.name, c.text("filterPlant")));
+    var location =
+        el(
+                "div",
+                el("h3", "1 · Plant or location"),
+                el("p", "Choose one location filter. Select one or more values within that group.")
+                    .cls("filter-hint"))
+            .cls("location-filter-panel");
+    var all = c.<LssPlant>list("filterPlants");
+    var plantOptions = new LinkedHashMap<String, String>();
+    all.forEach(p -> plantOptions.put(String.valueOf(p.id), p.plantId + " · " + p.name));
+    location.add(
+        locationGroup(c, "all", "All locations", "No location restrictions", "", Map.of()));
+    location.add(
+        locationGroup(
+            c, "plant", "Plant", "Select individual plants", "locationPlants", plantOptions));
+    for (String mode : List.of("state", "region", "zone")) {
+      var options = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
+      for (LssPlant plant : all) {
+        String value =
+            switch (mode) {
+              case "state" -> plant.state;
+              case "region" -> PlantLocationFilter.region(plant.state);
+              default -> plant.zone;
+            };
+        if (value != null && !value.isBlank()) options.putIfAbsent(value, value);
+      }
+      String title = Character.toUpperCase(mode.charAt(0)) + mode.substring(1);
+      String name = "location" + title + "s";
+      location.add(
+          locationGroup(
+              c,
+              mode,
+              title,
+              mode.equals("region")
+                  ? "Regions derived from plant states"
+                  : "Values saved in Plant Config",
+              name,
+              options));
+    }
     var types = el("select").attr("id", "filter-type").attr("name", "filterType");
     for (String type : List.of("", "DDQ", "MMF"))
       types.add(option(type, type.isEmpty() ? "All API types" : type, c.text("filterType")));
@@ -366,17 +407,95 @@ final class AdminPages {
     return el(
             "form",
             el(
-                "div",
-                el("label", "Search records").attr("for", "search"),
-                input("q", "text", c.text("q")).attr("id", "search").attr("maxlength", 100)),
-            el("div", el("label", "Plant").attr("for", "filter-plant"), plants),
-            el("div", el("label", "API type").attr("for", "filter-type"), types),
-            el("div", el("label", "Test result").attr("for", "filter-result"), results),
-            el("div", button("Apply filters", true), action("Clear", "/admin/lss-plants", false))
-                .cls("java-actions"))
+                "header",
+                el("span", "QUERY CONTROLS").cls("section-label"),
+                el("h2", "Plant configuration filters")),
+            el(
+                    "div",
+                    location,
+                    el(
+                            "div",
+                            el("h3", "2 · API filters"),
+                            el(
+                                    "p",
+                                    "Refine plants by configured APIs and their latest test"
+                                        + " results.")
+                                .cls("filter-hint"),
+                            el(
+                                "div",
+                                el("label", "Search records").attr("for", "search"),
+                                input("q", "search", c.text("q"))
+                                    .attr("id", "search")
+                                    .attr("maxlength", 100)
+                                    .attr("placeholder", "Search plant records…")),
+                            el("div", el("label", "API type").attr("for", "filter-type"), types),
+                            el(
+                                "div",
+                                el("label", "Test result").attr("for", "filter-result"),
+                                results))
+                        .cls("api-filter-panel"))
+                .cls("plant-filter-columns"),
+            el(
+                "footer",
+                el(
+                        "p",
+                        "Only the selected location group is applied. Use All locations to remove"
+                            + " the location filter.")
+                    .cls("filter-hint"),
+                el(
+                        "div",
+                        action("Clear", "/admin/lss-plants", false),
+                        button("Apply filters", true))
+                    .cls("java-actions")))
         .attr("method", "get")
         .attr("action", "/admin/lss-plants")
-        .cls("plant-config-filters");
+        .cls("plant-config-filters location-query");
+  }
+
+  private static Element locationGroup(
+      PageContext c,
+      String mode,
+      String title,
+      String hint,
+      String name,
+      Map<String, String> options) {
+    String selected = c.text("locationMode");
+    if (selected.isBlank()) selected = "all";
+    var card =
+        el(
+                "section",
+                input("locationMode", "radio", mode)
+                    .attr("id", "location-mode-" + mode)
+                    .flag("checked", selected.equals(mode)),
+                el("label", el("strong", title), el("small", hint))
+                    .attr("for", "location-mode-" + mode)
+                    .cls("location-mode-label"))
+            .cls("location-choice");
+    if (!mode.equals("all")) {
+      var choices = el("div").cls("location-values");
+      var picked = Arrays.asList(c.text(name).split(","));
+      options.forEach(
+          (value, label) ->
+              choices.add(
+                  el(
+                          "label",
+                          input(name, "checkbox", value)
+                              .flag(
+                                  "checked",
+                                  picked.stream().anyMatch(v -> v.equalsIgnoreCase(value))),
+                          el("span", label))
+                      .cls("location-value")));
+      if (options.isEmpty())
+        choices.add(
+            el(
+                    "p",
+                    "No "
+                        + title.toLowerCase(Locale.ROOT)
+                        + " values available. Add them in Plant Config.")
+                .cls("filter-hint"));
+      card.add(choices);
+    }
+    return card;
   }
 
   static Element edit(PageContext c) {

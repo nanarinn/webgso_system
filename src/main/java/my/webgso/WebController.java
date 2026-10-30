@@ -564,7 +564,12 @@ public class WebController {
       @RequestParam(defaultValue = "") String q,
       @RequestParam(defaultValue = "0") int filterPlant,
       @RequestParam(defaultValue = "") String filterType,
-      @RequestParam(defaultValue = "") String filterResult) {
+      @RequestParam(defaultValue = "") String filterResult,
+      @RequestParam(defaultValue = "all") String locationMode,
+      @RequestParam(defaultValue = "") List<String> locationPlants,
+      @RequestParam(defaultValue = "") List<String> locationStates,
+      @RequestParam(defaultValue = "") List<String> locationRegions,
+      @RequestParam(defaultValue = "") List<String> locationZones) {
     var resource = Resources.get(request.getRequestURI());
     int safePage = Math.clamp(page, 0, 100000);
     String predicate = "";
@@ -592,18 +597,46 @@ public class WebController {
     long total;
     List<?> records;
     if (resource.type() == LssPlant.class) {
-      var filter = new PlantConfigFilter(filterPlant, filterType, filterResult);
+      if (locationMode.equals("all") && filterPlant > 0) {
+        locationMode = "plant";
+        locationPlants = List.of(String.valueOf(filterPlant));
+      }
+      var location =
+          new PlantLocationFilter(
+              locationMode,
+              switch (locationMode) {
+                case "plant" -> locationPlants;
+                case "state" -> locationStates;
+                case "region" -> locationRegions;
+                case "zone" -> locationZones;
+                default -> List.of();
+              });
+      var filter = new PlantConfigFilter(0, filterType, filterResult);
       var allPlants = db.list(LssPlant.class, "ORDER BY \"Name\"");
       var links = db.list(PlantApiConfiguration.class, "");
       var latest = testHistory.latest();
       var matching =
           db.list(LssPlant.class, predicate + " ORDER BY \"Id\" DESC", args.toArray()).stream()
+              .filter(location::matches)
               .filter(p -> filter.matches(p, links, latest))
               .toList();
       total = matching.size();
       records = matching.stream().skip((long) safePage * 25).limit(25).toList();
       model.addAttribute("filterPlants", allPlants);
-      model.addAttribute("filterPlant", filterPlant);
+      model.addAttribute("filterPlant", 0);
+      model.addAttribute("locationMode", location.mode());
+      model.addAttribute(
+          "locationPlants",
+          location.mode().equals("plant") ? String.join(",", location.values()) : "");
+      model.addAttribute(
+          "locationStates",
+          location.mode().equals("state") ? String.join(",", location.values()) : "");
+      model.addAttribute(
+          "locationRegions",
+          location.mode().equals("region") ? String.join(",", location.values()) : "");
+      model.addAttribute(
+          "locationZones",
+          location.mode().equals("zone") ? String.join(",", location.values()) : "");
       model.addAttribute("filterType", filterType);
       model.addAttribute("filterResult", filterResult);
     } else {

@@ -66,6 +66,51 @@ class ConfiguredApiTests {
   }
 
   @Test
+  void locationFiltersApplyOneGroupAndKeepSelectionsAcrossPages() throws Exception {
+    plant.state = "PERAK";
+    plant.zone = "West";
+    db.update(plant);
+    // A stale selection in a collapsed group must never restrict the chosen group.
+    var response =
+        mvc.perform(
+                get("/admin/lss-plants")
+                    .param("q", plant.plantId)
+                    .param("locationMode", "zone")
+                    .param("locationZones", "West")
+                    .param("locationStates", "Johor")
+                    .with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn();
+    assertThat(response.getModelAndView().getModel().get("total")).isEqualTo(1L);
+    assertThat(response.getModelAndView().getModel().get("locationStates")).isEqualTo("");
+    assertThat(response.getResponse().getContentAsString())
+        .contains("Plant configuration filters", "location-mode-region", "location-mode-zone")
+        .contains("name=\"locationZones\" type=\"checkbox\" value=\"West\" checked=\"checked\"");
+    var excluded =
+        mvc.perform(
+                get("/admin/lss-plants")
+                    .param("q", plant.plantId)
+                    .param("locationMode", "region")
+                    .param("locationRegions", "Southern")
+                    .with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn();
+    assertThat(excluded.getModelAndView().getModel().get("total")).isEqualTo(0L);
+    var included =
+        mvc.perform(
+                get("/admin/lss-plants")
+                    .param("q", plant.plantId)
+                    .param("locationMode", "state")
+                    .param("locationStates", "Johor", "Perak")
+                    .with(authentication(auth)))
+            .andExpect(status().isOk())
+            .andReturn();
+    assertThat(included.getModelAndView().getModel().get("total")).isEqualTo(1L);
+    assertThat(included.getModelAndView().getModel().get("locationStates"))
+        .isEqualTo("Johor,Perak");
+  }
+
+  @Test
   void rowShowsSavedDatasetNamesAndTestsWithoutDropdown() throws Exception {
     String html =
         mvc.perform(get("/admin/lss-plants").param("q", plant.plantId).with(authentication(auth)))
