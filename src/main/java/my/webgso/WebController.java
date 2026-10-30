@@ -126,12 +126,11 @@ public class WebController {
   public String register(
       @RequestParam String username,
       @RequestParam String email,
-      @RequestParam String displayName,
       @RequestParam String password,
       @RequestParam String confirmPassword) {
     if (!password.equals(confirmPassword))
       throw new IllegalArgumentException("The passwords do not match.");
-    emailVerification.register(username.trim(), email.trim(), displayName.trim(), password);
+    emailVerification.register(username.trim(), email.trim(), username.trim(), password);
     return "redirect:/login?registered=success";
   }
 

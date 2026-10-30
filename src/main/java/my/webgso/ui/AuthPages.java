@@ -204,13 +204,6 @@ final class AuthPages {
             "/account/register",
             "java-form signup-form",
             field(
-                "Full name",
-                input("displayName", "text", null)
-                    .attr("autocomplete", "name")
-                    .attr("maxlength", 160)
-                    .attr("placeholder", "Enter your full name")
-                    .flag("required", true)),
-            field(
                 "Username",
                 input("username", "text", null)
                     .attr("autocomplete", "username")
@@ -220,15 +213,14 @@ final class AuthPages {
                     .attr("placeholder", "Choose a username")
                     .flag("required", true)),
             field(
-                    "Gmail address",
-                    input("email", "email", null)
-                        .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
-                        .attr("title", "Only @gmail.com email addresses are allowed.")
-                        .attr("autocomplete", "email")
-                        .attr("maxlength", 256)
-                        .attr("placeholder", "you@gmail.com")
-                        .flag("required", true))
-                .cls("signup-wide"),
+                "Gmail address",
+                input("email", "email", null)
+                    .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
+                    .attr("title", "Only @gmail.com email addresses are allowed.")
+                    .attr("autocomplete", "email")
+                    .attr("maxlength", 256)
+                    .attr("placeholder", "you@gmail.com")
+                    .flag("required", true)),
             field(
                 "Password",
                 input("password", "password", null)

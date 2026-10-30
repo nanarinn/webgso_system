@@ -988,12 +988,22 @@ class ApplicationIntegrationTests {
   void registrationRequiresOwnEmailVerificationWithoutAnotherUserApproval() throws Exception {
     String name = "verify." + System.nanoTime();
     String email = name + "@gmail.com";
+    mvc.perform(get("/register"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("name=\"displayName\""))))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Full name"))));
     mvc.perform(
             post("/account/register")
                 .with(csrf())
                 .param("username", name)
                 .param("email", email)
-                .param("displayName", "New user")
                 .param("password", "StrongPassword123!")
                 .param("confirmPassword", "StrongPassword123!"))
         .andExpect(redirectedUrl("/login?registered=success"));
@@ -1003,6 +1013,7 @@ class ApplicationIntegrationTests {
                 "WHERE \"NormalizedEmail\"=?",
                 email.toUpperCase(Locale.ROOT))
             .getFirst();
+    assertThat(user.displayName).isEqualTo(name);
     assertThat(user.accessStatus).isEqualTo("Pending");
     assertThat(user.emailConfirmed).isFalse();
     assertThat(
