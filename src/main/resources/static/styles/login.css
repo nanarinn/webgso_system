@@ -64,3 +64,13 @@ a:focus-visible,button:focus-visible,summary:focus-visible { outline:3px solid #
 @media(max-width:660px) { .auth-layout { margin:16px; border-radius:16px; } .auth-story { padding:24px; } .auth-access { padding:28px 22px; } .auth-form-heading h2 { font-size:26px; } }
 @media(max-width:420px) { .auth-story h1 { font-size:25px; } .auth-form-heading h2 { font-size:24px; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none !important; } }
+
+/* Let the login fill the browser while keeping form lines comfortably readable. */
+body.auth-page .auth-layout { width:100%; max-width:none; min-height:100vh; min-height:100svh; margin:0; border:0; border-radius:0; box-shadow:none; }
+body.auth-page .auth-story { padding:clamp(32px,4vw,72px); }
+body.auth-page .auth-story-copy { margin:auto 0; padding:42px 0; }
+body.auth-page .auth-story h1 { font-size:clamp(32px,3vw,52px); }
+body.auth-page .auth-access { justify-content:center; padding:40px clamp(30px,5vw,90px); }
+body.auth-page .auth-access-content { max-width:500px; }
+@media(max-width:820px) { body.auth-page .auth-story { padding:26px 30px; } body.auth-page .auth-story-copy { margin:24px 0 0; padding:0; } body.auth-page .auth-story h1 { font-size:27px; } body.auth-page .auth-access { padding:30px 24px; } }
+@media(max-width:420px) { body.auth-page .auth-story { padding:24px; } body.auth-page .auth-story h1 { font-size:25px; } body.auth-page .auth-access { padding:28px 22px; } }
