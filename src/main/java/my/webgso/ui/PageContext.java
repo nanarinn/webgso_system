@@ -136,6 +136,9 @@ public record PageContext(Map<String, Object> model, HttpServletRequest request)
                       .cls("java-empty")));
     return el("div", el("table", el("thead", header), el("tbody", rows)))
         .cls("java-table-wrap")
+        .attr("tabindex", "0")
+        .attr("role", "region")
+        .attr("aria-label", "Data table; scroll horizontally to see all columns")
         .attr("data-columns", headings.size())
         .attr("data-id-column", !headings.isEmpty() && headings.getFirst().equals("ID"));
   }

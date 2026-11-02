@@ -336,15 +336,27 @@ final class AdminPages {
                     .attr("aria-describedby", deletePopup + "-message")
                     .cls("plant-delete-popup"))
             .cls("plant-row-actions");
-    return row(
-        plant.get("id"),
-        plant.get("plantId"),
-        plant.get("name"),
-        Objects.toString(plant.get("zone"), "").isBlank() ? "—" : plant.get("zone"),
-        plant.get("state"),
-        plant.get("capacityMw"),
-        endpoints,
-        actions);
+    return el(
+            "tr",
+            plantCell("ID", plant.get("id")),
+            plantCell("Plant ID", plant.get("plantId")),
+            plantCell("Plant name", plant.get("name")),
+            plantCell(
+                "Zone",
+                Objects.toString(plant.get("zone"), "").isBlank() ? "—" : plant.get("zone")),
+            plantCell("State", plant.get("state")),
+            plantCell(
+                "Capacity (MW)",
+                plant.get("capacityMw") instanceof java.math.BigDecimal capacity
+                    ? capacity.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+                    : plant.get("capacityMw")),
+            plantCell("Configured APIs", endpoints),
+            plantCell("Actions", actions))
+        .cls("plant-record");
+  }
+
+  private static Element plantCell(String label, Object value) {
+    return el("td", value).attr("data-label", label);
   }
 
   private static void addPlantApi(

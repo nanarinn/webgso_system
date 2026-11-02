@@ -64,10 +64,11 @@ public final class JavaPages {
                 .attr("name", "viewport")
                 .attr("content", "width=device-width,initial-scale=1"),
             el("title", title + " | " + Branding.REPOSITORY),
+            el("meta").attr("name", "theme-color").attr("content", "#103d30"),
             el("link").attr("rel", "icon").attr("type", "image/png").attr("href", Branding.LOGO));
     List<String> styles =
         login
-            ? List.of("/styles/login.css?v=8")
+            ? List.of("/styles/login.css?v=8", "/styles/responsive-finish.css?v=1")
             : List.of(
                 "/bootstrap/bootstrap.min.css",
                 "/styles/app.css",
@@ -80,7 +81,8 @@ public final class JavaPages {
                 "/styles/workspace-finish.css?v=1",
                 "/styles/signup.css?v=3",
                 "/styles/plant-filters.css?v=3",
-                "/styles/account-tools.css?v=1");
+                "/styles/account-tools.css?v=1",
+                "/styles/responsive-finish.css?v=1");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
       head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));
@@ -195,7 +197,13 @@ public final class JavaPages {
                     .attr("id", "mobile-nav")
                     .cls("nav-toggle")
                     .attr("aria-label", "Navigation menu"),
-                el("label", "☰ Menu").attr("for", "mobile-nav").cls("mobile-nav-label"),
+                el(
+                        "label",
+                        el("span", "☰").cls("mobile-nav-symbol").attr("aria-hidden", "true"),
+                        el("span", "Menu").cls("nav-open-text"),
+                        el("span", "Close").cls("nav-close-text"))
+                    .attr("for", "mobile-nav")
+                    .cls("mobile-nav-label"),
                 nav)
             .cls("app-sidebar");
     var notifications = el("div").cls("notification-panel");
