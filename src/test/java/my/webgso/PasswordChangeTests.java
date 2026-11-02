@@ -144,14 +144,14 @@ class PasswordChangeTests {
                 .with(authentication(auth))
                 .param("currentPassword", OLD))
         .andExpect(status().isForbidden());
-    mvc.perform(get("/account/profile/edit").with(authentication(auth)))
+    mvc.perform(get("/account/profile/password").with(authentication(auth)))
         .andExpect(
             content()
                 .string(
                     org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString("name=\"confirmPassword\""))));
     String code = send();
-    mvc.perform(get("/account/profile/edit").with(authentication(auth)))
+    mvc.perform(get("/account/profile/password").with(authentication(auth)))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Verify code")))
         .andExpect(
             content()
@@ -164,8 +164,8 @@ class PasswordChangeTests {
                 .with(authentication(auth))
                 .with(csrf())
                 .param("code", code))
-        .andExpect(redirectedUrl("/account/profile/edit#change-password"));
-    mvc.perform(get("/account/profile/edit").with(authentication(auth)))
+        .andExpect(redirectedUrl("/account/profile/password"));
+    mvc.perform(get("/account/profile/password").with(authentication(auth)))
         .andExpect(
             content().string(org.hamcrest.Matchers.containsString("name=\"confirmPassword\"")));
     mvc.perform(

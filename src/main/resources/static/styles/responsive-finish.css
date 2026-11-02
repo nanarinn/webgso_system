@@ -218,3 +218,38 @@ body { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
  .profile-email-change .verification-card { padding:24px 16px; border-radius:15px; }
  .app-content .verification-code-input { font-size:27px; letter-spacing:.28em; min-height:64px; }
 }
+body:has(.profile-security-overlay) { overflow:hidden; }
+.profile-security-actions { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; }
+.profile-security-actions > div { padding:20px; border:1px solid #dfe8e0; border-radius:14px; background:#f8faf7; }
+.profile-security-actions strong { color:#204d3b; }
+.profile-security-actions p { color:#718578; font-size:13px; line-height:1.6; }
+.profile-security-overlay { position:fixed; inset:0; z-index:5000; display:flex; align-items:center; justify-content:center; padding:24px; background:#0b2f2580; backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px); }
+.profile-security-dialog { position:relative; inset:auto; display:block; width:min(620px,100%); max-width:100%; max-height:calc(100dvh - 48px); overflow-y:auto; overscroll-behavior:contain; margin:0; padding:28px 30px; border:1px solid #d8e5d8; border-radius:22px; box-shadow:0 28px 90px #05271940; background:#fff; color:#214737; font-family:"Segoe UI",Arial,sans-serif; }
+.profile-security-dialog > header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; }
+.profile-security-dialog > header > span { font-size:10px; font-weight:700; letter-spacing:.16em; color:#688675; }
+.profile-dialog-close { display:grid; place-items:center; width:36px; height:36px; border:1px solid #dce7de; border-radius:50%; color:#54715f; background:#f5f8f3; font-size:24px; text-decoration:none; }
+.profile-dialog-close:hover { background:#e8f1e1; }
+.profile-dialog-close:focus-visible { outline:3px solid #b4ce93; outline-offset:3px; }
+.profile-security-dialog .profile-email-change { margin:0; padding:0; border:0; scroll-margin:0; }
+.profile-security-dialog .profile-email-change > h2 { margin:0 0 12px; font-size:27px; line-height:1.25; letter-spacing:-.025em; }
+.profile-security-dialog p { font-size:13px; line-height:1.65; color:#708376; }
+.profile-security-dialog .verification-steps { margin:20px 0; }
+.profile-security-dialog label { display:grid; gap:8px; font-size:13px; font-weight:600; color:#416650; }
+.profile-security-dialog input { box-sizing:border-box; width:100%; min-width:0; min-height:48px; border:1px solid #cbdcce; border-radius:10px; padding:12px 14px; font:400 15px "Segoe UI",Arial,sans-serif; color:#214b38; background:#fff; }
+.profile-security-dialog input:focus { outline:3px solid #e2edcf; outline-offset:1px; border-color:#89ac74; }
+.profile-security-dialog .verification-code-input { min-height:68px; margin-top:0; text-align:center; font-size:30px; font-weight:650; letter-spacing:.35em; padding-left:24px; border:1.5px solid #a7c3ad; box-shadow:0 0 0 4px #f2f6ed; }
+.profile-security-dialog .verification-card { max-width:100%; margin:20px 0 0; padding:24px; box-shadow:none; }
+.profile-security-dialog :is(button,.primary-action,.secondary-action) { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:44px; padding:11px 18px; border:1px solid #cbdcce; border-radius:10px; color:#23543e; background:white; text-decoration:none; font:600 13px "Segoe UI",Arial,sans-serif; cursor:pointer; }
+.profile-security-dialog :is(button,.primary-action) { background:#19543f; border-color:#19543f; color:white; }
+.profile-security-dialog :is(button,a):focus-visible { outline:3px solid #b9d49b; outline-offset:3px; }
+.profile-security-dialog .profile-dialog-notice { padding:12px 14px; border:1px solid #d2e3c5; border-radius:10px; color:#3e663d; background:#f0f7e9; }
+.profile-security-dialog .profile-error { padding:12px 14px; border:1px solid #f2c7bd; border-radius:10px; color:#ad3828; background:#fff4f0; }
+.profile-security-dialog .verification-actions a { background:transparent; border-color:transparent; }
+@media(max-width:600px) {
+ .profile-security-actions { grid-template-columns:1fr; }
+ .profile-security-overlay { padding:12px; }
+ .profile-security-dialog { padding:22px 18px; border-radius:17px; max-height:calc(100dvh - 24px); }
+ .profile-security-dialog input { font-size:16px; }
+ .profile-security-dialog .verification-card { padding:20px 14px; }
+ .profile-security-dialog .verification-code-input { font-size:27px; letter-spacing:.28em; }
+}

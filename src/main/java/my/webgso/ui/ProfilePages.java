@@ -114,14 +114,61 @@ final class ProfilePages {
             el(
                     "div",
                     summary,
-                    el(
-                            "article",
-                            form,
-                            managed ? null : emailChange(c),
-                            managed ? null : passwordChange(c))
+                    el("article", form, managed ? null : securityActions())
                         .cls("panel profile-edit-panel"))
                 .cls("profile-layout"))
         .cls("profile-page");
+  }
+
+  private static Element securityActions() {
+    return el(
+            "section",
+            el("h2", "Account security"),
+            el("p", "Manage your sign-in details with email verification."),
+            el(
+                    "div",
+                    el(
+                        "div",
+                        el("strong", "Email address"),
+                        el("p", "Verify a new Gmail address before changing it."),
+                        action("Change email", "/account/profile/email", false)),
+                    el(
+                        "div",
+                        el("strong", "Password"),
+                        el("p", "Confirm your identity and choose a new password."),
+                        action("Change password", "/account/profile/password", false)))
+                .cls("profile-security-actions"))
+        .cls("profile-email-change");
+  }
+
+  static Element dialog(PageContext c) {
+    ApplicationUser user = c.value("profile");
+    if (user == null || Boolean.TRUE.equals(user.isEntraUser)) return null;
+    boolean email = "email".equals(c.text("profileDialog"));
+    return el(
+            "div",
+            el(
+                    "dialog",
+                    el(
+                        "header",
+                        el("span", "ACCOUNT SECURITY"),
+                        action("×", "/account/profile/edit", false)
+                            .cls("profile-dialog-close")
+                            .attr("aria-label", "Close verification popup")),
+                    c.model().get("message") == null
+                        ? null
+                        : el("p", c.text("message"))
+                            .cls("profile-dialog-notice")
+                            .attr("role", "status"),
+                    email && c.model().get("profileError") != null
+                        ? el("p", c.text("profileError")).cls("profile-error").attr("role", "alert")
+                        : null,
+                    email ? emailChange(c) : passwordChange(c))
+                .flag("open", true)
+                .attr("aria-modal", "true")
+                .attr("aria-label", email ? "Change email" : "Change password")
+                .cls("profile-security-dialog"))
+        .cls("profile-security-overlay");
   }
 
   private static Element emailChange(PageContext c) {
@@ -287,7 +334,7 @@ final class ProfilePages {
                         + " received.")
                 .cls("verification-help")
                 .attr("id", id + "-hint"),
-            el("div", button(submit, true), action("Cancel", "/account/profile", false))
+            el("div", button(submit, true), action("Cancel", "/account/profile/edit", false))
                 .cls("verification-actions"),
             el("p", "Your account details stay unchanged until verification is complete.")
                 .cls("verification-assurance"))

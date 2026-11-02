@@ -264,8 +264,13 @@ public final class JavaPages {
             .cls("app-content");
     return el(
         "div",
-        link("Skip to content", "#main-content").cls("skip-link"),
-        el("div", sidebar, el("main", topbar, mainContent).cls("app-main")).cls("app-shell"),
+        link("Skip to content", "#main-content")
+            .cls("skip-link")
+            .flag("inert", c.model().get("profileDialog") != null),
+        el("div", sidebar, el("main", topbar, mainContent).cls("app-main"))
+            .cls("app-shell")
+            .flag("inert", c.model().get("profileDialog") != null),
+        c.model().get("profileDialog") == null ? null : ProfilePages.dialog(c),
         c.model().get("apiTestMessage") == null ? null : ApiTestPopup.render(c));
   }
 }

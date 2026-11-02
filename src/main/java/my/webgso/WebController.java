@@ -1195,6 +1195,24 @@ public class WebController {
     return profile(model, auth);
   }
 
+  @GetMapping("/account/profile/email")
+  public String emailChangeDialog(Model model, Authentication auth) {
+    if (Boolean.TRUE.equals(
+        db.find(ApplicationUser.class, principal(auth).id()).orElseThrow().isEntraUser))
+      return "redirect:/account/profile/edit";
+    model.addAttribute("profileDialog", "email");
+    return editProfile(model, auth);
+  }
+
+  @GetMapping("/account/profile/password")
+  public String passwordChangeDialog(Model model, Authentication auth) {
+    if (Boolean.TRUE.equals(
+        db.find(ApplicationUser.class, principal(auth).id()).orElseThrow().isEntraUser))
+      return "redirect:/account/profile/edit";
+    model.addAttribute("profileDialog", "password");
+    return editProfile(model, auth);
+  }
+
   @PostMapping("/account/profile")
   public String saveProfile(
       @RequestParam String displayName,
@@ -1235,7 +1253,7 @@ public class WebController {
     } catch (IllegalArgumentException e) {
       flash.addFlashAttribute("profileError", e.getMessage());
     }
-    return "redirect:/account/profile/edit";
+    return "redirect:/account/profile/email";
   }
 
   @PostMapping("/account/profile/email/verify")
@@ -1260,7 +1278,7 @@ public class WebController {
           "This Gmail address is no longer available. Request a new code with a different"
               + " address.");
     }
-    return "redirect:/account/profile/edit";
+    return "redirect:/account/profile/email";
   }
 
   @PostMapping("/account/profile/password/send-code")
@@ -1275,7 +1293,7 @@ public class WebController {
     } catch (IllegalArgumentException e) {
       flash.addFlashAttribute("passwordChangeError", e.getMessage());
     }
-    return "redirect:/account/profile/edit#change-password";
+    return "redirect:/account/profile/password";
   }
 
   @PostMapping("/account/profile/password/verify")
@@ -1291,7 +1309,7 @@ public class WebController {
     } catch (IllegalArgumentException e) {
       flash.addFlashAttribute("passwordChangeError", e.getMessage());
     }
-    return "redirect:/account/profile/edit#change-password";
+    return "redirect:/account/profile/password";
   }
 
   @PostMapping("/account/profile/password/change")
@@ -1309,7 +1327,7 @@ public class WebController {
       return "redirect:/login?passwordReset=true";
     } catch (IllegalArgumentException e) {
       flash.addFlashAttribute("passwordChangeError", e.getMessage());
-      return "redirect:/account/profile/edit#change-password";
+      return "redirect:/account/profile/password";
     }
   }
 

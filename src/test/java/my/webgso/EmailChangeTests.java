@@ -55,11 +55,11 @@ class EmailChangeTests {
   @Test
   void profileShowsSeparateCodeFormsAndVerifiesThroughAuthenticatedPost() throws Exception {
     var auth = accounts.token(user);
-    mvc.perform(get("/account/profile/edit").with(authentication(auth)))
+    mvc.perform(get("/account/profile/email").with(authentication(auth)))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Send code")));
     String code = send();
-    mvc.perform(get("/account/profile/edit").with(authentication(auth)))
+    mvc.perform(get("/account/profile/email").with(authentication(auth)))
         .andExpect(
             content()
                 .string(
