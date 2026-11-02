@@ -25,6 +25,7 @@ public class WebController {
   private final ManualBatchService batches;
   private final ProfileService profileService;
   private final EmailChange emailChange;
+  private final PasswordChange passwordChange;
   private final ApiTestHistoryService testHistory;
   private final ApiRetestService apiRetests;
   private final ApiTestTiming testTiming;
@@ -43,6 +44,7 @@ public class WebController {
       ManualBatchService batches,
       ProfileService profileService,
       EmailChange emailChange,
+      PasswordChange passwordChange,
       ApiTestHistoryService testHistory,
       ApiRetestService apiRetests,
       ApiTestTiming testTiming,
@@ -62,6 +64,7 @@ public class WebController {
     this.batches = batches;
     this.profileService = profileService;
     this.emailChange = emailChange;
+    this.passwordChange = passwordChange;
     this.testHistory = testHistory;
     this.apiRetests = apiRetests;
     this.testTiming = testTiming;
@@ -102,8 +105,8 @@ public class WebController {
           db.list(
               UserAccessNotification.class,
               "WHERE \"UserId\"=? AND \"NotificationType\" NOT IN"
-                  + " ('EmailChangeCode','PasswordReset','EmailVerification') ORDER BY"
-                  + " \"CreatedAt\" DESC LIMIT 15",
+                  + " ('EmailChangeCode','PasswordChangeCode','PasswordReset','EmailVerification')"
+                  + " ORDER BY \"CreatedAt\" DESC LIMIT 15",
               p.id()));
     }
     model.addAttribute("title", "LSS Repository");
@@ -1170,6 +1173,7 @@ public class WebController {
     model.addAttribute("title", "My Profile");
     model.addAttribute("profile", user);
     model.addAttribute("pendingEmail", emailChange.pending(user.id).orElse(""));
+    model.addAttribute("passwordChangeStage", passwordChange.stage(user.id));
     if (!model.containsAttribute("profileForm"))
       model.addAttribute(
           "profileForm",
@@ -1257,6 +1261,56 @@ public class WebController {
               + " address.");
     }
     return "redirect:/account/profile/edit";
+  }
+
+  @PostMapping("/account/profile/password/send-code")
+  public String sendPasswordChangeCode(
+      @RequestParam String currentPassword, Authentication auth, RedirectAttributes flash) {
+    try {
+      passwordChange.request(principal(auth).id(), currentPassword);
+      flash.addFlashAttribute(
+          "message",
+          "A verification code has been queued for your account Gmail address. Check your inbox and"
+              + " spam folder.");
+    } catch (IllegalArgumentException e) {
+      flash.addFlashAttribute("passwordChangeError", e.getMessage());
+    }
+    return "redirect:/account/profile/edit#change-password";
+  }
+
+  @PostMapping("/account/profile/password/verify")
+  public String verifyPasswordChange(
+      @RequestParam String code, Authentication auth, RedirectAttributes flash) {
+    try {
+      if (passwordChange.verify(principal(auth).id(), code.strip()))
+        flash.addFlashAttribute("message", "Code verified. You can now choose your new password.");
+      else
+        flash.addFlashAttribute(
+            "passwordChangeError",
+            "The code is incorrect, expired or already used. Request a new code if needed.");
+    } catch (IllegalArgumentException e) {
+      flash.addFlashAttribute("passwordChangeError", e.getMessage());
+    }
+    return "redirect:/account/profile/edit#change-password";
+  }
+
+  @PostMapping("/account/profile/password/change")
+  public String changeProfilePassword(
+      @RequestParam String password,
+      @RequestParam String confirmPassword,
+      Authentication auth,
+      HttpServletRequest request,
+      RedirectAttributes flash) {
+    try {
+      passwordChange.change(principal(auth).id(), password, confirmPassword);
+      var session = request.getSession(false);
+      if (session != null) session.invalidate();
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+      return "redirect:/login?passwordReset=true";
+    } catch (IllegalArgumentException e) {
+      flash.addFlashAttribute("passwordChangeError", e.getMessage());
+      return "redirect:/account/profile/edit#change-password";
+    }
   }
 
   @GetMapping("/admin/users")

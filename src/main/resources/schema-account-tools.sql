@@ -17,3 +17,10 @@ CREATE TABLE IF NOT EXISTS "GsoEmailChanges" (
  "RequestedAt" timestamp with time zone NOT NULL, "ExpiresAt" timestamp with time zone NOT NULL,
  "Attempts" integer NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS "GsoPasswordChanges" (
+ "UserId" varchar(450) PRIMARY KEY REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE,
+ "Email" varchar(256) NOT NULL, "CodeHash" varchar(256) NOT NULL,
+ "SecurityStamp" varchar(256) NOT NULL, "RequestedAt" timestamp with time zone NOT NULL,
+ "ExpiresAt" timestamp with time zone NOT NULL, "Attempts" integer NOT NULL DEFAULT 0,
+ "VerifiedAt" timestamp with time zone
+);

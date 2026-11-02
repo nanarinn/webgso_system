@@ -114,7 +114,11 @@ final class ProfilePages {
             el(
                     "div",
                     summary,
-                    el("article", form, managed ? null : emailChange(c))
+                    el(
+                            "article",
+                            form,
+                            managed ? null : emailChange(c),
+                            managed ? null : passwordChange(c))
                         .cls("panel profile-edit-panel"))
                 .cls("profile-layout"))
         .cls("profile-page");
@@ -166,5 +170,78 @@ final class ProfilePages {
                     button("Verify & change email", true)),
             el("p", "After verification, sign in again using your new Gmail address."))
         .cls("profile-email-change");
+  }
+
+  private static Element passwordChange(PageContext c) {
+    ApplicationUser user = c.value("profile");
+    String stage = c.text("passwordChangeStage");
+    return el(
+            "section",
+            el("h2", "Change password"),
+            el(
+                "p",
+                "Confirm your current password, verify the code sent to your account email, then"
+                    + " choose a new password."),
+            c.model().get("passwordChangeError") == null
+                ? null
+                : el("p", c.text("passwordChangeError")).cls("profile-error").attr("role", "alert"),
+            "change".equals(stage)
+                ? c.post(
+                    "/account/profile/password/change",
+                    "profile-password-change",
+                    el("p", "Email verified. Enter your new password below."),
+                    field(
+                        "New password",
+                        input("password", "password", "")
+                            .attr("autocomplete", "new-password")
+                            .attr("minlength", 12)
+                            .attr("maxlength", 72)
+                            .flag("required", true)),
+                    field(
+                        "Confirm new password",
+                        input("confirmPassword", "password", "")
+                            .attr("autocomplete", "new-password")
+                            .attr("minlength", 12)
+                            .attr("maxlength", 72)
+                            .flag("required", true)),
+                    el(
+                        "p",
+                        "Use 12–72 characters including uppercase and lowercase letters, a number"
+                            + " and a symbol."),
+                    button("Change password", true))
+                : el(
+                    "div",
+                    c.post(
+                        "/account/profile/password/send-code",
+                        "profile-password-request",
+                        field(
+                            "Current password",
+                            input("currentPassword", "password", "")
+                                .attr("autocomplete", "current-password")
+                                .attr("maxlength", 72)
+                                .flag("required", true)),
+                        el("p", "A verification code will be sent to " + user.email + "."),
+                        button("verify".equals(stage) ? "Resend code" : "Send code", true)),
+                    !"verify".equals(stage)
+                        ? null
+                        : c.post(
+                            "/account/profile/password/verify",
+                            "profile-password-verify",
+                            el(
+                                "p",
+                                "Enter the 6-digit code from your Gmail inbox. It expires after 10"
+                                    + " minutes."),
+                            field(
+                                "Verification code",
+                                input("code", "text", "")
+                                    .attr("inputmode", "numeric")
+                                    .attr("pattern", "[0-9]{6}")
+                                    .attr("maxlength", 6)
+                                    .attr("autocomplete", "one-time-code")
+                                    .flag("required", true)),
+                            button("Verify code", true))),
+            el("p", "After changing your password, sign in again with your new password."))
+        .cls("profile-email-change")
+        .attr("id", "change-password");
   }
 }
