@@ -92,7 +92,7 @@ final class ProfilePages {
                         input("email", "email", values.get("email"))
                             .attr("maxlength", 256)
                             .attr("autocomplete", "email")
-                            .flag("readonly", managed)
+                            .flag("readonly", true)
                             .flag("required", true)),
                     field(
                         "Phone number (optional)",
@@ -100,7 +100,8 @@ final class ProfilePages {
                             .attr("maxlength", 30)
                             .attr("autocomplete", "tel")))
                 .cls("profile-fields"),
-            el("p", "Use your Gmail address to sign in.").cls("profile-form-note"),
+            el("p", "Use Change email below to verify a new Gmail address.")
+                .cls("profile-form-note"),
             el("footer", action("Cancel", "/account/profile", false), button("Save changes", true))
                 .cls("profile-form-footer"));
     return el(
@@ -110,8 +111,60 @@ final class ProfilePages {
                 "My Profile",
                 "View and manage your personal information.",
                 action("Email settings", "/account/email-settings", false)),
-            el("div", summary, el("article", form).cls("panel profile-edit-panel"))
+            el(
+                    "div",
+                    summary,
+                    el("article", form, managed ? null : emailChange(c))
+                        .cls("panel profile-edit-panel"))
                 .cls("profile-layout"))
         .cls("profile-page");
+  }
+
+  private static Element emailChange(PageContext c) {
+    String pending = c.text("pendingEmail");
+    return el(
+            "section",
+            el("h2", "Change email"),
+            el(
+                "p",
+                "Your current email stays active until the code sent to your new Gmail address is"
+                    + " verified."),
+            c.post(
+                "/account/profile/email/send-code",
+                "profile-email-request",
+                field(
+                    "New Gmail address",
+                    input("newEmail", "email", pending)
+                        .attr("placeholder", "you@gmail.com")
+                        .attr("maxlength", 256)
+                        .attr("autocomplete", "email")
+                        .flag("required", true)),
+                field(
+                    "Current password",
+                    input("currentPassword", "password", "")
+                        .attr("autocomplete", "current-password")
+                        .flag("required", true)),
+                button(pending.isBlank() ? "Send code" : "Resend code", true)),
+            pending.isBlank()
+                ? null
+                : c.post(
+                    "/account/profile/email/verify",
+                    "profile-email-verify",
+                    el(
+                        "p",
+                        "Enter the 6-digit code sent to "
+                            + pending
+                            + ". The code expires in 10 minutes."),
+                    field(
+                        "Verification code",
+                        input("code", "text", "")
+                            .attr("inputmode", "numeric")
+                            .attr("pattern", "[0-9]{6}")
+                            .attr("maxlength", 6)
+                            .attr("autocomplete", "one-time-code")
+                            .flag("required", true)),
+                    button("Verify & change email", true)),
+            el("p", "After verification, sign in again using your new Gmail address."))
+        .cls("profile-email-change");
   }
 }

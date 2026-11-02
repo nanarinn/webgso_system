@@ -38,6 +38,9 @@ public class ProfileService {
         && (!username.equals(user.userName) || !email.equals(user.email)))
       throw new IllegalArgumentException(
           "Your username and email are managed by your identity provider.");
+    if (!email.equalsIgnoreCase(user.email))
+      throw new IllegalArgumentException(
+          "Use Send code and verify your new Gmail address before changing your email.");
     String normalizedName = username.toUpperCase(Locale.ROOT),
         normalizedEmail = email.toUpperCase(Locale.ROOT);
     if (!db.list(

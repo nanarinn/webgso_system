@@ -113,6 +113,12 @@ final class AuthPages {
               "success"));
     if (c.parameter("reason")) access.add(alert("Your session ended. Sign in to continue.", ""));
     if (c.parameter("logout")) access.add(alert("You have signed out successfully.", "success"));
+    if (c.parameter("emailChanged"))
+      access.add(
+          alert(
+              "Your email address has been verified and changed. Sign in with your new Gmail"
+                  + " address.",
+              "success"));
     if (c.parameter("verification"))
       access.add(
           alert(

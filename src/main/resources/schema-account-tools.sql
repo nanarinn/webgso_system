@@ -10,3 +10,10 @@ CREATE TABLE IF NOT EXISTS "GsoEmailPreferences" (
  "Stale" boolean NOT NULL DEFAULT true, "Excel" boolean NOT NULL DEFAULT true,
  "Digest" boolean NOT NULL DEFAULT true
 );
+CREATE TABLE IF NOT EXISTS "GsoEmailChanges" (
+ "UserId" varchar(450) PRIMARY KEY REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE,
+ "NewEmail" varchar(256) NOT NULL, "OldEmail" varchar(256) NOT NULL,
+ "CodeHash" varchar(256) NOT NULL, "SecurityStamp" varchar(256) NOT NULL,
+ "RequestedAt" timestamp with time zone NOT NULL, "ExpiresAt" timestamp with time zone NOT NULL,
+ "Attempts" integer NOT NULL DEFAULT 0
+);

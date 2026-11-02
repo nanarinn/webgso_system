@@ -24,6 +24,7 @@ public class WebController {
   private final ReportService reports;
   private final ManualBatchService batches;
   private final ProfileService profileService;
+  private final EmailChange emailChange;
   private final ApiTestHistoryService testHistory;
   private final ApiRetestService apiRetests;
   private final ApiTestTiming testTiming;
@@ -41,6 +42,7 @@ public class WebController {
       ReportService reports,
       ManualBatchService batches,
       ProfileService profileService,
+      EmailChange emailChange,
       ApiTestHistoryService testHistory,
       ApiRetestService apiRetests,
       ApiTestTiming testTiming,
@@ -59,6 +61,7 @@ public class WebController {
     this.reports = reports;
     this.batches = batches;
     this.profileService = profileService;
+    this.emailChange = emailChange;
     this.testHistory = testHistory;
     this.apiRetests = apiRetests;
     this.testTiming = testTiming;
@@ -98,7 +101,9 @@ public class WebController {
           "notifications",
           db.list(
               UserAccessNotification.class,
-              "WHERE \"UserId\"=? ORDER BY \"CreatedAt\" DESC LIMIT 15",
+              "WHERE \"UserId\"=? AND \"NotificationType\" NOT IN"
+                  + " ('EmailChangeCode','PasswordReset','EmailVerification') ORDER BY"
+                  + " \"CreatedAt\" DESC LIMIT 15",
               p.id()));
     }
     model.addAttribute("title", "LSS Repository");
@@ -1164,6 +1169,7 @@ public class WebController {
     var user = db.find(ApplicationUser.class, principal(auth).id()).orElseThrow();
     model.addAttribute("title", "My Profile");
     model.addAttribute("profile", user);
+    model.addAttribute("pendingEmail", emailChange.pending(user.id).orElse(""));
     if (!model.containsAttribute("profileForm"))
       model.addAttribute(
           "profileForm",
@@ -1208,6 +1214,49 @@ public class WebController {
           Map.of("displayName", displayName, "username", username, "email", email, "phone", phone));
     }
     return "redirect:/account/profile";
+  }
+
+  @PostMapping("/account/profile/email/send-code")
+  public String sendEmailChangeCode(
+      @RequestParam String newEmail,
+      @RequestParam String currentPassword,
+      Authentication auth,
+      RedirectAttributes flash) {
+    try {
+      emailChange.request(principal(auth).id(), newEmail, currentPassword);
+      flash.addFlashAttribute(
+          "message",
+          "A verification code has been queued for your new Gmail address. Check your inbox and"
+              + " spam folder.");
+    } catch (IllegalArgumentException e) {
+      flash.addFlashAttribute("profileError", e.getMessage());
+    }
+    return "redirect:/account/profile/edit";
+  }
+
+  @PostMapping("/account/profile/email/verify")
+  public String verifyEmailChange(
+      @RequestParam String code,
+      Authentication auth,
+      HttpServletRequest request,
+      RedirectAttributes flash) {
+    try {
+      if (emailChange.confirm(principal(auth).id(), code.strip())) {
+        var session = request.getSession(false);
+        if (session != null) session.invalidate();
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        return "redirect:/login?emailChanged=true";
+      }
+      flash.addFlashAttribute(
+          "profileError",
+          "The code is incorrect, expired or has reached its attempt limit. Request a new code.");
+    } catch (IllegalArgumentException | org.springframework.dao.DataIntegrityViolationException e) {
+      flash.addFlashAttribute(
+          "profileError",
+          "This Gmail address is no longer available. Request a new code with a different"
+              + " address.");
+    }
+    return "redirect:/account/profile/edit";
   }
 
   @GetMapping("/admin/users")

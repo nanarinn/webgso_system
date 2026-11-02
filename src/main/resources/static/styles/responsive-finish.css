@@ -178,3 +178,6 @@ body { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
   .profile-read-details { grid-template-columns: 1fr; gap: 6px; }
   .profile-read-details dd { margin-bottom: 16px; }
 }
+.profile-email-change { margin-top:32px; padding-top:28px; border-top:1px solid var(--gso-border); }
+.profile-email-change form { display:grid; gap:16px; margin:22px 0; }
+.profile-email-change form button { justify-self:start; }

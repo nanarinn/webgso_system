@@ -120,7 +120,7 @@ public class ApiEmailAlerts {
         db.list(
             UserAccessNotification.class,
             "WHERE \"NotificationType\" IN"
-                + " ('ApiTestAlert','ApiTestFailed','ApiTestRecovered','StaleDataAlert','ApiDailySummary','EmailVerification','PasswordReset','AccessDecision')"
+                + " ('ApiTestAlert','ApiTestFailed','ApiTestRecovered','StaleDataAlert','ApiDailySummary','EmailVerification','PasswordReset','AccessDecision','EmailChangeCode','EmailChangeNotice')"
                 + " AND \"DeliveryStatus\"='Pending' ORDER BY \"Id\" LIMIT 10")) {
       if (db.jdbc()
               .update(
@@ -137,6 +137,7 @@ public class ApiEmailAlerts {
         mail.send(List.of(note.email), note.subject, note.body, null);
         note.deliveryStatus = "Delivered";
         note.sentAt = OffsetDateTime.now(ZoneOffset.UTC);
+        if ("EmailChangeCode".equals(note.notificationType)) note.body = "Verification code sent.";
       } catch (RuntimeException e) {
         note.deliveryStatus = "Failed";
         note.errorMessage = "Email delivery failed. Check Gmail settings and SMTP connectivity.";

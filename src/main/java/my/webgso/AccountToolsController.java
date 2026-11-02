@@ -53,7 +53,9 @@ public class AccountToolsController {
           "notifications",
           db.list(
               Models.UserAccessNotification.class,
-              "WHERE \"UserId\"=? ORDER BY \"CreatedAt\" DESC LIMIT 15",
+              "WHERE \"UserId\"=? AND \"NotificationType\" NOT IN"
+                  + " ('EmailChangeCode','PasswordReset','EmailVerification') ORDER BY"
+                  + " \"CreatedAt\" DESC LIMIT 15",
               p.id()));
     }
   }

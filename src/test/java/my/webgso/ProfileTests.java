@@ -70,7 +70,7 @@ class ProfileTests {
                 .with(csrf())
                 .param("displayName", "Updated Profile")
                 .param("username", "profile.updated")
-                .param("email", "updated-profile@gmail.com")
+                .param("email", own.email)
                 .param("phone", "+60 12-3456789")
                 .param("id", other.id)
                 .param("accessStatus", "Rejected")
@@ -79,7 +79,7 @@ class ProfileTests {
         .andExpect(flash().attribute("message", "Your profile has been updated."));
     var saved = db.find(ApplicationUser.class, own.id).orElseThrow();
     assertThat(saved.userName).isEqualTo(own.userName);
-    assertThat(saved.normalizedEmail).isEqualTo("UPDATED-PROFILE@GMAIL.COM");
+    assertThat(saved.normalizedEmail).isEqualTo(own.normalizedEmail);
     assertThat(saved.displayName).isEqualTo("Updated Profile");
     assertThat(saved.phoneNumber).isEqualTo("+60 12-3456789");
     assertThat(saved.passwordHash).isEqualTo(own.passwordHash);
@@ -92,7 +92,7 @@ class ProfileTests {
                     accounts
                         .authenticate(
                             UsernamePasswordAuthenticationToken.unauthenticated(
-                                "updated-profile@gmail.com", "StrongPassword123!"))
+                                own.email, "StrongPassword123!"))
                         .getPrincipal())
                 .id())
         .isEqualTo(own.id);
