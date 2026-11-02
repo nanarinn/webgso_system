@@ -1188,11 +1188,11 @@ public class WebController {
   @PostMapping("/account/profile")
   public String saveProfile(
       @RequestParam String displayName,
-      @RequestParam String username,
       @RequestParam String email,
       @RequestParam(defaultValue = "") String phone,
       Authentication auth,
       RedirectAttributes flash) {
+    String username = db.find(ApplicationUser.class, principal(auth).id()).orElseThrow().userName;
     try {
       profileService.update(principal(auth).id(), displayName, username, email, phone);
       flash.addFlashAttribute("message", "Your profile has been updated.");

@@ -27,8 +27,6 @@ final class ProfilePages {
                 el("span", "Admin").cls("profile-role"),
                 el(
                     "dl",
-                    el("dt", "Username"),
-                    el("dd", user.userName),
                     el("dt", "Account status"),
                     el("dd", "Approved".equals(user.accessStatus) ? "Active" : "Inactive"),
                     el("dt", "Joined"),
@@ -47,8 +45,6 @@ final class ProfilePages {
                           "dl",
                           el("dt", "Full name"),
                           el("dd", name),
-                          el("dt", "Username"),
-                          el("dd", user.userName),
                           el("dt", "Email address"),
                           el("dd", user.email),
                           el("dt", "Phone number"),
@@ -90,13 +86,6 @@ final class ProfilePages {
                         input("displayName", "text", values.get("displayName"))
                             .attr("maxlength", 160)
                             .attr("autocomplete", "name")
-                            .flag("required", true)),
-                    field(
-                        "Username",
-                        input("username", "text", values.get("username"))
-                            .attr("maxlength", 100)
-                            .attr("autocomplete", "username")
-                            .flag("readonly", managed)
                             .flag("required", true)),
                     field(
                         "Email address",

@@ -78,7 +78,7 @@ class ProfileTests {
         .andExpect(redirectedUrl("/account/profile"))
         .andExpect(flash().attribute("message", "Your profile has been updated."));
     var saved = db.find(ApplicationUser.class, own.id).orElseThrow();
-    assertThat(saved.userName).isEqualTo("profile.updated");
+    assertThat(saved.userName).isEqualTo(own.userName);
     assertThat(saved.normalizedEmail).isEqualTo("UPDATED-PROFILE@GMAIL.COM");
     assertThat(saved.displayName).isEqualTo("Updated Profile");
     assertThat(saved.phoneNumber).isEqualTo("+60 12-3456789");
