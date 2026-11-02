@@ -1179,6 +1179,12 @@ public class WebController {
     return "profile";
   }
 
+  @GetMapping("/account/profile/edit")
+  public String editProfile(Model model, Authentication auth) {
+    model.addAttribute("profileEditing", true);
+    return profile(model, auth);
+  }
+
   @PostMapping("/account/profile")
   public String saveProfile(
       @RequestParam String displayName,
@@ -1191,6 +1197,7 @@ public class WebController {
       profileService.update(principal(auth).id(), displayName, username, email, phone);
       flash.addFlashAttribute("message", "Your profile has been updated.");
     } catch (IllegalArgumentException | org.springframework.dao.DataIntegrityViolationException e) {
+      flash.addFlashAttribute("profileEditing", true);
       flash.addFlashAttribute(
           "profileError",
           e instanceof IllegalArgumentException

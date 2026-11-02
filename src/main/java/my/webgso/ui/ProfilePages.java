@@ -34,6 +34,43 @@ final class ProfilePages {
                     el("dt", "Joined"),
                     el("dd", date(user.accessRequestedAt, "dd MMM yyyy"))))
             .cls("panel profile-summary");
+    if (!Boolean.TRUE.equals(c.model().get("profileEditing"))) {
+      var details =
+          el(
+                  "article",
+                  el(
+                          "div",
+                          el("h2", "Personal details"),
+                          el("p", "Your account information. Select Edit profile to make changes."))
+                      .cls("profile-form-heading"),
+                  el(
+                          "dl",
+                          el("dt", "Full name"),
+                          el("dd", name),
+                          el("dt", "Username"),
+                          el("dd", user.userName),
+                          el("dt", "Email address"),
+                          el("dd", user.email),
+                          el("dt", "Phone number"),
+                          el(
+                              "dd",
+                              user.phoneNumber == null || user.phoneNumber.isBlank()
+                                  ? "Not provided"
+                                  : user.phoneNumber))
+                      .cls("profile-read-details"),
+                  el("footer", action("Edit profile", "/account/profile/edit", true))
+                      .cls("profile-form-footer"))
+              .cls("panel profile-edit-panel");
+      return el(
+              "section",
+              heading(
+                  "Account",
+                  "My Profile",
+                  "View and manage your personal information.",
+                  action("Email settings", "/account/email-settings", false)),
+              el("div", summary, details).cls("profile-layout"))
+          .cls("profile-page");
+    }
     var form =
         c.post(
             "/account/profile",
