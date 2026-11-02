@@ -111,7 +111,13 @@ final class AuthPages {
           alert(
               "Account created. Check your inbox and verify your email before signing in.",
               "success"));
-    if (c.parameter("reason")) access.add(alert("Your session ended. Sign in to continue.", ""));
+    if (c.parameter("reason"))
+      access.add(
+          alert(
+              "form-expired".equals(c.request().getParameter("reason"))
+                  ? "Your sign-in form expired. Please enter your details and sign in again."
+                  : "Your session ended. Sign in to continue.",
+              ""));
     if (c.parameter("logout")) access.add(alert("You have signed out successfully.", "success"));
     if (c.parameter("emailChanged"))
       access.add(

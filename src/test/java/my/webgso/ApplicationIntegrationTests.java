@@ -3,6 +3,7 @@ package my.webgso;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.*;
+import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.unauthenticated;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -865,7 +866,36 @@ class ApplicationIntegrationTests {
             post("/account/login")
                 .param("identifier", admin.email)
                 .param("password", "StrongPassword123!"))
-        .andExpect(status().isForbidden());
+        .andExpect(redirectedUrl("/login?reason=form-expired"))
+        .andExpect(unauthenticated());
+  }
+
+  @Test
+  void expiredLoginTokenReturnsToFreshFormButOtherPostsRemainProtected() throws Exception {
+    var login = mvc.perform(get("/login")).andReturn();
+    var token =
+        java.util.regex.Pattern.compile("name=\"_csrf\"[^>]*value=\"([^\"]+)\"")
+            .matcher(login.getResponse().getContentAsString());
+    assertThat(token.find()).isTrue();
+    // The token came from an old session; the next request deliberately has no session cookie.
+    mvc.perform(
+            post("/account/login")
+                .param("_csrf", token.group(1))
+                .param("identifier", admin.email)
+                .param("password", "StrongPassword123!"))
+        .andExpect(redirectedUrl("/login?reason=form-expired"))
+        .andExpect(unauthenticated());
+    mvc.perform(get("/login?reason=form-expired"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(org.hamcrest.Matchers.containsString("Your sign-in form expired")));
+    mvc.perform(post("/api/admin/plants/test")).andExpect(status().isForbidden());
+    mvc.perform(post("/account/register")).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void visitingLoginProcessingAddressRedirectsToLoginPage() throws Exception {
+    mvc.perform(get("/account/login")).andExpect(redirectedUrl("/login"));
   }
 
   @Test

@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Configuration
@@ -69,11 +70,26 @@ public class SecurityConfiguration {
                     .deleteCookies("JSESSIONID"))
         .exceptionHandling(
             ex ->
-                ex.authenticationEntryPoint(
-                    (request, response, error) -> {
-                      if (request.getRequestURI().startsWith("/api/")) response.sendError(401);
-                      else response.sendRedirect("/login");
-                    }))
+                ex.accessDeniedHandler(
+                        (request, response, error) -> {
+                          // Reject stale login submissions without replaying credentials or
+                          // bypassing
+                          // CSRF. A fresh GET renders a new session-bound token.
+                          if (error instanceof CsrfException
+                              && "POST".equals(request.getMethod())
+                              && (request.getContextPath() + "/account/login")
+                                  .equals(request.getRequestURI())) {
+                            response.sendRedirect(
+                                request.getContextPath() + "/login?reason=form-expired");
+                          } else {
+                            response.sendError(HttpServletResponse.SC_FORBIDDEN);
+                          }
+                        })
+                    .authenticationEntryPoint(
+                        (request, response, error) -> {
+                          if (request.getRequestURI().startsWith("/api/")) response.sendError(401);
+                          else response.sendRedirect("/login");
+                        }))
         .headers(
             headers ->
                 headers.contentSecurityPolicy(

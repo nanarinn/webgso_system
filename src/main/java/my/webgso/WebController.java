@@ -119,6 +119,11 @@ public class WebController {
     return "login";
   }
 
+  @GetMapping("/account/login")
+  public String loginAddress() {
+    return "redirect:/login";
+  }
+
   @GetMapping("/register")
   public String registration(Model model) {
     model.addAttribute("title", "Create an account");
