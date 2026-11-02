@@ -80,7 +80,7 @@ public final class JavaPages {
                 "/styles/workspace-polish.css?v=2",
                 "/styles/workspace-finish.css?v=1",
                 "/styles/signup.css?v=3",
-                "/styles/plant-filters.css?v=3",
+                "/styles/plant-filters.css?v=4",
                 "/styles/account-tools.css?v=1",
                 "/styles/responsive-finish.css?v=1");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));

@@ -391,9 +391,8 @@ final class AdminPages {
     var location =
         el(
                 "div",
-                el("h3", "1 · Plant or location"),
-                el("p", "Choose one location filter. Select one or more values within that group.")
-                    .cls("filter-hint"))
+                el("h3", "Location"),
+                el("p", "Choose a group, then select the locations to include.").cls("filter-hint"))
             .cls("location-filter-panel");
     var all = c.<LssPlant>list("filterPlants");
     var plantOptions = new LinkedHashMap<String, String>();
@@ -438,18 +437,21 @@ final class AdminPages {
             "form",
             el(
                 "header",
-                el("span", "QUERY CONTROLS").cls("section-label"),
-                el("h2", "Plant configuration filters")),
+                el(
+                    "div",
+                    el("span", "PLANT DIRECTORY").cls("section-label"),
+                    el("h2", "Filter plants")),
+                el(
+                        "span",
+                        all.size() + (all.size() == 1 ? " plant available" : " plants available"))
+                    .cls("plant-filter-count")),
             el(
                     "div",
                     location,
                     el(
                             "div",
-                            el("h3", "2 · API filters"),
-                            el(
-                                    "p",
-                                    "Refine plants by configured APIs and their latest test"
-                                        + " results.")
+                            el("h3", "Refine results"),
+                            el("p", "Search by name or narrow down the API results.")
                                 .cls("filter-hint"),
                             el(
                                 "div",

@@ -84,7 +84,7 @@ class ConfiguredApiTests {
     assertThat(response.getModelAndView().getModel().get("total")).isEqualTo(1L);
     assertThat(response.getModelAndView().getModel().get("locationStates")).isEqualTo("");
     assertThat(response.getResponse().getContentAsString())
-        .contains("Plant configuration filters", "location-mode-region", "location-mode-zone")
+        .contains("Filter plants", "location-mode-region", "location-mode-zone")
         .contains("name=\"locationZones\" type=\"checkbox\" value=\"West\" checked=\"checked\"");
     String lockedHtml = response.getResponse().getContentAsString();
     for (String group : java.util.List.of("plant", "state", "region", "all")) {
