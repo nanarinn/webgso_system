@@ -171,7 +171,13 @@ public class ApiRetestService {
                   "Success",
                   response.status(),
                   response.elapsedMillis(),
-                  tested.readings() + " readable measurements; " + tested.issues() + " anomalies");
+                  tested.readings()
+                      + " readable measurements; "
+                      + tested.issues()
+                      + " anomalies"
+                      + (tested.freshnessWarning().isEmpty()
+                          ? ""
+                          : ". Warning: " + tested.freshnessWarning()));
         } catch (Exception e) {
           var response = e instanceof PlantApiClient.Failure failure ? failure.response() : null;
           result =

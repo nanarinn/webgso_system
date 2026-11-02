@@ -16,6 +16,14 @@ final class ApiTestPopup {
             el("p", "API connection test · " + c.text("apiTestDataset")).cls("section-label"),
             el("h2", c.text("apiTestTitle")).attr("id", "api-test-title"),
             el("p", c.text("apiTestMessage")).attr("id", "api-test-message"),
+            c.text("apiTestFreshnessWarning").isBlank()
+                ? null
+                : el(
+                        "div",
+                        el("strong", "Data freshness warning"),
+                        el("p", c.text("apiTestFreshnessWarning")))
+                    .cls("api-freshness-warning")
+                    .attr("role", "status"),
             c.yes("apiTestAlreadyTested")
                 ? null
                 : el(

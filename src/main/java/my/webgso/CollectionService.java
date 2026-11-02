@@ -244,7 +244,17 @@ public class CollectionService {
   }
 
   public record ApiTestResult(
-      PlantApiClient.Response response, long reportId, int readings, int issues, int rules) {}
+      PlantApiClient.Response response,
+      long reportId,
+      int readings,
+      int issues,
+      int rules,
+      String freshnessWarning) {
+    public ApiTestResult(
+        PlantApiClient.Response response, long reportId, int readings, int issues, int rules) {
+      this(response, reportId, readings, issues, rules, "");
+    }
+  }
 
   public ApiTestResult testWithAnomalies(int id, String dataType, String actor) {
     return runApiTest(id, dataType, actor, false);
@@ -319,12 +329,15 @@ public class CollectionService {
             (int) validation.rules().stream().filter(rule -> rule.dataType.equals(apiType)).count();
         long reportId =
             anomalyReports.save(plant, type, parsed.readings().size(), ruleCount, issues);
+        String freshnessWarning =
+            ApiDataFreshness.warning(parsed.readings(), type, LocalDateTime.now(Policies.LOCAL));
         plant.apiConnectionStatus = "Connected";
         plant.lastApiTestMessage =
             parsed.readings().size()
                 + " readable value(s); "
                 + issues.size()
-                + " anomaly/anomalies. Data structure valid.";
+                + " anomaly/anomalies. Data structure valid."
+                + (freshnessWarning.isEmpty() ? "" : " Warning: " + freshnessWarning);
         plant.lastApiTestSource = apiType;
         plant.lastApiTestAt = OffsetDateTime.now(ZoneOffset.UTC);
         db.update(plant);
@@ -332,7 +345,12 @@ public class CollectionService {
             actor, "API test", "Plant", plant.plantId, "Success", plant.lastApiTestMessage);
         testHistory.save(id, type, actor, true, response, started, plant.lastApiTestMessage);
         return new ApiTestResult(
-            response, reportId, parsed.readings().size(), issues.size(), ruleCount);
+            response,
+            reportId,
+            parsed.readings().size(),
+            issues.size(),
+            ruleCount,
+            freshnessWarning);
       } catch (RuntimeException e) {
         testHistory.save(
             id,

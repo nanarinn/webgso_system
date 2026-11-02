@@ -408,3 +408,8 @@ pre {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 }
+
+.api-freshness-warning { padding: 16px 18px; margin: 18px 0; border: 1px solid #e8c77d; border-left: 4px solid #c18516; border-radius: 12px; background: #fff8e6; color: #765014; }
+.api-freshness-warning p { margin: 8px 0 0; line-height: 1.6; }
+
+.api-freshness-badge { display: inline-block; width: fit-content; padding: 4px 9px; border-radius: 8px; background: #fff2ce; color: #765014; font-size: 12px; font-weight: 600; }

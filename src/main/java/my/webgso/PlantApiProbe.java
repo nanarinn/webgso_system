@@ -19,7 +19,8 @@ public class PlantApiProbe {
     return inspect(url, apiType, dataType, plantId).readings();
   }
 
-  public record ProbeResult(PlantApiClient.Response response, int readings) {}
+  public record ProbeResult(
+      PlantApiClient.Response response, int readings, String freshnessWarning) {}
 
   public ProbeResult inspect(String url, String apiType, String dataType, int plantId) {
     client.validate(url);
@@ -39,7 +40,10 @@ public class PlantApiProbe {
       if (parsed.readings().isEmpty())
         throw new IllegalArgumentException(
             ApiFailureGuide.noMeasurements(response) + " The URL was not saved.");
-      return new ProbeResult(response, parsed.readings().size());
+      return new ProbeResult(
+          response,
+          parsed.readings().size(),
+          ApiDataFreshness.warning(parsed.readings(), dataType, now));
     } catch (IllegalArgumentException e) {
       throw new PlantApiClient.Failure(e.getMessage(), response);
     }

@@ -68,7 +68,7 @@ public final class JavaPages {
                 "/bootstrap/bootstrap.min.css",
                 "/styles/app.css",
                 "/styles/interface.css",
-                "/styles/java.css",
+                "/styles/java.css?v=2",
                 "/styles/workspace-theme.css?v=4",
                 "/styles/workspace-panels.css?v=28",
                 "/styles/plant-editor.css?v=4",

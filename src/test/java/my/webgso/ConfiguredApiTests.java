@@ -325,6 +325,30 @@ class ConfiguredApiTests {
   }
 
   @Test
+  void expiredForecastRemainsConnectedAndWarningIsSavedAndShown() throws Exception {
+    when(client.fetch("https://example.test/day-ahead"))
+        .thenReturn(
+            new PlantApiClient.Response(
+                200, "application/json", "{\"timestamp\":\"2001-01-01T00:00:00\",\"power\":10}"));
+    mvc.perform(
+            post("/admin/plants/" + plant.id + "/test")
+                .param("dataType", "Day Ahead")
+                .with(authentication(auth))
+                .with(csrf()))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(
+            flash()
+                .attribute(
+                    "apiTestFreshnessWarning",
+                    org.hamcrest.Matchers.containsString("Expired forecast")));
+    var latest = testHistory.latest().get(ApiTestHistoryService.key(plant.id, "Day Ahead"));
+    assertThat(latest.outcome()).isEqualTo("Success");
+    assertThat(latest.message()).contains("Warning: Expired forecast");
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().apiConnectionStatus)
+        .isEqualTo("Connected");
+  }
+
+  @Test
   void noRulesIsShownAsNotValidatedRatherThanClean() throws Exception {
     db.jdbc().update("UPDATE \"ValidationRules\" SET \"IsActive\"=false");
     when(client.fetch("https://example.test/day-ahead"))

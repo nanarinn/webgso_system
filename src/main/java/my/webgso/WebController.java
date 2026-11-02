@@ -925,6 +925,7 @@ public class WebController {
               ? collection.retestWithAnomalies(id, dataType, actor)
               : collection.testWithAnomalies(id, dataType, actor);
       ApiTestDetails.add(flash, result.response());
+      flash.addFlashAttribute("apiTestFreshnessWarning", result.freshnessWarning());
       flash.addFlashAttribute(
           "apiTestTitle",
           result.issues() > 0 ? "Connected — anomalies detected" : "Connection successful");
@@ -1111,6 +1112,7 @@ public class WebController {
       var result =
           probe.inspect(apiUrl.strip(), dataType.equals("MMF") ? "MMF" : "DDQ", dataType, 0);
       ApiTestDetails.add(details, result.response());
+      model.addAttribute("apiTestFreshnessWarning", result.freshnessWarning());
       model.addAttribute("apiTestTitle", "Connection successful");
       model.addAttribute(
           "apiTestMessage",

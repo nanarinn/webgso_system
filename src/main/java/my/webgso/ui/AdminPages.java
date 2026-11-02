@@ -208,6 +208,13 @@ final class AdminPages {
                                             : last.outcome().equals("Success")
                                                 ? "api-test-success"
                                                 : "api-test-failed")),
+                            last != null
+                                    && last.message() != null
+                                    && last.message().contains(" Warning:")
+                                ? el("span", "Data freshness warning")
+                                    .cls("api-freshness-badge")
+                                    .attr("title", last.message())
+                                : null,
                             nextTest != null && nextTest.isAfter(java.time.OffsetDateTime.now())
                                 ? el(
                                         "small",
