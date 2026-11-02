@@ -48,6 +48,9 @@ if (-not $Demo -and -not $env:SMTP_PASSWORD -and (Test-Path -LiteralPath $gmailC
     $gmailCredential = $null
 }
 
+# Local daily PostgreSQL backups requested by the user; demo remains isolated.
+if (-not $Demo -and -not $env:WEBGSO_BACKUP_ENABLED) { $env:WEBGSO_BACKUP_ENABLED = 'true' }
+
 # Credentials remain in the environment or the existing local secret store.
 # Reading the former connection string allows migration without a password reset;
 # .NET is not required to run the Java application.

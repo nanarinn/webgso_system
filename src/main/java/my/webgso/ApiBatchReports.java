@@ -10,6 +10,19 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class ApiBatchReports {
+  private EmailPreferences preferences;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public void setPreferences(EmailPreferences preferences) {
+    this.preferences = preferences;
+  }
+
+  private String recipient(ApiRetestService.Job job) {
+    return preferences == null
+        ? env.getProperty("webgso.api-alerts.recipient", "")
+        : preferences.owner(job.owner).map(u -> u.email).orElse("");
+  }
+
   private final MailDelivery mail;
   private final Environment env;
 
@@ -52,6 +65,10 @@ public class ApiBatchReports {
   }
 
   public void automatically(ApiRetestService.Job job) {
+    if (preferences != null && !preferences.allows(job.owner, "Excel")) {
+      job.reportStatus = "Disabled in email settings";
+      return;
+    }
     if (env.getProperty("webgso.api-alerts.enabled", Boolean.class, false)
         && job.items.stream().allMatch(item -> item.status().equals("Success"))) send(job);
   }
@@ -65,14 +82,14 @@ public class ApiBatchReports {
         throw new IllegalArgumentException(
             "Wait until all API tests finish before emailing results.");
       if (!env.getProperty("webgso.mail.enabled", Boolean.class, false)
-          || env.getProperty("webgso.api-alerts.recipient", "").isBlank()) {
+          || recipient(job).isBlank()) {
         job.reportStatus = "Not configured";
         return;
       }
       job.reportStatus = "Sending";
     }
     try {
-      String recipient = env.getProperty("webgso.api-alerts.recipient");
+      String recipient = recipient(job);
       long passed = job.items.stream().filter(item -> item.status().equals("Success")).count();
       mail.send(
           List.of(recipient),

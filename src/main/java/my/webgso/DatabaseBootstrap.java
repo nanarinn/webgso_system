@@ -13,6 +13,7 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.stereotype.Component;
 
 @Component
+@org.springframework.core.annotation.Order(0)
 public class DatabaseBootstrap implements ApplicationRunner {
   private final Store db;
   private final Accounts accounts;

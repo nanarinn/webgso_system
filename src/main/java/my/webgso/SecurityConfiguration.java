@@ -33,6 +33,8 @@ public class SecurityConfiguration {
                         "/account/google",
                         "/account/verify-email",
                         "/account/resend-verification",
+                        "/account/forgot-password",
+                        "/account/reset-password",
                         "/oauth2/**",
                         "/login/oauth2/**",
                         "/styles/**",

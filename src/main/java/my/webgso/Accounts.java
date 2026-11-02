@@ -119,6 +119,18 @@ public class Accounts implements AuthenticationProvider {
     return UsernamePasswordAuthenticationToken.class.isAssignableFrom(type);
   }
 
+  public static void validatePassword(String password) {
+    if (password == null
+        || password.length() < 12
+        || password.length() > 72
+        || !password.matches("(?s).*[A-Z].*")
+        || !password.matches("(?s).*[a-z].*")
+        || !password.matches("(?s).*\\d.*")
+        || password.chars().allMatch(Character::isLetterOrDigit))
+      throw new IllegalArgumentException(
+          "Use 12–72 characters including uppercase, lowercase, a number and a symbol.");
+  }
+
   @Transactional
   public ApplicationUser register(String name, String email, String displayName, String password) {
     if (!name.matches("[a-zA-Z0-9_.@-]{3,100}")
@@ -127,14 +139,7 @@ public class Accounts implements AuthenticationProvider {
         || displayName.isBlank()
         || displayName.length() > 160)
       throw new IllegalArgumentException("Enter a valid username, email and display name.");
-    if (password.length() < 12
-        || password.length() > 72
-        || !password.matches("(?s).*[A-Z].*")
-        || !password.matches("(?s).*[a-z].*")
-        || !password.matches("(?s).*\\d.*")
-        || password.chars().allMatch(Character::isLetterOrDigit))
-      throw new IllegalArgumentException(
-          "Use 12–72 characters including uppercase, lowercase, a number and a symbol.");
+    validatePassword(password);
     if (!db.list(
             ApplicationUser.class,
             "WHERE \"NormalizedUserName\"=? OR \"NormalizedEmail\"=?",

@@ -10,6 +10,13 @@ import org.springframework.stereotype.Service;
 /** A separate mail queue; enabling it never enables collection or report schedules. */
 @Service
 public class ApiEmailAlerts {
+  private EmailPreferences preferences;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public void setPreferences(EmailPreferences preferences) {
+    this.preferences = preferences;
+  }
+
   private final Store db;
   private final MailDelivery mail;
   private final Environment env;
@@ -29,45 +36,81 @@ public class ApiEmailAlerts {
   public void record(int plantId, String dataset, String previous, boolean success, Integer http) {
     if (!env.getProperty("webgso.api-alerts.enabled", Boolean.class, false)
         || !changed(previous, success)) return;
-    String recipient = env.getProperty("webgso.api-alerts.recipient", "").strip();
-    if (recipient.isEmpty()) return;
     var plant = db.find(LssPlant.class, plantId);
     if (plant.isEmpty()) return;
+    String recipient = env.getProperty("webgso.api-alerts.recipient", "").strip();
     var users =
-        db.list(
-            ApplicationUser.class,
-            "WHERE LOWER(\"Email\")=? AND \"AccessStatus\"='Approved'",
-            recipient.toLowerCase(Locale.ROOT));
-    if (users.isEmpty()) return;
-    var note = new UserAccessNotification();
-    note.userId = users.getFirst().id;
-    note.email = recipient;
-    note.notificationType = "ApiTestAlert";
-    String state = success ? "recovered" : "failed";
-    note.subject = "GSO Web Services: API " + state;
-    note.body =
-        "Plant: "
-            + plant.get().name
-            + " ("
-            + plant.get().plantId
-            + ")\nAPI: "
-            + dataset
-            + "\nResult: "
-            + (success ? "Success - recovered" : "Failed")
-            + "\nHTTP: "
-            + (http == null ? "No response" : http)
-            + (success
-                ? "\nAction: The API is working again. No immediate action is required."
-                : "\nAction: " + guidance(http))
-            + "\nTime (MYT): "
-            + OffsetDateTime.now()
-                .atZoneSameInstant(Policies.LOCAL)
-                .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss"))
-            + "\n\n"
-            + "Open API test history in GSO Web Services for the full result. No API payload or"
-            + " credentials are included in this email.";
-    note.deliveryStatus = "Pending";
-    db.insert(note);
+        preferences == null
+            ? (recipient.isEmpty()
+                ? List.<ApplicationUser>of()
+                : db.list(
+                    ApplicationUser.class,
+                    "WHERE LOWER(\"Email\")=? AND \"AccessStatus\"='Approved'",
+                    recipient.toLowerCase(Locale.ROOT)))
+            : preferences.recipients();
+    for (var user : users) {
+      if (preferences != null
+          && !preferences.allows(user.id, success ? "ApiTestRecovered" : "ApiTestFailed")) continue;
+      recipient = preferences == null ? recipient : user.email;
+      var note = new UserAccessNotification();
+      note.userId = user.id;
+      note.email = recipient;
+      note.notificationType =
+          preferences == null ? "ApiTestAlert" : success ? "ApiTestRecovered" : "ApiTestFailed";
+      String state = success ? "recovered" : "failed";
+      note.subject = "GSO Web Services: API " + state;
+      note.body =
+          "Plant: "
+              + plant.get().name
+              + " ("
+              + plant.get().plantId
+              + ")\nAPI: "
+              + dataset
+              + "\nResult: "
+              + (success ? "Success - recovered" : "Failed")
+              + "\nHTTP: "
+              + (http == null ? "No response" : http)
+              + (success
+                  ? "\nAction: The API is working again. No immediate action is required."
+                  : "\nAction: " + guidance(http))
+              + "\nTime (MYT): "
+              + OffsetDateTime.now()
+                  .atZoneSameInstant(Policies.LOCAL)
+                  .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss"))
+              + "\n\n"
+              + "Open API test history in GSO Web Services for the full result. No API payload or"
+              + " credentials are included in this email.";
+      note.deliveryStatus = "Pending";
+      db.insert(note);
+    }
+  }
+
+  public void recordStale(int plantId, String dataset, String previousMessage, String message) {
+    if (preferences == null
+        || !env.getProperty("webgso.api-alerts.enabled", Boolean.class, false)
+        || message == null
+        || !message.contains(" Warning:")
+        || previousMessage != null && previousMessage.contains("Warning:")) return;
+    var plant = db.find(LssPlant.class, plantId);
+    if (plant.isEmpty()) return;
+    for (var user : preferences.recipients()) {
+      if (!preferences.allows(user.id, "StaleDataAlert")) continue;
+      var note = new UserAccessNotification();
+      note.userId = user.id;
+      note.email = user.email;
+      note.notificationType = "StaleDataAlert";
+      note.subject = "GSO Web Services - Data freshness warning";
+      note.body =
+          "Plant: "
+              + plant.get().name
+              + "\nAPI: "
+              + dataset
+              + "\n"
+              + message
+              + "\nReview the API provider's data update schedule. No raw API payload is included.";
+      note.deliveryStatus = "Pending";
+      db.insert(note);
+    }
   }
 
   @Scheduled(fixedDelay = 10000, initialDelay = 10000)
@@ -77,14 +120,19 @@ public class ApiEmailAlerts {
         db.list(
             UserAccessNotification.class,
             "WHERE \"NotificationType\" IN"
-                + " ('ApiTestAlert','ApiDailySummary','EmailVerification','AccessDecision') AND"
-                + " \"DeliveryStatus\"='Pending' ORDER BY \"Id\" LIMIT 10")) {
+                + " ('ApiTestAlert','ApiTestFailed','ApiTestRecovered','StaleDataAlert','ApiDailySummary','EmailVerification','PasswordReset','AccessDecision')"
+                + " AND \"DeliveryStatus\"='Pending' ORDER BY \"Id\" LIMIT 10")) {
       if (db.jdbc()
               .update(
                   "UPDATE \"UserAccessNotifications\" SET \"DeliveryStatus\"='Sending' WHERE"
                       + " \"Id\"=? AND \"DeliveryStatus\"='Pending'",
                   note.id)
           != 1) continue;
+      if (preferences != null && !preferences.allowsDelivery(note)) {
+        note.deliveryStatus = "Cancelled";
+        db.update(note);
+        continue;
+      }
       try {
         mail.send(List.of(note.email), note.subject, note.body, null);
         note.deliveryStatus = "Delivered";

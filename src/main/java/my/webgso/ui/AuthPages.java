@@ -135,6 +135,8 @@ final class AuthPages {
                     "Google sign-in could not be completed. Please try again or use email sign-in.";
               },
               google.equals("pending") ? "success" : "error"));
+    if (c.parameter("passwordReset"))
+      access.add(alert("Your password has been reset. Sign in with your new password.", "success"));
     var identifier = authField("Gmail address", "identifier", "email", "username");
     // Controls retain their native browser validation, password-manager support and keyboard
     // behavior.
@@ -147,6 +149,7 @@ final class AuthPages {
             identifier,
             authField("Password", "password", "password", "current-password"),
             el("button", "Login").cls("auth-submit").attr("type", "submit")),
+        el("p", link("Forgot password?", "/account/forgot-password")).cls("auth-signup"),
         el("p", "Don't have an account? ", link("Sign up", "/register")).cls("auth-signup"),
         el(
                 "details",

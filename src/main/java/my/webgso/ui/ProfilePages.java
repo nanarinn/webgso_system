@@ -74,12 +74,16 @@ final class ProfilePages {
                             .attr("maxlength", 30)
                             .attr("autocomplete", "tel")))
                 .cls("profile-fields"),
-            el("p", "Use your username or email address to sign in.").cls("profile-form-note"),
+            el("p", "Use your Gmail address to sign in.").cls("profile-form-note"),
             el("footer", action("Cancel", "/account/profile", false), button("Save changes", true))
                 .cls("profile-form-footer"));
     return el(
             "section",
-            heading("Account", "My Profile", "View and manage your personal information.", null),
+            heading(
+                "Account",
+                "My Profile",
+                "View and manage your personal information.",
+                action("Email settings", "/account/email-settings", false)),
             el("div", summary, el("article", form).cls("panel profile-edit-panel"))
                 .cls("profile-layout"))
         .cls("profile-page");

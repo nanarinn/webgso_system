@@ -102,6 +102,9 @@ public class ApiTestHistoryService {
         (System.nanoTime() - started) / 1_000_000,
         Objects.requireNonNullElse(message, "Test failed"));
     try {
+      if (success)
+        alerts.recordStale(
+            plantId, dataset, previous.isEmpty() ? null : previous.getFirst().message(), message);
       alerts.record(
           plantId,
           dataset,

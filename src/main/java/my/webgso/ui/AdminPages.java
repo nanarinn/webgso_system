@@ -215,6 +215,17 @@ final class AdminPages {
                                     .cls("api-freshness-badge")
                                     .attr("title", last.message())
                                 : null,
+                            last == null
+                                ? el("small", "Last tested: Not tested").cls("api-history-note")
+                                : el(
+                                        "small",
+                                        "Last tested: "
+                                            + date(
+                                                last.testedAt()
+                                                    .atZoneSameInstant(my.webgso.Policies.LOCAL),
+                                                "dd MMM yyyy, HH:mm:ss")
+                                            + " MYT")
+                                    .cls("api-history-note"),
                             nextTest != null && nextTest.isAfter(java.time.OffsetDateTime.now())
                                 ? el(
                                         "small",
@@ -225,7 +236,7 @@ final class AdminPages {
                                                 "dd MMM yyyy, HH:mm")
                                             + " MYT")
                                     .cls("api-history-note")
-                                : null)
+                                : el("small", "Next test: Available now").cls("api-history-note"))
                         .cls("plant-api-name-result"),
                     el(
                             "div",

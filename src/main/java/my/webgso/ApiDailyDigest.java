@@ -11,6 +11,13 @@ import org.springframework.transaction.annotation.Transactional;
 /** A daily snapshot of saved test results; never runs API tests or data collections. */
 @Service
 public class ApiDailyDigest {
+  private EmailPreferences preferences;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public void setPreferences(EmailPreferences preferences) {
+    this.preferences = preferences;
+  }
+
   private final Store db;
   private final ApiTestHistoryService history;
   private final Environment env;
@@ -27,8 +34,15 @@ public class ApiDailyDigest {
     if (!env.getProperty("webgso.api-digest.enabled", Boolean.class, true)
         || !env.getProperty("webgso.api-alerts.enabled", Boolean.class, false)
         || !env.getProperty("webgso.mail.enabled", Boolean.class, false)) return;
-    String recipient =
-        env.getProperty("webgso.api-alerts.recipient", "").strip().toLowerCase(Locale.ROOT);
+    if (preferences != null) {
+      for (var user : preferences.recipients())
+        if (preferences.allows(user.id, "ApiDailySummary")) queueFor(user.email);
+      return;
+    }
+    queueFor(env.getProperty("webgso.api-alerts.recipient", "").strip().toLowerCase(Locale.ROOT));
+  }
+
+  private void queueFor(String recipient) {
     if (recipient.isEmpty()) return;
     // Serialize checks across app instances before deciding whether today's message exists.
     var users =

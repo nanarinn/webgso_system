@@ -23,6 +23,36 @@ class ApiBatchReportsTests {
   }
 
   @Test
+  void automaticReportRespectsOptOutButManualReportUsesOnlyJobOwnersGmail() {
+    var mail = mock(MailDelivery.class);
+    var env =
+        new MockEnvironment()
+            .withProperty("webgso.mail.enabled", "true")
+            .withProperty("webgso.api-alerts.enabled", "true")
+            .withProperty("webgso.api-alerts.recipient", "different@gmail.com");
+    var prefs = mock(EmailPreferences.class);
+    var owner = new my.webgso.Models.ApplicationUser();
+    owner.id = "owner";
+    owner.email = "owner@gmail.com";
+    when(prefs.owner("owner")).thenReturn(Optional.of(owner));
+    when(prefs.allows("owner", "Excel")).thenReturn(false);
+    var service = new ApiBatchReports(mail, env);
+    service.setPreferences(prefs);
+    var job = job("Success");
+    service.automatically(job);
+    verifyNoInteractions(mail);
+    assertThat(job.reportStatus).isEqualTo("Disabled in email settings");
+    service.send(job);
+    verify(mail)
+        .send(
+            eq(List.of("owner@gmail.com")),
+            anyString(),
+            anyString(),
+            any(ReportService.Download.class));
+    assertThat(job.reportStatus).isEqualTo("Sent");
+  }
+
+  @Test
   void exportsExactJobResultsWithExcelSafeCells() {
     var result = new String(ApiBatchReports.csv(job("Success")), StandardCharsets.UTF_8);
     assertThat(result)
