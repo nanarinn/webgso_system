@@ -129,45 +129,44 @@ final class ProfilePages {
     return el(
             "section",
             el("h2", "Change email"),
+            verificationSteps(pending.isBlank() ? 1 : 2),
             el(
                 "p",
                 "Your current email stays active until the code sent to your new Gmail address is"
                     + " verified."),
-            c.post(
-                "/account/profile/email/send-code",
-                "profile-email-request",
-                field(
-                    "New Gmail address",
-                    input("newEmail", "email", pending)
-                        .attr("placeholder", "you@gmail.com")
-                        .attr("maxlength", 256)
-                        .attr("autocomplete", "email")
-                        .flag("required", true)),
-                field(
-                    "Current password",
-                    input("currentPassword", "password", "")
-                        .attr("autocomplete", "current-password")
-                        .flag("required", true)),
-                button(pending.isBlank() ? "Send code" : "Resend code", true)),
+            el(
+                    "details",
+                    el(
+                        "summary",
+                        pending.isBlank()
+                            ? "Enter your new email"
+                            : "Didn't receive a code? Resend"),
+                    c.post(
+                        "/account/profile/email/send-code",
+                        "profile-email-request",
+                        field(
+                            "New Gmail address",
+                            input("newEmail", "email", pending)
+                                .attr("placeholder", "you@gmail.com")
+                                .attr("maxlength", 256)
+                                .attr("autocomplete", "email")
+                                .flag("required", true)),
+                        field(
+                            "Current password",
+                            input("currentPassword", "password", "")
+                                .attr("autocomplete", "current-password")
+                                .flag("required", true)),
+                        button(pending.isBlank() ? "Send code" : "Resend code", true)))
+                .cls("verification-resend")
+                .flag("open", pending.isBlank()),
             pending.isBlank()
                 ? null
-                : c.post(
+                : verificationForm(
+                    c,
                     "/account/profile/email/verify",
                     "profile-email-verify",
-                    el(
-                        "p",
-                        "Enter the 6-digit code sent to "
-                            + pending
-                            + ". The code expires in 10 minutes."),
-                    field(
-                        "Verification code",
-                        input("code", "text", "")
-                            .attr("inputmode", "numeric")
-                            .attr("pattern", "[0-9]{6}")
-                            .attr("maxlength", 6)
-                            .attr("autocomplete", "one-time-code")
-                            .flag("required", true)),
-                    button("Verify & change email", true)),
+                    pending,
+                    "Verify & change email"),
             el("p", "After verification, sign in again using your new Gmail address."))
         .cls("profile-email-change");
   }
@@ -178,6 +177,7 @@ final class ProfilePages {
     return el(
             "section",
             el("h2", "Change password"),
+            verificationSteps("change".equals(stage) ? 3 : "verify".equals(stage) ? 2 : 1),
             el(
                 "p",
                 "Confirm your current password, verify the code sent to your account email, then"
@@ -211,37 +211,86 @@ final class ProfilePages {
                     button("Change password", true))
                 : el(
                     "div",
-                    c.post(
-                        "/account/profile/password/send-code",
-                        "profile-password-request",
-                        field(
-                            "Current password",
-                            input("currentPassword", "password", "")
-                                .attr("autocomplete", "current-password")
-                                .attr("maxlength", 72)
-                                .flag("required", true)),
-                        el("p", "A verification code will be sent to " + user.email + "."),
-                        button("verify".equals(stage) ? "Resend code" : "Send code", true)),
+                    el(
+                            "details",
+                            el(
+                                "summary",
+                                "verify".equals(stage)
+                                    ? "Didn't receive a code? Resend"
+                                    : "Confirm your identity"),
+                            c.post(
+                                "/account/profile/password/send-code",
+                                "profile-password-request",
+                                field(
+                                    "Current password",
+                                    input("currentPassword", "password", "")
+                                        .attr("autocomplete", "current-password")
+                                        .attr("maxlength", 72)
+                                        .flag("required", true)),
+                                el("p", "A verification code will be sent to " + user.email + "."),
+                                button("verify".equals(stage) ? "Resend code" : "Send code", true)))
+                        .cls("verification-resend")
+                        .flag("open", !"verify".equals(stage)),
                     !"verify".equals(stage)
                         ? null
-                        : c.post(
+                        : verificationForm(
+                            c,
                             "/account/profile/password/verify",
                             "profile-password-verify",
-                            el(
-                                "p",
-                                "Enter the 6-digit code from your Gmail inbox. It expires after 10"
-                                    + " minutes."),
-                            field(
-                                "Verification code",
-                                input("code", "text", "")
-                                    .attr("inputmode", "numeric")
-                                    .attr("pattern", "[0-9]{6}")
-                                    .attr("maxlength", 6)
-                                    .attr("autocomplete", "one-time-code")
-                                    .flag("required", true)),
-                            button("Verify code", true))),
+                            user.email,
+                            "Verify code")),
             el("p", "After changing your password, sign in again with your new password."))
         .cls("profile-email-change")
         .attr("id", "change-password");
+  }
+
+  private static Element verificationSteps(int current) {
+    var steps = el("ol").cls("verification-steps").attr("aria-label", "Verification progress");
+    String[] labels = {"Confirm identity", "Verify email", "Update account"};
+    for (int i = 1; i <= 3; i++) {
+      steps.add(
+          el("li", el("span", i < current ? "✓" : Integer.toString(i)), el("small", labels[i - 1]))
+              .cls(i == current ? "is-current" : i < current ? "is-complete" : "")
+              .attr("aria-current", i == current ? "step" : null));
+    }
+    return steps;
+  }
+
+  private static Element verificationForm(
+      PageContext c, String path, String id, String email, String submit) {
+    return c.post(
+            path,
+            id,
+            el("div", "✉").cls("verification-mail-icon").attr("aria-hidden", "true"),
+            el("p", "EMAIL VERIFICATION").cls("verification-eyebrow"),
+            el("h3", "Check your inbox"),
+            el("p", "Enter the code sent to your Gmail address.").cls("verification-description"),
+            el("div", el("span", "Sent to"), el("strong", email)).cls("verification-recipient"),
+            el("div", el("span", "6-digit code"), el("span", "Valid for 10 minutes"))
+                .cls("verification-meta"),
+            field(
+                "Verification code",
+                input("code", "text", "")
+                    .cls("verification-code-input")
+                    .attr("placeholder", "000000")
+                    .attr("inputmode", "numeric")
+                    .attr("pattern", "[0-9]{6}")
+                    .attr("minlength", 6)
+                    .attr("maxlength", 6)
+                    .attr("autocomplete", "one-time-code")
+                    .attr("spellcheck", "false")
+                    .attr("aria-describedby", id + "-hint")
+                    .flag("required", true)),
+            el(
+                    "p",
+                    "Check your Spam folder if the email hasn't arrived. Use the latest code"
+                        + " received.")
+                .cls("verification-help")
+                .attr("id", id + "-hint"),
+            el("div", button(submit, true), action("Cancel", "/account/profile", false))
+                .cls("verification-actions"),
+            el("p", "Your account details stay unchanged until verification is complete.")
+                .cls("verification-assurance"))
+        .cls("verification-card");
   }
 }

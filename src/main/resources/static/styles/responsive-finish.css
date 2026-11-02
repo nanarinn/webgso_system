@@ -181,3 +181,40 @@ body { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
 .profile-email-change { margin-top:32px; padding-top:28px; border-top:1px solid var(--gso-border); }
 .profile-email-change form { display:grid; gap:16px; margin:22px 0; }
 .profile-email-change form button { justify-self:start; }
+.verification-steps { display:flex; list-style:none; padding:0; margin:24px 0; gap:12px; }
+.verification-steps li { flex:1; display:flex; align-items:center; gap:9px; color:#83928b; padding-bottom:14px; border-bottom:2px solid #e6ece8; }
+.verification-steps li > span { display:grid; place-items:center; flex:0 0 28px; width:28px; height:28px; border-radius:50%; background:#edf1ee; font-size:12px; font-weight:700; }
+.verification-steps small { font-size:12px; line-height:1.35; }
+.verification-steps .is-current { color:#174f3d; border-color:#287a59; font-weight:700; }
+.verification-steps .is-current > span { background:#19533f; color:white; box-shadow:0 0 0 4px #edf5e7; }
+.verification-steps .is-complete { color:#347357; border-color:#b8d6c2; }
+.verification-steps .is-complete > span { background:#e4f0df; }
+.verification-resend { border:1px solid #dfe8e2; border-radius:12px; background:#f8faf8; padding:16px 20px; }
+.verification-resend summary { cursor:pointer; color:#245c47; font-weight:600; font-size:13px; }
+.verification-resend form { margin-bottom:0; }
+.profile-email-change .verification-card { max-width:540px; margin:24px auto; padding:32px; gap:16px; border:1px solid #dce7de; border-radius:20px; background:linear-gradient(160deg,#f6faf3 0%,#fff 45%); box-shadow:0 12px 34px #173e2e08; text-align:center; }
+.verification-mail-icon { display:grid; place-items:center; width:62px; height:62px; margin:0 auto 4px; background:#e4efda; border:1px solid #d9e8cc; border-radius:18px; color:#1d6045; font-size:29px; }
+.profile-email-change .verification-eyebrow { margin:0; color:#5f7b69; font-size:10px; font-weight:700; letter-spacing:.16em; }
+.profile-email-change .verification-card h3 { margin:0; color:#173d30; font-size:26px; letter-spacing:-.025em; }
+.profile-email-change .verification-description { margin:0; color:#728278; font-size:13px; line-height:1.6; }
+.verification-recipient { display:grid; gap:4px; padding:12px 16px; border:1px solid #e2eae1; border-radius:10px; background:#f5f8f2; }
+.verification-recipient span { color:#7b8a80; font-size:11px; }
+.verification-recipient strong { color:#28513e; font-size:14px; overflow-wrap:anywhere; }
+.verification-meta { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; }
+.verification-meta span { padding:5px 10px; border-radius:20px; background:#eef3ed; color:#5f7767; font-size:11px; }
+.verification-card label { text-align:left; font-size:12px; color:#466751; }
+.app-content .verification-code-input { width:100%; min-height:70px; margin-top:8px; text-align:center; font-family:"Segoe UI",Arial,sans-serif; font-size:30px; font-weight:650; letter-spacing:.35em; padding:12px 10px 12px 20px; background:#fff; border:1.5px solid #a7c3ad; border-radius:12px; box-shadow:0 0 0 4px #f2f6ed; }
+.verification-code-input::placeholder { color:#b9c7bc; opacity:1; }
+.profile-email-change .verification-help { margin:0; font-size:12px; color:#78867e; line-height:1.6; }
+.verification-actions { display:grid; gap:10px; margin-top:4px; }
+.profile-email-change .verification-actions :is(button,a) { width:100%; justify-self:stretch; justify-content:center; min-height:46px; }
+.verification-actions a { background:transparent; border-color:transparent; color:#678071; box-shadow:none; }
+.profile-email-change .verification-assurance { margin:4px 0 0; padding-top:16px; border-top:1px solid #e7ede7; color:#7e8e82; font-size:11px; line-height:1.6; }
+#change-password { scroll-margin-top:110px; }
+@media(max-width:600px) {
+ .verification-steps { gap:8px; }
+ .verification-steps li { flex-direction:column; text-align:center; gap:9px; }
+ .verification-steps small { font-size:10px; }
+ .profile-email-change .verification-card { padding:24px 16px; border-radius:15px; }
+ .app-content .verification-code-input { font-size:27px; letter-spacing:.28em; min-height:64px; }
+}
