@@ -160,7 +160,6 @@ public final class JavaPages {
           continue;
         workspaceNav.add(navigation(c, item.title(), item.path()));
       }
-      workspaceNav.add(navigation(c, "User Guide", "/help"));
       workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
     }
     nav.add(

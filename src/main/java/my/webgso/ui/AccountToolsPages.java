@@ -142,8 +142,7 @@ final class AccountToolsPages {
                     "p",
                     "Daily local backup while the server runs. The seven latest completed copies"
                         + " are kept. Backups are stored on this server and are not sent by"
-                        + " email."),
-                link("Open User Guide", "/help"))
+                        + " email."))
             .cls("panel account-tools-card"));
   }
 
