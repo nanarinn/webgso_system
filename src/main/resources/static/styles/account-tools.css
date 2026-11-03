@@ -22,3 +22,18 @@
 .account-tools-auth h1 { font-size: clamp(25px, 3vw, 30px); margin: 10px 0 14px; }
 .account-tools-form > small, .account-tools-form > p { color: #637b6c; line-height: 1.6; }
 @media (max-width: 600px) { .account-tools-auth.registration-shell { margin: 24px auto; } }
+.profile-detail-stack { display:grid; gap:24px; min-width:0; align-content:start; }
+.profile-google-panel { padding:28px; margin-top:0; }
+.profile-edit-panel > .profile-google-panel { margin-top:28px; }
+.profile-google-heading { display:flex; align-items:center; gap:16px; margin-bottom:20px; }
+.profile-google-heading h2 { margin:0 0 5px; font-size:22px; }
+.profile-google-heading p,.profile-google-panel p { color:#637b6c; line-height:1.6; }
+.profile-google-heading p { margin:0; }
+.profile-google-icon { display:grid; place-items:center; width:48px; height:48px; border:1px solid #dce6dc; border-radius:12px; background:#fff; color:#4285f4; font-size:26px; font-weight:700; flex-shrink:0; }
+.profile-google-panel .account-tools-form { max-width:540px; }
+.profile-google-panel .account-tools-form button { justify-self:start; }
+.profile-google-connected { padding:18px; border:1px solid #d5e5c8; border-radius:12px; background:#f3f8ee; }
+.profile-google-connected strong { color:#245b3e; }
+.profile-google-connected p { margin:8px 0; overflow-wrap:anywhere; }
+.profile-google-connected small { color:#637b6c; line-height:1.6; }
+@media(max-width:600px) { .profile-google-panel { padding:20px; } }

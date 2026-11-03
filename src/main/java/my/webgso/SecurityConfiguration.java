@@ -128,6 +128,10 @@ public class SecurityConfiguration {
               oauth
                   .loginPage("/login")
                   .clientRegistrationRepository(clients.getObject())
+                  .authorizationEndpoint(
+                      endpoint ->
+                          endpoint.authorizationRequestResolver(
+                              google.resolver(clients.getObject())))
                   .successHandler(google::success)
                   .failureHandler(
                       (request, response, error) -> {

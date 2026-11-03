@@ -19,6 +19,53 @@ import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 
 class GoogleLoginTests {
+  @Test
+  void linkingCallbackIsSingleUseAndNeverFallsBackToCreatingAnotherAccount() throws Exception {
+    for (boolean matchingState : List.of(true, false)) {
+      var google = mock(GoogleAccounts.class);
+      var accounts = mock(Accounts.class);
+      var links = mock(GoogleAccountLink.class);
+      var intent =
+          new GoogleAccountLink.Intent(
+              "local-id", "stamp", Instant.now().plusSeconds(300), "expected");
+      var user = new ApplicationUser();
+      user.id = "local-id";
+      when(links.current(intent)).thenReturn(user);
+      var oidc = mock(org.springframework.security.oauth2.core.oidc.user.OidcUser.class);
+      when(oidc.getSubject()).thenReturn("subject");
+      when(oidc.getEmail()).thenReturn("other@gmail.com");
+      when(oidc.getEmailVerified()).thenReturn(true);
+      when(links.complete(intent, "subject", "other@gmail.com", true))
+          .thenThrow(new IllegalArgumentException("Wrong Gmail"));
+      var local =
+          org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+              .authenticated(
+                  new Accounts.Principal("local-id", "local", "Local", "stamp"),
+                  null,
+                  List.of(new SimpleGrantedAuthority("ROLE_Admin")));
+      when(accounts.token(user)).thenReturn(local);
+      var request = new MockHttpServletRequest();
+      request.getSession().setAttribute(GoogleAccountLink.SESSION_KEY, intent);
+      request.setParameter("state", matchingState ? "expected" : "incorrect");
+      var response = new MockHttpServletResponse();
+      var auth =
+          new OAuth2AuthenticationToken(
+              oidc, List.of(new SimpleGrantedAuthority("OIDC_USER")), "google");
+      new GoogleLogin(google, accounts, links).success(request, response, auth);
+      verifyNoInteractions(google);
+      if (matchingState) {
+        assertThat(response.getRedirectedUrl()).isEqualTo("/account/profile?googleLink=error");
+        assertThat(request.getSession().getAttribute(GoogleAccountLink.SESSION_KEY)).isNull();
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isSameAs(local);
+      } else {
+        assertThat(response.getRedirectedUrl()).isEqualTo("/login?google=error");
+        assertThat(request.getSession(false)).isNull();
+        verifyNoInteractions(links);
+      }
+      SecurityContextHolder.clearContext();
+    }
+  }
+
   @AfterEach
   void clear() {
     SecurityContextHolder.clearContext();
@@ -61,7 +108,8 @@ class GoogleLoginTests {
       request.getSession();
       var response = new MockHttpServletResponse();
       SecurityContextHolder.getContext().setAuthentication(auth);
-      new GoogleLogin(google, accounts).success(request, response, auth);
+      new GoogleLogin(google, accounts, mock(GoogleAccountLink.class))
+          .success(request, response, auth);
       if (status.equals("Approved")) {
         assertThat(response.getRedirectedUrl()).isEqualTo("/");
         var context =

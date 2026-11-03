@@ -12,6 +12,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.stereotype.Component;
@@ -20,14 +23,74 @@ import org.springframework.stereotype.Component;
 public class GoogleLogin {
   private final GoogleAccounts googleAccounts;
   private final Accounts accounts;
+  private final GoogleAccountLink links;
 
-  public GoogleLogin(GoogleAccounts googleAccounts, Accounts accounts) {
+  public GoogleLogin(GoogleAccounts googleAccounts, Accounts accounts, GoogleAccountLink links) {
     this.googleAccounts = googleAccounts;
     this.accounts = accounts;
+    this.links = links;
+  }
+
+  public OAuth2AuthorizationRequestResolver resolver(ClientRegistrationRepository clients) {
+    var delegate = new DefaultOAuth2AuthorizationRequestResolver(clients, "/oauth2/authorization");
+    return new OAuth2AuthorizationRequestResolver() {
+      public OAuth2AuthorizationRequest resolve(HttpServletRequest request) {
+        return bind(request, delegate.resolve(request));
+      }
+
+      public OAuth2AuthorizationRequest resolve(HttpServletRequest request, String id) {
+        return bind(request, delegate.resolve(request, id));
+      }
+
+      private OAuth2AuthorizationRequest bind(
+          HttpServletRequest request, OAuth2AuthorizationRequest authorization) {
+        var session = request.getSession(false);
+        if (authorization != null
+            && session != null
+            && session.getAttribute(GoogleAccountLink.SESSION_KEY)
+                instanceof GoogleAccountLink.Intent intent) {
+          session.setAttribute(
+              GoogleAccountLink.SESSION_KEY, intent.withState(authorization.getState()));
+          return OAuth2AuthorizationRequest.from(authorization)
+              .additionalParameters(parameters -> parameters.put("prompt", "select_account"))
+              .build();
+        }
+        return authorization;
+      }
+    };
   }
 
   public void success(HttpServletRequest request, HttpServletResponse response, Authentication auth)
       throws IOException {
+    var session = request.getSession(false);
+    if (session != null
+        && session.getAttribute(GoogleAccountLink.SESSION_KEY)
+            instanceof GoogleAccountLink.Intent intent) {
+      session.removeAttribute(GoogleAccountLink.SESSION_KEY);
+      try {
+        if (intent.state() == null || !intent.state().equals(request.getParameter("state")))
+          throw new IllegalArgumentException("Invalid Google linking state");
+        var user = links.current(intent);
+        String outcome = "linked";
+        try {
+          var identity = (OidcUser) auth.getPrincipal();
+          user =
+              links.complete(
+                  intent, identity.getSubject(), identity.getEmail(), identity.getEmailVerified());
+        } catch (RuntimeException e) {
+          outcome = "error";
+        }
+        var context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(accounts.token(user));
+        SecurityContextHolder.setContext(context);
+        new HttpSessionSecurityContextRepository().saveContext(context, request, response);
+        response.sendRedirect("/account/profile?googleLink=" + outcome);
+      } catch (RuntimeException e) {
+        clear(request);
+        response.sendRedirect("/login?google=error");
+      }
+      return;
+    }
     String result;
     try {
       var identity = (OidcUser) auth.getPrincipal();

@@ -33,6 +33,7 @@ public class WebController {
   private final ApiBatchReports apiBatchReports;
   private final PlantApiProbe probe;
   private final EmailVerification emailVerification;
+  private final GoogleAccountLink googleAccountLink;
 
   public WebController(
       Store db,
@@ -51,7 +52,9 @@ public class WebController {
       DatabaseConnectionStatus databaseConnection,
       ApiBatchReports apiBatchReports,
       PlantApiProbe probe,
-      EmailVerification emailVerification) {
+      EmailVerification emailVerification,
+      GoogleAccountLink googleAccountLink) {
+    this.googleAccountLink = googleAccountLink;
     this.emailVerification = emailVerification;
     this.probe = probe;
     this.apiBatchReports = apiBatchReports;
@@ -131,7 +134,11 @@ public class WebController {
   }
 
   @GetMapping("/account/google")
-  public String googleLogin(@Value("${webgso.google.enabled:false}") boolean enabled) {
+  public String googleLogin(
+      @Value("${webgso.google.enabled:false}") boolean enabled,
+      jakarta.servlet.http.HttpServletRequest request) {
+    if (request.getSession(false) != null)
+      request.getSession(false).removeAttribute(GoogleAccountLink.SESSION_KEY);
     return enabled ? "redirect:/oauth2/authorization/google" : "redirect:/login?google=unavailable";
   }
 
@@ -1177,6 +1184,7 @@ public class WebController {
     var user = db.find(ApplicationUser.class, principal(auth).id()).orElseThrow();
     model.addAttribute("title", "My Profile");
     model.addAttribute("profile", user);
+    model.addAttribute("googleLinked", googleAccountLink.linked(user.id));
     model.addAttribute("pendingEmail", emailChange.pending(user.id).orElse(""));
     model.addAttribute("passwordChangeStage", passwordChange.stage(user.id));
     if (!model.containsAttribute("profileForm"))
