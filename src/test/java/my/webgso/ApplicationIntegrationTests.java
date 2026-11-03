@@ -1029,13 +1029,23 @@ class ApplicationIntegrationTests {
             content()
                 .string(
                     org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Full name"))));
+    mvc.perform(get("/register"))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("name=\"username\""))))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("name=\"confirmPassword\""))))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Create password")));
     mvc.perform(
             post("/account/register")
                 .with(csrf())
-                .param("username", name)
                 .param("email", email)
-                .param("password", "StrongPassword123!")
-                .param("confirmPassword", "StrongPassword123!"))
+                .param("password", "StrongPassword123!"))
         .andExpect(redirectedUrl("/login?registered=success"));
     var user =
         db.list(

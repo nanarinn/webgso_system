@@ -140,14 +140,15 @@ public class WebController {
   }
 
   @PostMapping("/account/register")
-  public String register(
-      @RequestParam String username,
-      @RequestParam String email,
-      @RequestParam String password,
-      @RequestParam String confirmPassword) {
-    if (!password.equals(confirmPassword))
-      throw new IllegalArgumentException("The passwords do not match.");
-    emailVerification.register(username.trim(), email.trim(), username.trim(), password);
+  public String register(@RequestParam String email, @RequestParam String password) {
+    String address = email.trim();
+    GmailAccounts.require(address);
+    String displayName = address.substring(0, address.indexOf('@'));
+    emailVerification.register(
+        "account." + UUID.randomUUID(),
+        address,
+        displayName.substring(0, Math.min(displayName.length(), 160)),
+        password);
     return "redirect:/login?registered=success";
   }
 

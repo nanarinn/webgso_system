@@ -202,39 +202,25 @@ final class AuthPages {
             "/account/register",
             "java-form signup-form",
             field(
-                "Username",
-                input("username", "text", null)
-                    .attr("autocomplete", "username")
-                    .attr("minlength", 3)
-                    .attr("maxlength", 100)
-                    .attr("pattern", "[a-zA-Z0-9_.@-]+")
-                    .attr("placeholder", "Choose a username")
-                    .flag("required", true)),
+                    "Gmail address",
+                    input("email", "email", null)
+                        .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
+                        .attr("title", "Only @gmail.com email addresses are allowed.")
+                        .attr("autocomplete", "email")
+                        .attr("maxlength", 256)
+                        .attr("placeholder", "you@gmail.com")
+                        .flag("required", true))
+                .cls("signup-wide"),
             field(
-                "Gmail address",
-                input("email", "email", null)
-                    .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
-                    .attr("title", "Only @gmail.com email addresses are allowed.")
-                    .attr("autocomplete", "email")
-                    .attr("maxlength", 256)
-                    .attr("placeholder", "you@gmail.com")
-                    .flag("required", true)),
-            field(
-                "Password",
-                input("password", "password", null)
-                    .attr("autocomplete", "new-password")
-                    .attr("minlength", 12)
-                    .attr("maxlength", 72)
-                    .attr("placeholder", "Create a password")
-                    .attr("aria-describedby", "signup-password-help")
-                    .flag("required", true)),
-            field(
-                "Confirm password",
-                input("confirmPassword", "password", null)
-                    .attr("autocomplete", "new-password")
-                    .attr("maxlength", 72)
-                    .attr("placeholder", "Re-enter your password")
-                    .flag("required", true)),
+                    "Create password",
+                    input("password", "password", null)
+                        .attr("autocomplete", "new-password")
+                        .attr("minlength", 12)
+                        .attr("maxlength", 72)
+                        .attr("placeholder", "Create a password")
+                        .attr("aria-describedby", "signup-password-help")
+                        .flag("required", true))
+                .cls("signup-wide"),
             el(
                     "p",
                     "Use 12–72 characters with uppercase and lowercase letters, a number and a"
@@ -276,7 +262,9 @@ final class AuthPages {
                 el(
                         "ol",
                         signupStep(
-                            "01", "Create your profile", "Enter your details and email address."),
+                            "01",
+                            "Create your account",
+                            "Enter your Gmail address and create a password."),
                         signupStep(
                             "02", "Verify your email", "Open the verification link in your inbox."),
                         signupStep(
