@@ -79,6 +79,11 @@ public class EmailPreferences {
 
   public boolean allowsDelivery(Models.UserAccessNotification note) {
     String type = note.notificationType;
+    if ("ApiIssueMessage".equals(type))
+      return owner(note.userId)
+          .filter(
+              u -> Boolean.TRUE.equals(u.emailConfirmed) && u.email.equalsIgnoreCase(note.email))
+          .isPresent();
     if ("ApiTestAlert".equals(type))
       type =
           note.subject != null && note.subject.contains("recovered")

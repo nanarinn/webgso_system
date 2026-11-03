@@ -120,7 +120,7 @@ public class ApiEmailAlerts {
         db.list(
             UserAccessNotification.class,
             "WHERE \"NotificationType\" IN"
-                + " ('ApiTestAlert','ApiTestFailed','ApiTestRecovered','StaleDataAlert','ApiDailySummary','EmailVerification','PasswordReset','AccessDecision','EmailChangeCode','EmailChangeNotice','PasswordChangeCode')"
+                + " ('ApiIssueMessage','ApiTestAlert','ApiTestFailed','ApiTestRecovered','StaleDataAlert','ApiDailySummary','EmailVerification','PasswordReset','AccessDecision','EmailChangeCode','EmailChangeNotice','PasswordChangeCode')"
                 + " AND \"DeliveryStatus\"='Pending' ORDER BY \"Id\" LIMIT 10")) {
       if (db.jdbc()
               .update(

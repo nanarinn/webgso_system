@@ -32,6 +32,7 @@ public final class JavaPages {
           case "resource" -> AdminPages.resource(c);
           case "edit" -> AdminPages.edit(c);
           case "users" -> AdminPages.users(c);
+          case "api-email" -> ApiEmailPage.render(c);
           case "email-settings" -> AccountToolsPages.settings(c);
           case "user-guide" -> AccountToolsPages.guide(c);
           case "profile" -> ProfilePages.profile(c);
@@ -81,7 +82,7 @@ public final class JavaPages {
                 "/styles/workspace-finish.css?v=1",
                 "/styles/signup.css?v=3",
                 "/styles/plant-filters.css?v=4",
-                "/styles/account-tools.css?v=2",
+                "/styles/account-tools.css?v=3",
                 "/styles/responsive-finish.css?v=1");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
@@ -160,6 +161,7 @@ public final class JavaPages {
           continue;
         workspaceNav.add(navigation(c, item.title(), item.path()));
       }
+      workspaceNav.add(navigation(c, "API email alerts", "/admin/api-email"));
       workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
     }
     nav.add(

@@ -18,6 +18,7 @@ public final class JavaPageResolver implements ViewResolver, Ordered {
           "forgot-password",
           "reset-password",
           "email-settings",
+          "api-email",
           "user-guide",
           "error-page",
           "dashboard",
