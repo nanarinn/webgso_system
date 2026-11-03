@@ -21,16 +21,8 @@ if ($PublicBaseUrl) {
     $env:WEBGSO_SECURE_COOKIE = 'true'
 }
 
-# Google OAuth uses a separate Windows-encrypted credential, not the Gmail App Password.
-$googleCredentialPath = Join-Path $env:LOCALAPPDATA 'GSO Web Services\google.oauth.xml'
-if (-not $Demo -and -not $env:GOOGLE_CLIENT_SECRET -and (Test-Path -LiteralPath $googleCredentialPath)) {
-    $googleCredential = Import-Clixml -LiteralPath $googleCredentialPath
-    if ($googleCredential -isnot [System.Management.Automation.PSCredential]) { throw 'Invalid local Google OAuth credential file.' }
-    $env:GOOGLE_CLIENT_ID = $googleCredential.UserName
-    $env:GOOGLE_CLIENT_SECRET = $googleCredential.GetNetworkCredential().Password
-    if (-not $env:GOOGLE_LOGIN_ENABLED) { $env:GOOGLE_LOGIN_ENABLED = 'true' }
-    $googleCredential = $null
-}
+# Google sign-in has been retired. Gmail SMTP remains available for verification emails.
+$env:GOOGLE_LOGIN_ENABLED = 'false'
 
 # Windows DPAPI-encrypted credential, entered locally and never stored in Git.
 $gmailCredentialPath = Join-Path $env:LOCALAPPDATA 'GSO Web Services\gmail.credential.xml'

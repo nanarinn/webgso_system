@@ -1,10 +1,8 @@
 package my.webgso;
 
-import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import java.net.URI;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -24,36 +22,23 @@ class GoogleOAuthSecurityTests {
   @Autowired MockMvc mvc;
 
   @Test
-  void googleAuthorizationUsesStateNonceAndFixedCallback() throws Exception {
-    mvc.perform(get("/account/google")).andExpect(redirectedUrl("/oauth2/authorization/google"));
-    var result =
-        mvc.perform(get("/oauth2/authorization/google"))
-            .andExpect(status().is3xxRedirection())
-            .andReturn();
-    var target = URI.create(result.getResponse().getRedirectedUrl());
-    assertThat(target.getHost()).isEqualTo("accounts.google.com");
-    assertThat(target.getQuery())
-        .contains(
-            "state=",
-            "nonce=",
-            "response_type=code",
-            "openid",
-            "email",
-            "profile",
-            "redirect_uri=http://localhost:5187/login/oauth2/code/google");
-    assertThat(result.getRequest().getSession(false)).isNotNull();
+  void googleLoginIsUnavailableEvenWithOldConfiguration() throws Exception {
+    mvc.perform(get("/account/google")).andExpect(redirectedUrl("/login"));
+    mvc.perform(get("/oauth2/authorization/google")).andExpect(redirectedUrl("/login"));
+    mvc.perform(get("/login/oauth2/code/google").param("code", "old").param("state", "old"))
+        .andExpect(redirectedUrl("/login"));
   }
 
   @Test
-  void unsolicitedCallbackDoesNotCreateAnAuthenticatedSession() throws Exception {
-    var result =
-        mvc.perform(
-                get("/login/oauth2/code/google")
-                    .param("code", "unsolicited")
-                    .param("state", "invalid"))
-            .andExpect(redirectedUrl("/login?google=error"))
-            .andReturn();
-    assertThat(result.getRequest().getSession(false)).isNull();
-    mvc.perform(get("/api/status")).andExpect(status().isUnauthorized());
+  void loginAndSignupOfferOnlyEmailAuthentication() throws Exception {
+    for (String path : new String[] {"/login", "/register"}) {
+      mvc.perform(get(path))
+          .andExpect(status().isOk())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.not(
+                          org.hamcrest.Matchers.containsString("Continue with Google"))));
+    }
   }
 }

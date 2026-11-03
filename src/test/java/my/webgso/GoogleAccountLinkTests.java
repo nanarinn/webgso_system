@@ -94,35 +94,20 @@ class GoogleAccountLinkTests {
   }
 
   @Test
-  void linkRequiresPasswordCsrfAndBindsIntentToOAuthState() throws Exception {
+  void linkingIsRetiredAndProfileDoesNotOfferGoogle() throws Exception {
     var auth = accounts.token(user);
-    mvc.perform(post("/account/profile/google/link").with(authentication(auth)))
+    mvc.perform(post("/account/profile/google/link").with(authentication(auth)).with(csrf()))
         .andExpect(status().isForbidden());
-    mvc.perform(
-            post("/account/profile/google/link")
-                .with(authentication(auth))
-                .with(csrf())
-                .param("currentPassword", "wrong"))
-        .andExpect(redirectedUrl("/account/profile"))
-        .andExpect(request().sessionAttributeDoesNotExist(GoogleAccountLink.SESSION_KEY));
-    var started =
-        mvc.perform(
-                post("/account/profile/google/link")
-                    .with(authentication(auth))
-                    .with(csrf())
-                    .param("currentPassword", PASSWORD))
-            .andExpect(redirectedUrl("/oauth2/authorization/google"))
-            .andReturn();
-    var session = (org.springframework.mock.web.MockHttpSession) started.getRequest().getSession();
-    var authorized =
-        mvc.perform(get("/oauth2/authorization/google").session(session))
-            .andExpect(status().is3xxRedirection())
-            .andReturn();
-    assertThat(authorized.getResponse().getRedirectedUrl()).contains("prompt=select_account");
-    var intent = (GoogleAccountLink.Intent) session.getAttribute(GoogleAccountLink.SESSION_KEY);
-    assertThat(intent.state()).isNotBlank();
-    assertThat(intent.userId()).isEqualTo(user.id);
     mvc.perform(get("/account/profile").with(authentication(auth)))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Link Google account")));
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Link Google account"))))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Google connected"))));
   }
 }

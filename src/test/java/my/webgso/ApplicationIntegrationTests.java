@@ -1144,12 +1144,20 @@ class ApplicationIntegrationTests {
   }
 
   @Test
-  void googleDisabledShowsSetupMessageAndButtonsWithoutStartingAnOAuthRequest() throws Exception {
-    mvc.perform(get("/account/google")).andExpect(redirectedUrl("/login?google=unavailable"));
+  void retiredGoogleLoginDoesNotOfferGoogleButtonsOrSetupMessages() throws Exception {
+    mvc.perform(get("/account/google")).andExpect(redirectedUrl("/login"));
     mvc.perform(get("/login").param("google", "unavailable"))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("not configured yet")));
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("not configured yet"))));
     mvc.perform(get("/register"))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Continue with Google")));
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Continue with Google"))));
   }
 
   @Test

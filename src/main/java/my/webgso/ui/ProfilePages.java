@@ -64,11 +64,7 @@ final class ProfilePages {
                   "My Profile",
                   "View and manage your personal information.",
                   action("Email settings", "/account/email-settings", false)),
-              el(
-                      "div",
-                      summary,
-                      el("div", details, googleConnection(c, user)).cls("profile-detail-stack"))
-                  .cls("profile-layout"))
+              el("div", summary, details).cls("profile-layout"))
           .cls("profile-page");
     }
     var form =
@@ -118,11 +114,7 @@ final class ProfilePages {
             el(
                     "div",
                     summary,
-                    el(
-                            "article",
-                            form,
-                            managed ? null : securityActions(),
-                            googleConnection(c, user))
+                    el("article", form, managed ? null : securityActions())
                         .cls("panel profile-edit-panel"))
                 .cls("profile-layout"))
         .cls("profile-page");
@@ -147,62 +139,6 @@ final class ProfilePages {
                         action("Change password", "/account/profile/password", false)))
                 .cls("profile-security-actions"))
         .cls("profile-email-change");
-  }
-
-  private static Element googleConnection(PageContext c, ApplicationUser user) {
-    boolean linked = c.yes("googleLinked");
-    String result = c.request().getParameter("googleLink");
-    return el(
-            "section",
-            el(
-                    "div",
-                    el("span", "G").cls("profile-google-icon"),
-                    el(
-                        "div",
-                        el("h2", "Google account"),
-                        el("p", "Choose how you sign in to GSO.")))
-                .cls("profile-google-heading"),
-            result == null
-                ? null
-                : el(
-                        "p",
-                        result.equals("linked")
-                            ? "Google account linked successfully. You can now use Google or your"
-                                  + " existing GSO password."
-                            : "Google account was not linked. Choose the same Gmail address as your"
-                                  + " profile and try again.")
-                    .cls(result.equals("linked") ? "account-tools-notice" : "profile-error")
-                    .attr("role", "status"),
-            linked
-                ? el(
-                        "div",
-                        el("strong", "Google connected"),
-                        el("p", user.email),
-                        el(
-                            "small",
-                            "Your existing GSO password remains available if you have set one."))
-                    .cls("profile-google-connected")
-                : el(
-                    "div",
-                    el(
-                        "p",
-                        "Link "
-                            + user.email
-                            + " to sign in with Google without creating another GSO account."),
-                    c.post(
-                        "/account/profile/google/link",
-                        "account-tools-form",
-                        field(
-                            "Current GSO password",
-                            input("currentPassword", "password", null)
-                                .attr("autocomplete", "current-password")
-                                .flag("required", true)),
-                        el(
-                            "small",
-                            "Next, choose the Google account with the same Gmail address. Your"
-                                + " password will stay unchanged."),
-                        button("Link Google account", true))))
-        .cls("panel profile-google-panel");
   }
 
   static Element dialog(PageContext c) {

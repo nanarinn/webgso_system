@@ -131,29 +131,12 @@ final class AuthPages {
               "If this email has an unverified account, a verification link will be sent. Check"
                   + " your inbox and spam folder. Wait one minute before requesting another link.",
               "success"));
-    String google = c.request().getParameter("google");
-    if (google != null)
-      access.add(
-          alert(
-              switch (google) {
-                case "pending" ->
-                    "Verify your email before signing in. Check your inbox for a verification"
-                        + " link.";
-                case "existing" ->
-                    "This email already has an account. Sign in using your email and password.";
-                case "unavailable" ->
-                    "Google sign-in is not configured yet. Please use email sign-in for now.";
-                default ->
-                    "Google sign-in could not be completed. Please try again or use email sign-in.";
-              },
-              google.equals("pending") ? "success" : "error"));
     if (c.parameter("passwordReset"))
       access.add(alert("Your password has been reset. Sign in with your new password.", "success"));
     var identifier = authField("Gmail address", "identifier", "email", "username");
     // Controls retain their native browser validation, password-manager support and keyboard
     // behavior.
     access.add(
-        googleButton().cls("auth-google-button"),
         el("div", el("span", "Account credentials")).cls("auth-divider"),
         c.post(
             "/account/login",
@@ -311,8 +294,6 @@ final class AuthPages {
                         el("h1", "Create your account"),
                         el("p", "Get started with your GSO workspace."))
                     .cls("signup-heading"),
-                googleButton().cls("signup-google-button"),
-                el("p", "or register with email").cls("signup-email-divider"),
                 form)
             .cls("signup-card")
             .attr("aria-label", "Account registration");
@@ -372,11 +353,6 @@ final class AuthPages {
         "li",
         el("span", number).cls("signup-step-number").attr("aria-hidden", "true"),
         el("div", el("strong", title), el("p", detail)));
-  }
-
-  private static Element googleButton() {
-    return link("", "/account/google")
-        .add(el("span", "G").attr("aria-hidden", "true"), el("span", "Continue with Google"));
   }
 
   static String error(PageContext c) {

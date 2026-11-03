@@ -4,11 +4,9 @@ import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import java.io.IOException;
 import java.util.Objects;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.*;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.csrf.CsrfException;
@@ -17,17 +15,14 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Configuration
 public class SecurityConfiguration {
   @Bean
-  SecurityFilterChain security(
-      HttpSecurity http,
-      Accounts accounts,
-      Store db,
-      ObjectProvider<ClientRegistrationRepository> clients,
-      GoogleLogin google)
-      throws Exception {
+  SecurityFilterChain security(HttpSecurity http, Accounts accounts, Store db) throws Exception {
     http.authenticationProvider(accounts)
         .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(
+                        "/oauth2/**", "/login/oauth2/**", "/account/profile/google/link")
+                    .denyAll()
+                    .requestMatchers(
                         "/login",
                         "/register",
                         "/account/register",
@@ -36,8 +31,6 @@ public class SecurityConfiguration {
                         "/account/resend-verification",
                         "/account/forgot-password",
                         "/account/reset-password",
-                        "/oauth2/**",
-                        "/login/oauth2/**",
                         "/styles/**",
                         "/bootstrap/**",
                         "/scripts/**",
@@ -122,23 +115,6 @@ public class SecurityConfiguration {
               }
             },
             AnonymousAuthenticationFilter.class);
-    if (clients.getIfAvailable() != null) {
-      http.oauth2Login(
-          oauth ->
-              oauth
-                  .loginPage("/login")
-                  .clientRegistrationRepository(clients.getObject())
-                  .authorizationEndpoint(
-                      endpoint ->
-                          endpoint.authorizationRequestResolver(
-                              google.resolver(clients.getObject())))
-                  .successHandler(google::success)
-                  .failureHandler(
-                      (request, response, error) -> {
-                        GoogleLogin.clear(request);
-                        response.sendRedirect("/login?google=error");
-                      }));
-    }
     return http.build();
   }
 }
