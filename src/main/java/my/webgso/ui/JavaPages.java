@@ -75,7 +75,7 @@ public final class JavaPages {
                 "/styles/interface.css",
                 "/styles/java.css?v=2",
                 "/styles/workspace-theme.css?v=4",
-                "/styles/workspace-panels.css?v=28",
+                "/styles/workspace-panels.css?v=29",
                 "/styles/plant-editor.css?v=4",
                 "/styles/workspace-polish.css?v=2",
                 "/styles/workspace-finish.css?v=1",

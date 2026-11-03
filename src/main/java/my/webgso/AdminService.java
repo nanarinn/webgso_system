@@ -32,6 +32,36 @@ public class AdminService {
   }
 
   @Transactional
+  public void deletePlantApi(int plantId, String dataset, String actor) {
+    var plant =
+        db.find(LssPlant.class, plantId)
+            .orElseThrow(() -> new IllegalArgumentException("Plant not found."));
+    if (!dataset.equals("DDQ")
+        && PlantApiSlots.ALL.stream().noneMatch(slot -> slot.dataType().equals(dataset)))
+      throw new IllegalArgumentException("Choose a valid API dataset.");
+    // General legacy links and explicit dataset links are distinct. Never remove other datasets.
+    if (dataset.equals("DDQ")) {
+      plant.ddqApiEndpoint = "";
+      db.update(plant);
+    } else {
+      String apiType = dataset.equals("MMF") ? "MMF" : "DDQ";
+      db.jdbc()
+          .update(
+              "DELETE FROM \"PlantApiConfigurations\" WHERE \"PlantId\"=? AND \"ApiType\"=? AND"
+                  + " \"DataType\"=?",
+              plantId,
+              apiType,
+              dataset);
+      if (dataset.equals("MMF") && !plant.mmfApiEndpoint.isBlank()) {
+        plant.mmfApiEndpoint = "";
+        db.update(plant);
+      }
+    }
+    accounts.audit(
+        actor, "API removed", "Plant API", Integer.toString(plantId), "Success", dataset);
+  }
+
+  @Transactional
   public int savePlantApi(int plantId, String field, String url, String actor) {
     plant(plantId);
     var slot =

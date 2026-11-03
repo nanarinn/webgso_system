@@ -247,7 +247,8 @@ final class AdminPages {
                                 button("Test", false)
                                     .attr(
                                         "aria-label",
-                                        "Test " + name + " API for " + plant.get("name"))))
+                                        "Test " + name + " API for " + plant.get("name"))),
+                            deleteApi(c, plant, name, "table"))
                         .cls("plant-api-controls"))
                 .cls("plant-api-table-item"));
       }
@@ -357,6 +358,49 @@ final class AdminPages {
 
   private static Element plantCell(String label, Object value) {
     return el("td", value).attr("data-label", label);
+  }
+
+  private static Element deleteApi(
+      PageContext c, Map<String, Object> plant, String dataset, String source) {
+    String popup =
+        "delete-api-"
+            + plant.get("id")
+            + "-"
+            + dataset.replaceAll("[^a-zA-Z0-9]", "-")
+            + "-"
+            + source;
+    return el(
+        "div",
+        el("button", "Delete")
+            .attr("type", "button")
+            .attr("popovertarget", popup)
+            .attr("aria-label", "Delete " + dataset + " API for " + plant.get("name"))
+            .cls("plant-delete-button"),
+        el(
+                "div",
+                el("h2", "Delete API?").attr("id", popup + "-title"),
+                el("p", "Are you sure you want to delete this API connection?")
+                    .attr("id", popup + "-message"),
+                el("strong", plant.get("name") + " · " + dataset).cls("plant-delete-name"),
+                el("p", "The plant, other APIs and saved test history will be kept."),
+                c.post(
+                    "/admin/plants/" + plant.get("id") + "/apis/delete",
+                    "plant-delete-confirmation",
+                    input("dataType", "hidden", dataset),
+                    input("confirmation", "hidden", "delete"),
+                    el("button", "Cancel")
+                        .attr("type", "button")
+                        .attr("popovertarget", popup)
+                        .attr("popovertargetaction", "hide")
+                        .flag("autofocus", true)
+                        .cls("secondary-action"),
+                    button("Delete API", false).cls("plant-delete-button")))
+            .attr("id", popup)
+            .attr("popover", "auto")
+            .attr("role", "alertdialog")
+            .attr("aria-labelledby", popup + "-title")
+            .attr("aria-describedby", popup + "-message")
+            .cls("plant-delete-popup"));
   }
 
   private static void addPlantApi(

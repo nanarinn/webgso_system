@@ -23,6 +23,7 @@ class PlantDeletionTests {
   @Autowired MockMvc mvc;
   @Autowired Store db;
   @Autowired Accounts accounts;
+  @Autowired AdminService admin;
   Authentication auth;
   LssPlant plant, other;
 
@@ -43,6 +44,90 @@ class PlantDeletionTests {
     other.plantId = "KEEP-TEST";
     other.name = "Keep test plant";
     db.insert(other);
+  }
+
+  @Test
+  void deletesOneApiWhileKeepingPlantOtherDatasetsAndOtherPlants() throws Exception {
+    var selected = api(plant.id, "DDQ", "Day Ahead");
+    var keep = api(plant.id, "DDQ", "Week Ahead");
+    var otherApi = api(other.id, "DDQ", "Day Ahead");
+    mvc.perform(get("/admin/lss-plants").with(authentication(auth)))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.containsString(
+                        "Delete Day Ahead API for Delete test plant")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Delete API?")));
+    mvc.perform(
+            post("/admin/plants/" + plant.id + "/apis/delete")
+                .with(authentication(auth))
+                .with(csrf())
+                .param("dataType", "Day Ahead")
+                .param("confirmation", "delete"))
+        .andExpect(redirectedUrl("/admin/lss-plants"));
+    assertThat(db.find(PlantApiConfiguration.class, selected.id)).isEmpty();
+    assertThat(db.find(PlantApiConfiguration.class, keep.id)).isPresent();
+    assertThat(db.find(PlantApiConfiguration.class, otherApi.id)).isPresent();
+    assertThat(db.find(LssPlant.class, plant.id)).isPresent();
+  }
+
+  @Test
+  void removingLegacyMmfClearsItsDuplicateButKeepsGeneralDdq() {
+    plant.ddqApiEndpoint = "https://example.test/ddq";
+    plant.mmfApiEndpoint = "https://example.test/mmf";
+    db.update(plant);
+    var mmf = api(plant.id, "MMF", "MMF");
+    admin.deletePlantApi(plant.id, "MMF", "Delete Admin");
+    assertThat(db.find(PlantApiConfiguration.class, mmf.id)).isEmpty();
+    var saved = db.find(LssPlant.class, plant.id).orElseThrow();
+    assertThat(saved.mmfApiEndpoint).isEmpty();
+    assertThat(saved.ddqApiEndpoint).isEqualTo("https://example.test/ddq");
+    var rolling = api(plant.id, "DDQ", "Rolling 24 Hour");
+    admin.deletePlantApi(plant.id, "DDQ", "Delete Admin");
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().ddqApiEndpoint).isEmpty();
+    assertThat(db.find(PlantApiConfiguration.class, rolling.id)).isPresent();
+  }
+
+  @Test
+  void apiDeletionRequiresConfirmationCsrfAuthenticationAndValidDataset() throws Exception {
+    var keep = api(plant.id, "DDQ", "Day Ahead");
+    String path = "/admin/plants/" + plant.id + "/apis/delete";
+    mvc.perform(post(path).with(authentication(auth)).with(csrf()).param("dataType", "Day Ahead"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            post(path)
+                .with(authentication(auth))
+                .param("dataType", "Day Ahead")
+                .param("confirmation", "delete"))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            post(path).with(csrf()).param("dataType", "Day Ahead").param("confirmation", "delete"))
+        .andExpect(status().is3xxRedirection());
+    mvc.perform(
+            post(path)
+                .with(authentication(auth))
+                .with(csrf())
+                .param("dataType", "invalid")
+                .param("confirmation", "delete"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            post("/admin/plants/2147483647/apis/delete")
+                .with(authentication(auth))
+                .with(csrf())
+                .param("dataType", "Day Ahead")
+                .param("confirmation", "delete"))
+        .andExpect(status().isBadRequest());
+    assertThat(db.find(PlantApiConfiguration.class, keep.id)).isPresent();
+  }
+
+  private PlantApiConfiguration api(int plantId, String type, String dataset) {
+    var api = new PlantApiConfiguration();
+    api.plantId = plantId;
+    api.apiType = type;
+    api.dataType = dataset;
+    api.apiLink = "https://example.test/api";
+    db.insert(api);
+    return api;
   }
 
   @Test
