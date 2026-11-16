@@ -53,6 +53,27 @@ public class PlantApiClient {
   private final Set<String> privateHosts, httpHosts;
   private final int maxBytes;
 
+  @Value("${webgso.api.mmf-url:}")
+  private String mmfUrl = "";
+
+  @Value("${webgso.api.mmf-token:}")
+  private String mmfToken = "";
+
+  // Credentials belong only to the explicitly configured MMF endpoint, never arbitrary URLs.
+  HttpGet request(URI uri) {
+    var request = new HttpGet(uri);
+    if (!mmfUrl.isBlank() && !mmfToken.isBlank()) {
+      URI trusted = URI.create(mmfUrl);
+      if ("https".equals(trusted.getScheme())
+          && Objects.equals(uri.getScheme(), trusted.getScheme())
+          && Objects.equals(uri.getRawAuthority(), trusted.getRawAuthority())
+          && Objects.equals(uri.getRawPath(), trusted.getRawPath())) {
+        request.setHeader("Authorization", "Bearer " + mmfToken);
+      }
+    }
+    return request;
+  }
+
   public PlantApiClient(
       @Value("${webgso.api.allow-private-hosts:}") String privateHosts,
       @Value("${webgso.api.allow-http-hosts:}") String httpHosts,
@@ -144,7 +165,7 @@ public class PlantApiClient {
                         .build())
                 .build()) {
       return client.execute(
-          new HttpGet(uri),
+          request(uri),
           response -> {
             int code = response.getCode();
             var entity = response.getEntity();

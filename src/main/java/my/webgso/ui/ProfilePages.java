@@ -23,8 +23,8 @@ final class ProfilePages {
                 "aside",
                 el("div", initial).cls("profile-avatar"),
                 el("h2", name),
-                el("p", user.email).cls("profile-email"),
-                el("span", "Admin").cls("profile-role"),
+                el("p", user.userName).cls("profile-email"),
+                el("span", c.yes("isAdmin") ? "Admin" : "User").cls("profile-role"),
                 el(
                     "dl",
                     el("dt", "Account status"),
@@ -45,8 +45,8 @@ final class ProfilePages {
                           "dl",
                           el("dt", "Full name"),
                           el("dd", name),
-                          el("dt", "Email address"),
-                          el("dd", user.email),
+                          el("dt", "Email"),
+                          el("dd", user.email == null || user.email.isBlank() ? user.userName : user.email),
                           el("dt", "Phone number"),
                           el(
                               "dd",
@@ -63,7 +63,7 @@ final class ProfilePages {
                   "Account",
                   "My Profile",
                   "View and manage your personal information.",
-                  action("Email settings", "/account/email-settings", false)),
+                  null),
               el("div", summary, details).cls("profile-layout"))
           .cls("profile-page");
     }
@@ -87,21 +87,14 @@ final class ProfilePages {
                             .attr("maxlength", 160)
                             .attr("autocomplete", "name")
                             .flag("required", true)),
-                    field(
-                        "Email address",
-                        input("email", "email", values.get("email"))
-                            .attr("maxlength", 256)
-                            .attr("autocomplete", "email")
-                            .flag("readonly", true)
-                            .flag("required", true)),
+                    input("email", "hidden", values.get("email")),
                     field(
                         "Phone number (optional)",
                         input("phone", "tel", values.get("phone"))
                             .attr("maxlength", 30)
                             .attr("autocomplete", "tel")))
                 .cls("profile-fields"),
-            el("p", "Use Change email below to verify a new Gmail address.")
-                .cls("profile-form-note"),
+
             el("footer", action("Cancel", "/account/profile", false), button("Save changes", true))
                 .cls("profile-form-footer"));
     return el(
@@ -110,7 +103,7 @@ final class ProfilePages {
                 "Account",
                 "My Profile",
                 "View and manage your personal information.",
-                action("Email settings", "/account/email-settings", false)),
+                null),
             el(
                     "div",
                     summary,
@@ -121,26 +114,11 @@ final class ProfilePages {
   }
 
   private static Element securityActions() {
-    return el(
-            "section",
-            el("h2", "Account security"),
-            el("p", "Manage your sign-in details with email verification."),
-            el(
-                    "div",
-                    el(
-                        "div",
-                        el("strong", "Email address"),
-                        el("p", "Verify a new Gmail address before changing it."),
-                        action("Change email", "/account/profile/email", false)),
-                    el(
-                        "div",
-                        el("strong", "Password"),
-                        el("p", "Confirm your identity and choose a new password."),
-                        action("Change password", "/account/profile/password", false)))
-                .cls("profile-security-actions"))
-        .cls("profile-email-change");
+    return el("section", el("h2", "Account security"),
+        el("p", "Confirm your current password to change your email or password."),
+        action("Change email", "/account/profile/email", false),
+        action("Change password", "/account/profile/password", false)).cls("profile-email-change");
   }
-
   static Element dialog(PageContext c) {
     ApplicationUser user = c.value("profile");
     if (user == null || Boolean.TRUE.equals(user.isEntraUser)) return null;
@@ -160,7 +138,7 @@ final class ProfilePages {
                         : el("p", c.text("message"))
                             .cls("profile-dialog-notice")
                             .attr("role", "status"),
-                    email && c.model().get("profileError") != null
+                    c.model().get("profileError") != null
                         ? el("p", c.text("profileError")).cls("profile-error").attr("role", "alert")
                         : null,
                     email ? emailChange(c) : passwordChange(c))
@@ -172,172 +150,35 @@ final class ProfilePages {
   }
 
   private static Element emailChange(PageContext c) {
-    String pending = c.text("pendingEmail");
-    return el(
-            "section",
-            el("h2", "Change email"),
-            verificationSteps(pending.isBlank() ? 1 : 2),
-            el(
-                "p",
-                "Your current email stays active until the code sent to your new Gmail address is"
-                    + " verified."),
-            el(
-                    "details",
-                    el(
-                        "summary",
-                        pending.isBlank()
-                            ? "Enter your new email"
-                            : "Didn't receive a code? Resend"),
-                    c.post(
-                        "/account/profile/email/send-code",
-                        "profile-email-request",
-                        field(
-                            "New Gmail address",
-                            input("newEmail", "email", pending)
-                                .attr("placeholder", "you@gmail.com")
-                                .attr("maxlength", 256)
-                                .attr("autocomplete", "email")
-                                .flag("required", true)),
-                        field(
-                            "Current password",
-                            input("currentPassword", "password", "")
-                                .attr("autocomplete", "current-password")
-                                .flag("required", true)),
-                        button(pending.isBlank() ? "Send code" : "Resend code", true)))
-                .cls("verification-resend")
-                .flag("open", pending.isBlank()),
-            pending.isBlank()
-                ? null
-                : verificationForm(
-                    c,
-                    "/account/profile/email/verify",
-                    "profile-email-verify",
-                    pending,
-                    "Verify & change email"),
-            el("p", "After verification, sign in again using your new Gmail address."))
+    return el("section", el("h2", "Change email"),
+        el("p", "Enter your new SAE email address and confirm your current password."),
+        c.post("/account/profile/email/change", "profile-email-request",
+            field("New SAE email address", input("newEmail", "email", "")
+                .attr("placeholder", "name@sae-malaysia.com").attr("maxlength", 254)
+                .attr("autocomplete", "email").flag("required", true)),
+            field("Current password", input("currentPassword", "password", "")
+                .attr("autocomplete", "current-password").attr("maxlength", 256).flag("required", true)),
+            el("p", "Sign in again with your new email and existing password after saving. Your admin can review email changes."),
+            el("div", action("Cancel", "/account/profile/edit", false), button("Change email", true))
+                .cls("verification-actions")),
+        el("p", "Only @sae-malaysia.com addresses are allowed. No verification email is sent."))
         .cls("profile-email-change");
   }
 
   private static Element passwordChange(PageContext c) {
-    ApplicationUser user = c.value("profile");
-    String stage = c.text("passwordChangeStage");
-    return el(
-            "section",
-            el("h2", "Change password"),
-            verificationSteps("change".equals(stage) ? 3 : "verify".equals(stage) ? 2 : 1),
-            el(
-                "p",
-                "Confirm your current password, verify the code sent to your account email, then"
-                    + " choose a new password."),
-            c.model().get("passwordChangeError") == null
-                ? null
-                : el("p", c.text("passwordChangeError")).cls("profile-error").attr("role", "alert"),
-            "change".equals(stage)
-                ? c.post(
-                    "/account/profile/password/change",
-                    "profile-password-change",
-                    el("p", "Email verified. Enter your new password below."),
-                    field(
-                        "New password",
-                        input("password", "password", "")
-                            .attr("autocomplete", "new-password")
-                            .attr("minlength", 12)
-                            .attr("maxlength", 72)
-                            .flag("required", true)),
-                    field(
-                        "Confirm new password",
-                        input("confirmPassword", "password", "")
-                            .attr("autocomplete", "new-password")
-                            .attr("minlength", 12)
-                            .attr("maxlength", 72)
-                            .flag("required", true)),
-                    el(
-                        "p",
-                        "Use 12–72 characters including uppercase and lowercase letters, a number"
-                            + " and a symbol."),
-                    button("Change password", true))
-                : el(
-                    "div",
-                    el(
-                            "details",
-                            el(
-                                "summary",
-                                "verify".equals(stage)
-                                    ? "Didn't receive a code? Resend"
-                                    : "Confirm your identity"),
-                            c.post(
-                                "/account/profile/password/send-code",
-                                "profile-password-request",
-                                field(
-                                    "Current password",
-                                    input("currentPassword", "password", "")
-                                        .attr("autocomplete", "current-password")
-                                        .attr("maxlength", 72)
-                                        .flag("required", true)),
-                                el("p", "A verification code will be sent to " + user.email + "."),
-                                button("verify".equals(stage) ? "Resend code" : "Send code", true)))
-                        .cls("verification-resend")
-                        .flag("open", !"verify".equals(stage)),
-                    !"verify".equals(stage)
-                        ? null
-                        : verificationForm(
-                            c,
-                            "/account/profile/password/verify",
-                            "profile-password-verify",
-                            user.email,
-                            "Verify code")),
-            el("p", "After changing your password, sign in again with your new password."))
-        .cls("profile-email-change")
-        .attr("id", "change-password");
-  }
-
-  private static Element verificationSteps(int current) {
-    var steps = el("ol").cls("verification-steps").attr("aria-label", "Verification progress");
-    String[] labels = {"Confirm identity", "Verify email", "Update account"};
-    for (int i = 1; i <= 3; i++) {
-      steps.add(
-          el("li", el("span", i < current ? "✓" : Integer.toString(i)), el("small", labels[i - 1]))
-              .cls(i == current ? "is-current" : i < current ? "is-complete" : "")
-              .attr("aria-current", i == current ? "step" : null));
-    }
-    return steps;
-  }
-
-  private static Element verificationForm(
-      PageContext c, String path, String id, String email, String submit) {
-    return c.post(
-            path,
-            id,
-            el("div", "✉").cls("verification-mail-icon").attr("aria-hidden", "true"),
-            el("p", "EMAIL VERIFICATION").cls("verification-eyebrow"),
-            el("h3", "Check your inbox"),
-            el("p", "Enter the code sent to your Gmail address.").cls("verification-description"),
-            el("div", el("span", "Sent to"), el("strong", email)).cls("verification-recipient"),
-            el("div", el("span", "6-digit code"), el("span", "Valid for 10 minutes"))
-                .cls("verification-meta"),
-            field(
-                "Verification code",
-                input("code", "text", "")
-                    .cls("verification-code-input")
-                    .attr("placeholder", "000000")
-                    .attr("inputmode", "numeric")
-                    .attr("pattern", "[0-9]{6}")
-                    .attr("minlength", 6)
-                    .attr("maxlength", 6)
-                    .attr("autocomplete", "one-time-code")
-                    .attr("spellcheck", "false")
-                    .attr("aria-describedby", id + "-hint")
-                    .flag("required", true)),
-            el(
-                    "p",
-                    "Check your Spam folder if the email hasn't arrived. Use the latest code"
-                        + " received.")
-                .cls("verification-help")
-                .attr("id", id + "-hint"),
-            el("div", button(submit, true), action("Cancel", "/account/profile/edit", false))
-                .cls("verification-actions"),
-            el("p", "Your account details stay unchanged until verification is complete.")
-                .cls("verification-assurance"))
-        .cls("verification-card");
+    return el("section", el("h2", "Change password"),
+        el("p", "Confirm your current password, then choose your new password."),
+        c.post("/account/profile/password/update", "profile-password-change",
+            field("Current password", input("currentPassword", "password", "")
+                .attr("autocomplete", "current-password").attr("maxlength", 256).flag("required", true)),
+            field("New password", input("password", "password", "")
+                .attr("autocomplete", "new-password").attr("minlength", 12).attr("maxlength", 72).flag("required", true)),
+            field("Confirm new password", input("confirmPassword", "password", "")
+                .attr("autocomplete", "new-password").attr("minlength", 12).attr("maxlength", 72).flag("required", true)),
+            el("p", "Use 12–72 characters including uppercase, lowercase, a number and a symbol."),
+            el("div", action("Cancel", "/account/profile/edit", false), button("Change password", true))
+                .cls("verification-actions")),
+        el("p", "Sign in again after saving. No email or verification code is required."))
+        .cls("profile-email-change");
   }
 }

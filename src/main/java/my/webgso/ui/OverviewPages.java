@@ -11,6 +11,21 @@ import my.webgso.ui.Html.Element;
 final class OverviewPages {
   private OverviewPages() {}
 
+  static Element user(PageContext c) {
+    var rows = new ArrayList<Element>();
+    for (Map<String, Object> api : c.<Map<String, Object>>list("apiActivity")) {
+      rows.add(row(api.get("plantCode"), api.get("name"), api.get("category"),
+          api.get("status"), api.get("testedAt") == null ? "Not tested" : api.get("testedAt")));
+    }
+    return el("section",
+        heading("User workspace", "API overview", "View registered plants and test DDQ or MMF APIs.",
+            el("div", action("Test DDQ API", "/user/ddq-test", true),
+                action("Test MMF API", "/user/mmf-test", false)).cls("java-actions")),
+        el("article", el("h2", "Configured APIs"),
+            table(List.of("Plant ID", "Plant name", "API", "Latest result", "Last tested"),
+                rows, "No configured APIs yet.")).cls("panel"));
+  }
+
   static Element admin(PageContext c) {
     var cards =
         el(

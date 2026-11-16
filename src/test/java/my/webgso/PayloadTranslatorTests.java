@@ -11,6 +11,22 @@ class PayloadTranslatorTests {
   final LocalDateTime submission = LocalDateTime.of(2026, 10, 22, 8, 0);
 
   @Test
+  void mqttMmfEnvelopeAgeIsMetadataRatherThanAnUndatedMeasurement() {
+    var result = parse("""
+        {"plant":"BIDOR","data_type":"MMF","mqttConnected":true,
+         "maximumAgeSeconds":300,"status":"Fresh","readings":[
+          {"station":"Weather_Station_SAE_1","parameter":"WindSpeed",
+           "value":1.2,"unit":"m/s","timestamp":"2026-10-22T08:00:00+08:00",
+           "ageSeconds":12,"status":"Fresh","sourceTopic":"LSS_BIDOR_30MW-NEDA/Weather_Station_SAE_1"}]}
+        """, "MMF");
+    assertThat(result.readings()).hasSize(1);
+    assertThat(result.readings().getFirst().parameter).isEqualTo("WindSpeed");
+    assertThat(result.readings().getFirst().value).isEqualByComparingTo("1.2");
+    assertThat(result.readings().getFirst().intervalStart)
+        .isEqualTo(LocalDateTime.of(2026, 10, 22, 8, 0));
+  }
+
+  @Test
   void rejectsInvalidStructureEvenWhenOtherRowsAreReadable() {
     for (String row :
         java.util.List.of(

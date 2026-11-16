@@ -12,8 +12,10 @@ import org.springframework.web.servlet.view.AbstractView;
 public final class JavaPageResolver implements ViewResolver, Ordered {
   private static final Set<String> PAGES =
       Set.of(
+          "registered-users",
+          "audit-log",
           "login",
-          "register",
+          "register", "first-password",
           "email-verification",
           "forgot-password",
           "reset-password",
@@ -23,6 +25,8 @@ public final class JavaPageResolver implements ViewResolver, Ordered {
           "error-page",
           "dashboard",
           "admin-overview",
+          "user-overview",
+          "user-plant-config",
           "analytics",
           "collections",
           "collection",
@@ -32,8 +36,10 @@ public final class JavaPageResolver implements ViewResolver, Ordered {
           "users",
           "profile",
           "api-history",
+          "api-raw-response",
           "api-retest-progress",
           "api-quick-test",
+          "lss-directory",
           "batch-progress");
 
   @Override

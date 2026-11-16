@@ -10,6 +10,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 @Controller
 public class AccountToolsController {
   private final PasswordReset reset;
+  private final Accounts accounts;
   private final EmailPreferences prefs;
   private final DatabaseBackups backups;
   private final Store db;
@@ -17,6 +18,7 @@ public class AccountToolsController {
 
   public AccountToolsController(
       PasswordReset reset,
+      Accounts accounts,
       EmailPreferences prefs,
       DatabaseBackups backups,
       Store db,
@@ -24,6 +26,7 @@ public class AccountToolsController {
     this.db = db;
     this.connection = connection;
     this.reset = reset;
+    this.accounts = accounts;
     this.prefs = prefs;
     this.backups = backups;
   }
@@ -66,9 +69,21 @@ public class AccountToolsController {
   }
 
   @PostMapping("/account/forgot-password")
-  public String request(@RequestParam String email) {
-    reset.request(email);
-    return "redirect:/account/forgot-password?sent=true";
+  public String request(
+      @RequestParam(defaultValue = "") String identifier,
+      @RequestParam(defaultValue = "") String currentPassword,
+      @RequestParam(defaultValue = "") String password,
+      @RequestParam(defaultValue = "") String confirmPassword,
+      Model model) {
+    try {
+      accounts.changeWithCurrentPassword(identifier, currentPassword, password, confirmPassword);
+      return "redirect:/login?passwordReset=true";
+    } catch (org.springframework.security.core.AuthenticationException e) {
+      model.addAttribute("resetError", "Check your account ID and current password. If your account is locked, try again after 15 minutes.");
+    } catch (IllegalArgumentException e) {
+      model.addAttribute("resetError", e.getMessage());
+    }
+    return "forgot-password";
   }
 
   @GetMapping("/account/reset-password")

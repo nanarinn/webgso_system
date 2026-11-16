@@ -16,28 +16,11 @@ final class AuthPages {
             .attr("autocomplete", autocomplete)
             .flag("required", true);
     if (name.equals("identifier"))
-      control
-          .attr("maxlength", 256)
-          .attr("autocapitalize", "none")
-          .attr("spellcheck", "false")
-          .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
-          .attr("title", "Use your @gmail.com email address.")
-          .attr("placeholder", "you@gmail.com");
-    if (name.equals("identifier")) control.attr("aria-describedby", "gmail-address-hint");
-    return el(
-            "div",
-            el("label", label).attr("for", name),
-            control,
-            name.equals("identifier")
-                ? el(
-                        "small",
-                        el("span", "✓").attr("aria-hidden", "true"),
-                        "Gmail accounts only ",
-                        el("span", "@gmail.com").cls("gmail-domain"))
-                    .attr("id", "gmail-address-hint")
-                    .cls("auth-email-hint")
-                : null)
-        .cls("auth-field");
+      control.attr("maxlength", 256).attr("autocapitalize", "none")
+          .attr("spellcheck", "false").attr("placeholder", "you@sae-malaysia.com")
+          .attr("pattern", "[A-Za-z0-9._+\\-]+@[Ss][Aa][Ee]-[Mm][Aa][Ll][Aa][Yy][Ss][Ii][Aa]\\.[Cc][Oo][Mm]|demo\\.admin@example\\.test")
+          .attr("title", "Use your GSO work email ending in @sae-malaysia.com.");
+    return el("div", el("label", label).attr("for", name), control).cls("auth-field");
   }
 
   static String login(PageContext c) {
@@ -100,29 +83,35 @@ final class AuthPages {
                         el("p", "Access your registered services, forecasts and API validations."))
                     .cls("auth-form-heading"))
             .cls("auth-access-content");
+    if (c.parameter("accountDeleted"))
+      access.add(alert("Your account has been deleted. Please sign up again.", "error"));
     if (c.parameter("error"))
       access.add(
           alert(
-              "Sign-in failed. Check your email, password and account status. If your"
+              "Sign-in failed. Use your GSO email and check your password and account status. If your"
                   + " account is locked, try again after 15 minutes.",
               "error"));
     if (c.parameter("registered"))
       access.add(
           alert(
-              "Account created. Check your inbox and verify your email before signing in.",
+              "Account created. Sign in with your GSO email and temporary password CHANGEME. You must change it before using the system.",
               "success"));
+    if (c.parameter("initialPasswordChanged"))
+      access.add(alert("Password updated successfully. Sign in with your new password.", "success"));
     if (c.parameter("reason"))
       access.add(
           alert(
               "form-expired".equals(c.request().getParameter("reason"))
                   ? "Your sign-in form expired. Please enter your details and sign in again."
-                  : "Your session ended. Sign in to continue.",
+                  : "request-expired".equals(c.request().getParameter("reason"))
+                      ? "Your API test form expired. Nothing was tested or saved. Sign in again and retry the test."
+                      : "Your session ended. Sign in to continue.",
               ""));
     if (c.parameter("logout")) access.add(alert("You have signed out successfully.", "success"));
     if (c.parameter("emailChanged"))
       access.add(
           alert(
-              "Your email address has been verified and changed. Sign in with your new Gmail"
+              "Your email address has been changed. Sign in with your new SAE"
                   + " address.",
               "success"));
     if (c.parameter("verification"))
@@ -133,7 +122,7 @@ final class AuthPages {
               "success"));
     if (c.parameter("passwordReset"))
       access.add(alert("Your password has been reset. Sign in with your new password.", "success"));
-    var identifier = authField("Gmail address", "identifier", "email", "username");
+    var identifier = authField("GSO email address", "identifier", "email", "username");
     // Controls retain their native browser validation, password-manager support and keyboard
     // behavior.
     access.add(
@@ -142,36 +131,11 @@ final class AuthPages {
             "/account/login",
             "auth-form",
             identifier,
+            el("small", "Only GSO work email accounts are allowed. Personal and free email accounts are not accepted.").cls("signup-password-help"),
             authField("Password", "password", "password", "current-password"),
             el("button", "Login").cls("auth-submit").attr("type", "submit")),
         el("p", link("Forgot password?", "/account/forgot-password")).cls("auth-signup"),
         el("p", "Don't have an account? ", link("Sign up", "/register")).cls("auth-signup"),
-        el(
-                "details",
-                el("summary", "Resend verification email"),
-                c.post(
-                    "/account/resend-verification",
-                    "auth-form",
-                    field(
-                        "Gmail address",
-                        input("email", "email", null)
-                            .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
-                            .attr("title", "Only @gmail.com email addresses are allowed.")
-                            .attr("autocomplete", "email")
-                            .attr("maxlength", 256)
-                            .flag("required", true)),
-                    button("Send verification link", false).cls("auth-submit")))
-            .cls("auth-resend"),
-        el(
-                "details",
-                el("summary", "Information protection notice"),
-                el(
-                    "p",
-                    "This application contains TNB information. Any modification, copying,"
-                        + " reproduction, republication, uploading, posting, transmission or"
-                        + " distribution of this information without prior written permission is"
-                        + " prohibited."))
-            .cls("auth-notice"),
         el("footer", "GRID SYSTEM OPERATOR · Forecast & meteorological services")
             .cls("auth-access-footer"));
     return JavaPages.document(
@@ -190,6 +154,15 @@ final class AuthPages {
     return el("div", el("strong", name), el("span", description));
   }
 
+  private static Element resendVerification(PageContext c) {
+    return el("details", el("summary", "Resend verification email"),
+        c.post("/account/resend-verification", "auth-form",
+            field("GSO email address", input("email", "email", null)
+                .attr("autocomplete", "email").attr("maxlength", 256).flag("required", true)),
+            button("Send verification link", true).cls("auth-submit")))
+        .cls("auth-signup");
+  }
+
   private static Element alert(String text, String tone) {
     return el("div", text)
         .cls("auth-alert auth-alert-" + tone)
@@ -202,39 +175,19 @@ final class AuthPages {
             "/account/register",
             "java-form signup-form",
             field(
-                    "Gmail address",
+                    "GSO email address",
                     input("email", "email", null)
-                        .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
-                        .attr("title", "Only @gmail.com email addresses are allowed.")
-                        .attr("autocomplete", "email")
+                        .attr("pattern", "[A-Za-z0-9._+\\-]+@[Ss][Aa][Ee]-[Mm][Aa][Ll][Aa][Yy][Ss][Ii][Aa]\\.[Cc][Oo][Mm]")
+                        .attr("title", "Use your GSO work email ending in @sae-malaysia.com.")
+                        .attr("autocomplete", "username")
                         .attr("maxlength", 256)
-                        .attr("placeholder", "you@gmail.com")
+                        .attr("placeholder", "you@sae-malaysia.com")
                         .flag("required", true))
                 .cls("signup-wide"),
-            field(
-                    "Create password",
-                    input("password", "password", null)
-                        .attr("autocomplete", "new-password")
-                        .attr("minlength", 12)
-                        .attr("maxlength", 72)
-                        .attr("placeholder", "Create a password")
-                        .attr("aria-describedby", "signup-password-help")
-                        .flag("required", true))
-                .cls("signup-wide"),
-            el(
-                    "p",
-                    "Use 12–72 characters with uppercase and lowercase letters, a number and a"
-                        + " symbol.")
-                .attr("id", "signup-password-help")
+            el("small", "Use your @sae-malaysia.com work email address to register. Personal and free email addresses are not accepted.")
                 .cls("signup-password-help signup-wide"),
-            el(
-                    "div",
-                    el("strong", "Verify your email"),
-                    el(
-                        "p",
-                        "We will send a verification link to your email. Verify your email to"
-                            + " activate your account."))
-                .cls("signup-approval signup-wide"),
+            el("p", "Your temporary password is CHANGEME. After signing in, create and confirm a new password. You will then sign in again with your new password.")
+                .cls("signup-password-help signup-wide"),
             button("Create account", true).cls("primary-action signup-submit signup-wide"),
             el("p", "Already have an account? ", link("Sign in", "/login"))
                 .cls("signup-signin signup-wide"));
@@ -264,11 +217,11 @@ final class AuthPages {
                         signupStep(
                             "01",
                             "Create your account",
-                            "Enter your Gmail address and create a password."),
+                            "Register with your GSO work email."),
                         signupStep(
-                            "02", "Verify your email", "Open the verification link in your inbox."),
+                            "02", "First sign-in", "Use your GSO email and temporary password CHANGEME."),
                         signupStep(
-                            "03", "Start your workspace", "Sign in once your email is verified."))
+                            "03", "Secure your account", "Create a new password, then sign in again to access your workspace."))
                     .cls("signup-steps"),
                 el("p", "GRID SYSTEM OPERATOR", el("span", "Solar data management"))
                     .cls("signup-story-footer"))
@@ -280,7 +233,7 @@ final class AuthPages {
                         "header",
                         el("p", "ACCOUNT REGISTRATION").cls("signup-eyebrow"),
                         el("h1", "Create your account"),
-                        el("p", "Get started with your GSO workspace."))
+                        el("p", "Get started with your GSO work email."))
                     .cls("signup-heading"),
                 form)
             .cls("signup-card")
@@ -330,6 +283,7 @@ final class AuthPages {
                         input("token", "hidden", token),
                         button("Verify email", true))
                     : null,
+                !success && !landing ? resendVerification(c) : null,
                 action("Back to sign in", "/login", !landing))
             .cls("registration-shell verification-shell"),
         false,
@@ -357,3 +311,4 @@ final class AuthPages {
         false);
   }
 }
+

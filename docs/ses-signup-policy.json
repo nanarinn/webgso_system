@@ -1,0 +1,10 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "SendFromVerifiedDeveloperOnly",
+    "Effect": "Allow",
+    "Action": "ses:SendEmail",
+    "Resource": "arn:aws:ses:ap-southeast-5:441798856671:identity/developer@sae-malaysia.com",
+    "Condition": {"StringEquals": {"ses:FromAddress": "developer@sae-malaysia.com"}}
+  }]
+}

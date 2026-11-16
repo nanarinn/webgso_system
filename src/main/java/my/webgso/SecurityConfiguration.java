@@ -42,6 +42,9 @@ public class SecurityConfiguration {
                     .permitAll()
                     .requestMatchers("/admin/users", "/admin/users/**")
                     .denyAll()
+                    .requestMatchers("/", "/account/profile", "/account/profile/**",
+                        "/account/first-password", "/user/lss", "/user/plant-config", "/user/ddq-test", "/user/mmf-test")
+                    .hasAnyRole("Admin", "User")
                     .requestMatchers("/admin/**", "/api/admin/**")
                     .hasRole("Admin")
                     .anyRequest()
@@ -51,8 +54,13 @@ public class SecurityConfiguration {
                 form.loginPage("/login")
                     .loginProcessingUrl("/account/login")
                     .usernameParameter("identifier")
-                    .defaultSuccessUrl("/", true)
-                    .failureUrl("/login?error=true")
+                    .successHandler((request, response, authentication) -> {
+                    var principal = (Accounts.Principal) authentication.getPrincipal();
+                    response.sendRedirect(request.getContextPath() + (accounts.requiresInitialPassword(principal.id()) ? "/account/first-password" : "/"));
+                  })
+                    .failureHandler((request, response, error) -> response.sendRedirect(
+                        request.getContextPath() + (error instanceof DeletedAccountException
+                            ? "/login?accountDeleted=true" : "/login?error=true")))
                     .permitAll())
         .logout(
             logout ->
@@ -65,15 +73,19 @@ public class SecurityConfiguration {
             ex ->
                 ex.accessDeniedHandler(
                         (request, response, error) -> {
-                          // Reject stale login submissions without replaying credentials or
-                          // bypassing
-                          // CSRF. A fresh GET renders a new session-bound token.
+                          // Reject stale browser forms without replaying the POST or bypassing
+                          // CSRF. API clients and other protected routes retain their 403 response.
+                          String path = request.getRequestURI().substring(request.getContextPath().length());
+                          boolean loginForm = "/account/login".equals(path);
+                          boolean apiTestForm = java.util.Set.of(
+                              "/admin/ddq-test", "/admin/mmf-test", "/admin/api-quick-test",
+                              "/user/ddq-test", "/user/mmf-test").contains(path);
                           if (error instanceof CsrfException
                               && "POST".equals(request.getMethod())
-                              && (request.getContextPath() + "/account/login")
-                                  .equals(request.getRequestURI())) {
-                            response.sendRedirect(
-                                request.getContextPath() + "/login?reason=form-expired");
+                              && (loginForm || apiTestForm)) {
+                            response.setHeader("Cache-Control", "no-store");
+                            response.sendRedirect(request.getContextPath() + "/login?reason="
+                                + (loginForm ? "form-expired" : "request-expired"));
                           } else {
                             response.sendError(HttpServletResponse.SC_FORBIDDEN);
                           }
@@ -107,6 +119,15 @@ public class SecurityConfiguration {
                     if (request.getSession(false) != null) request.getSession(false).invalidate();
                     if (request.getRequestURI().startsWith("/api/")) response.sendError(401);
                     else response.sendRedirect("/login?reason=session-timeout");
+                    return;
+                  }
+                  String path = request.getRequestURI().substring(request.getContextPath().length());
+                  if (accounts.requiresInitialPassword(principal.id())
+                      && !path.equals("/account/first-password") && !path.equals("/account/logout")
+                      && !path.startsWith("/styles/") && !path.startsWith("/scripts/")
+                      && !path.startsWith("/bootstrap/") && !path.matches("/[^/]+\\.(png|svg)") && !path.equals("/error")) {
+                    if (path.startsWith("/api/")) response.sendError(403);
+                    else response.sendRedirect(request.getContextPath() + "/account/first-password");
                     return;
                   }
                   SecurityContextHolder.getContext().setAuthentication(accounts.token(user.get()));

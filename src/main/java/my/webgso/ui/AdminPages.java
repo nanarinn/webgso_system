@@ -27,7 +27,6 @@ final class AdminPages {
                   "ID",
                   "Plant ID",
                   "Plant Name",
-                  "Zone",
                   "State",
                   "Capacity (MW)",
                   "API",
@@ -111,8 +110,7 @@ final class AdminPages {
                     "locationMode",
                     "locationPlants",
                     "locationStates",
-                    "locationRegions",
-                    "locationZones"))
+                    "locationRegions"))
             .cls("panel"));
     return page;
   }
@@ -342,9 +340,6 @@ final class AdminPages {
             plantCell("ID", plant.get("id")),
             plantCell("Plant ID", plant.get("plantId")),
             plantCell("Plant name", plant.get("name")),
-            plantCell(
-                "Zone",
-                Objects.toString(plant.get("zone"), "").isBlank() ? "—" : plant.get("zone")),
             plantCell("State", plant.get("state")),
             plantCell(
                 "Capacity (MW)",
@@ -446,15 +441,10 @@ final class AdminPages {
     location.add(
         locationGroup(
             c, "plant", "Plant", "Select individual plants", "locationPlants", plantOptions));
-    for (String mode : List.of("state", "region", "zone")) {
+    for (String mode : List.of("state", "region")) {
       var options = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
       for (LssPlant plant : all) {
-        String value =
-            switch (mode) {
-              case "state" -> plant.state;
-              case "region" -> PlantLocationFilter.region(plant.state);
-              default -> plant.zone;
-            };
+        String value = mode.equals("state") ? plant.state : PlantLocationFilter.region(plant.state);
         if (value != null && !value.isBlank()) options.putIfAbsent(value, value);
       }
       String title = Character.toUpperCase(mode.charAt(0)) + mode.substring(1);
@@ -750,12 +740,6 @@ final class AdminPages {
                                 .attr("maxlength", 160)
                                 .flag("required", true)
                                 .attr("placeholder", "e.g. BDNS or KMPR")),
-                        field(
-                            "Zone",
-                            input("zone", "text", plant.zone)
-                                .attr("maxlength", 60)
-                                .attr("list", "plant-zone-options")
-                                .attr("placeholder", "Select or enter a zone")),
                         field("State", plantState(plant.state)),
                         field(
                             "Installed capacity (MW)",
@@ -763,14 +747,7 @@ final class AdminPages {
                                 .attr("step", "any")
                                 .attr("min", 0)
                                 .flag("required", true)))
-                    .cls("plant-detail-grid"),
-                el(
-                        "datalist",
-                        List.of("Northern", "Central", "Southern", "Eastern", "Sabah", "Sarawak")
-                            .stream()
-                            .map(zone -> el("option").attr("value", zone))
-                            .toList())
-                    .attr("id", "plant-zone-options"))
+                    .cls("plant-detail-grid"))
             .cls("plant-editor-card");
     var connections =
         el("details")

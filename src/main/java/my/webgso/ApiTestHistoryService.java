@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class ApiTestHistoryService {
+  @org.springframework.beans.factory.annotation.Value("${webgso.database.shared:false}")
+  private boolean sharedDatabase;
   public record Entry(
       long id,
       int plantId,
@@ -35,6 +37,7 @@ public class ApiTestHistoryService {
 
   @PostConstruct
   void initialize() {
+    if (sharedDatabase) return;
     new ResourceDatabasePopulator(new ClassPathResource("schema-api-test-history.sql"))
         .execute(source);
     jdbc.update(
@@ -88,10 +91,11 @@ public class ApiTestHistoryService {
       long started,
       String message) {
     var previous = history(plantId, dataset, 0);
+    var details = response == null ? Map.<String, Object>of() : ApiTestDetails.details(response);
     jdbc.update(
         "INSERT INTO \"ApiTestHistory\""
-            + " (\"PlantId\",\"Dataset\",\"TestedAt\",\"Actor\",\"Outcome\",\"HttpStatus\",\"ResponseMillis\",\"DurationMillis\",\"Message\")"
-            + " VALUES (?,?,?,?,?,?,?,?,?)",
+            + " (\"PlantId\",\"Dataset\",\"TestedAt\",\"Actor\",\"Outcome\",\"HttpStatus\",\"ResponseMillis\",\"DurationMillis\",\"Message\",\"ResponsePreview\",\"ResponseContentType\",\"ResponseBytes\",\"PreviewTruncated\")"
+            + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
         plantId,
         dataset,
         OffsetDateTime.now(ZoneOffset.UTC),
@@ -100,7 +104,9 @@ public class ApiTestHistoryService {
         response == null ? null : response.status(),
         response == null ? null : response.elapsedMillis(),
         (System.nanoTime() - started) / 1_000_000,
-        Objects.requireNonNullElse(message, "Test failed"));
+        Objects.requireNonNullElse(message, "Test failed"),
+        details.get("apiTestPreview"), details.get("apiTestContentType"),
+        details.get("apiTestBytes"), details.get("apiTestPreviewTruncated"));
     try {
       if (success)
         alerts.recordStale(
@@ -126,6 +132,17 @@ public class ApiTestHistoryService {
                 + " \"PlantId\",\"Dataset\")")
         .forEach(entry -> latest.put(key(entry.plantId(), entry.dataset()), entry));
     return latest;
+  }
+
+  public record SavedResponse(Entry test, String preview, String contentType, Long bytes,
+      boolean truncated) {}
+
+  public SavedResponse response(long id) {
+    var test = query("WHERE \"Id\"=?", id).stream().findFirst()
+        .orElseThrow(() -> new NoSuchElementException("API test not found"));
+    return jdbc.queryForObject("SELECT \"ResponsePreview\",\"ResponseContentType\",\"ResponseBytes\",\"PreviewTruncated\" FROM \"ApiTestHistory\" WHERE \"Id\"=?",
+        (rs, row) -> new SavedResponse(test, rs.getString(1), rs.getString(2),
+            (Long)rs.getObject(3), rs.getBoolean(4)), id);
   }
 
   public List<Entry> history(int plantId, String dataset, int page) {
@@ -210,6 +227,7 @@ public class ApiTestHistoryService {
   }
 
   private List<Entry> query(String predicate, Object... args) {
+    var actorNames = actorNames();
     return jdbc.query(
         "SELECT * FROM \"ApiTestHistory\" " + predicate,
         (rs, row) ->
@@ -218,12 +236,35 @@ public class ApiTestHistoryService {
                 rs.getInt("PlantId"),
                 rs.getString("Dataset"),
                 rs.getObject("TestedAt", OffsetDateTime.class),
-                rs.getString("Actor"),
+                actorNames.getOrDefault(rs.getString("Actor"), rs.getString("Actor")),
                 rs.getString("Outcome"),
                 (Integer) rs.getObject("HttpStatus"),
                 (Long) rs.getObject("ResponseMillis"),
                 rs.getLong("DurationMillis"),
                 rs.getString("Message")),
         args);
+  }
+
+  // Resolve renamed accounts from their recorded identity events, without rewriting test history.
+  private Map<String, String> actorNames() {
+    var names = new HashMap<String, String>();
+    var byId = new HashMap<String, String>();
+    var users = jdbc.queryForList("SELECT \"Id\",\"UserName\",\"Email\" FROM \"AspNetUsers\"");
+    for (var user : users)
+      byId.put((String) user.get("Id"), (String) user.get("UserName"));
+    for (var event : jdbc.queryForList(
+        "SELECT DISTINCT \"Actor\",\"EntityReference\" FROM \"AuditEvents\""
+            + " WHERE \"EntityType\"='User' AND \"Action\" IN ('Sign in','Account created')")) {
+      String username = byId.get(event.get("EntityReference"));
+      if (username != null) names.put((String) event.get("Actor"), username);
+    }
+    for (var user : users) {
+      String username = (String) user.get("UserName");
+      names.put((String) user.get("Id"), username);
+      names.put(username, username);
+      String email = (String) user.get("Email");
+      if (email != null && !email.isBlank()) names.put(email, username);
+    }
+    return names;
   }
 }

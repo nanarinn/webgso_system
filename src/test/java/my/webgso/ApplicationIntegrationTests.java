@@ -64,6 +64,31 @@ class ApplicationIntegrationTests {
     reset(client);
   }
 
+  @Test
+  void dedicatedTestPagesSeparateDatasetsAndLssUsesRegisteredPlants() throws Exception {
+    var mmf = mvc.perform(get("/admin/mmf-test").with(authentication(adminAuth)))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    assertThat(mmf).contains("MMF API testing", "action=\"/admin/mmf-test\"")
+        .doesNotContain("<option value=\"Rolling 24 Hour\"");
+    var ddq = mvc.perform(get("/admin/ddq-test").with(authentication(adminAuth)))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    assertThat(ddq).contains("DDQ API testing", "Rolling 24 Hour")
+        .doesNotContain("<option value=\"MMF\"");
+    mvc.perform(post("/admin/ddq-test").with(authentication(adminAuth)).with(csrf())
+        .param("apiUrl", "https://example.test/mmf").param("dataType", "MMF"))
+        .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Choose a DDQ dataset")));
+    verifyNoInteractions(client);
+    var plant = apiSavePlant("LSS directory sample");
+    try {
+      mvc.perform(get("/admin/lss").with(authentication(adminAuth))).andExpect(status().isOk())
+          .andExpect(content().string(org.hamcrest.Matchers.containsString("LSS directory sample")));
+    } finally { db.jdbc().update("DELETE FROM \"LssPlants\" WHERE \"Id\"=?", plant.id); }
+    mvc.perform(get("/admin/mmf-test")).andExpect(status().is3xxRedirection());
+    mvc.perform(post("/admin/mmf-test").with(authentication(adminAuth))
+        .param("apiUrl", "https://example.test/mmf").param("dataType", "MMF"))
+        .andExpect(redirectedUrl("/login?reason=request-expired"));
+  }
+
   private void readableApi(String url) {
     when(client.fetch(url))
         .thenReturn(
@@ -71,6 +96,22 @@ class ApplicationIntegrationTests {
                 200,
                 "application/json",
                 "[{\"timestamp\":\"2026-10-28T00:00:00\",\"value\":1.5,\"unit\":\"MW\"}]"));
+  }
+
+  @Test
+  void dedicatedApiTestsShowReadOnlyMeasurementsWithoutImportingThem() throws Exception {
+    String url = "https://example.test/preview";
+    for (String family : java.util.List.of("ddq", "mmf")) {
+      readableApi(url);
+      Integer before = db.jdbc().queryForObject("SELECT COUNT(*) FROM \"SolarApiReadings\"", Integer.class);
+      String page = mvc.perform(post("/admin/" + family + "-test")
+          .with(authentication(adminAuth)).with(csrf())
+          .param("apiUrl", url).param("dataType", family.equals("mmf") ? "MMF" : "Rolling 24 Hour"))
+          .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+      assertThat(page).contains("Tested API data", "Timestamp (MYT)", "1.5", "Read-only preview")
+          .doesNotContain(">Delete<");
+      assertThat(db.jdbc().queryForObject("SELECT COUNT(*) FROM \"SolarApiReadings\"", Integer.class)).isEqualTo(before);
+    }
   }
 
   private LssPlant apiSavePlant(String name) {
@@ -93,13 +134,13 @@ class ApplicationIntegrationTests {
       mvc.perform(
               post("/account/register")
                   .with(csrf())
-                  .param("username", "gmail.policy")
+                  .param("username", email)
                   .param("email", email)
                   .param("displayName", "Gmail policy")
                   .param("password", "StrongPassword123!")
                   .param("confirmPassword", "StrongPassword123!"))
           .andExpect(status().isBadRequest())
-          .andExpect(content().string(org.hamcrest.Matchers.containsString(GmailAccounts.MESSAGE)));
+          .andExpect(content().string(org.hamcrest.Matchers.containsString(SaeAccounts.MESSAGE)));
       assertThatThrownBy(() -> googleAccounts.resolve("blockedSubject", email, true, "Blocked"))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessage(GmailAccounts.MESSAGE);
@@ -119,7 +160,7 @@ class ApplicationIntegrationTests {
                 .with(csrf())
                 .param("identifier", admin.userName)
                 .param("password", "StrongPassword123!"))
-        .andExpect(redirectedUrl("/login?error=true"));
+        .andExpect(redirectedUrl("/"));
     var legacy =
         accounts.register("legacy.mail", "legacy@outlook.com", "Legacy", "StrongPassword123!");
     legacy.accessStatus = "Approved";
@@ -148,15 +189,16 @@ class ApplicationIntegrationTests {
                 .param("capacityMw", "30"))
         .andExpect(redirectedUrl("/admin/lss-plants"));
     var saved = db.find(LssPlant.class, plant.id).orElseThrow();
-    assertThat(saved.zone).isEqualTo("GSO North");
+    assertThat(saved.zone).isEqualTo("Northern");
     assertThat(saved.state).isEqualTo("Perak");
     mvc.perform(get("/admin/lss-plants").param("q", plant.name).with(authentication(adminAuth)))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("GSO North")));
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Perak")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<th>Zone</th>"))));
     mvc.perform(
             get("/admin/lss-plants/edit")
                 .param("id", plant.id.toString())
                 .with(authentication(adminAuth)))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"zone\"")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("name=\"zone\""))))
         .andExpect(
             content().string(org.hamcrest.Matchers.containsString("<select name=\"state\"")));
     mvc.perform(
@@ -168,8 +210,9 @@ class ApplicationIntegrationTests {
                 .param("apiDayAhead", "not-a-url")
                 .param("zone", "Draft zone")
                 .param("state", "Selangor"))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("value=\"Draft zone\"")));
-    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().zone).isEqualTo("GSO North");
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("value=\"Selangor\" selected=\"selected\"")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("name=\"zone\""))));
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().zone).isEqualTo("Northern");
     mvc.perform(
             post("/admin/lss-plants/save")
                 .with(authentication(adminAuth))
@@ -181,7 +224,7 @@ class ApplicationIntegrationTests {
                 .param("state", "Perak")
                 .param("capacityMw", "30"))
         .andExpect(status().isBadRequest());
-    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().zone).isEqualTo("GSO North");
+    assertThat(db.find(LssPlant.class, plant.id).orElseThrow().zone).isEqualTo("Northern");
   }
 
   @Test
@@ -894,6 +937,25 @@ class ApplicationIntegrationTests {
   }
 
   @Test
+  void expiredApiTestFormsRedirectWithoutExecutingTheTest() throws Exception {
+    for (String route : List.of("/admin/ddq-test", "/admin/mmf-test", "/admin/api-quick-test")) {
+      mvc.perform(post(route).param("_csrf", "old-session-token")
+              .param("apiUrl", "https://example.test/never-fetch"))
+          .andExpect(redirectedUrl("/login?reason=request-expired"))
+          .andExpect(unauthenticated());
+      mvc.perform(post(route).with(authentication(adminAuth)).with(csrf().useInvalidToken())
+              .param("apiUrl", "https://example.test/never-fetch"))
+          .andExpect(redirectedUrl("/login?reason=request-expired"));
+    }
+    verifyNoInteractions(client);
+    mvc.perform(get("/login?reason=request-expired"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Nothing was tested or saved")));
+    mvc.perform(post("/admin/users").with(authentication(adminAuth)).with(csrf()))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void visitingLoginProcessingAddressRedirectsToLoginPage() throws Exception {
     mvc.perform(get("/account/login")).andExpect(redirectedUrl("/login"));
   }
@@ -1015,97 +1077,25 @@ class ApplicationIntegrationTests {
   }
 
   @Test
-  void registrationRequiresOwnEmailVerificationWithoutAnotherUserApproval() throws Exception {
-    String name = "verify." + System.nanoTime();
-    String email = name + "@gmail.com";
-    mvc.perform(get("/register"))
-        .andExpect(status().isOk())
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("name=\"displayName\""))))
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Full name"))));
-    mvc.perform(get("/register"))
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("name=\"username\""))))
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("name=\"confirmPassword\""))))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Create password")));
-    mvc.perform(
-            post("/account/register")
-                .with(csrf())
-                .param("email", email)
-                .param("password", "StrongPassword123!"))
+  void companyRegistrationAllowsExplicitLoginWithoutEmailVerification() throws Exception {
+    String name = "developer@sae-malaysia.com";
+    mvc.perform(get("/register")).andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"email\"")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Verify your email"))));
+    mvc.perform(post("/account/register").with(csrf()).param("email", name)
+        .param("password", "StrongPassword123!"))
         .andExpect(redirectedUrl("/login?registered=success"));
-    var user =
-        db.list(
-                ApplicationUser.class,
-                "WHERE \"NormalizedEmail\"=?",
-                email.toUpperCase(Locale.ROOT))
-            .getFirst();
-    assertThat(user.displayName).isEqualTo(name);
-    assertThat(user.accessStatus).isEqualTo("Pending");
+    var user = db.list(ApplicationUser.class, "WHERE \"NormalizedUserName\"=?", name.toUpperCase(Locale.ROOT)).getFirst();
+    assertThat(user.email).isEqualTo(name);
+    assertThat(user.accessStatus).isEqualTo("Approved");
     assertThat(user.emailConfirmed).isFalse();
-    assertThat(
-            db.list(
-                UserAccessNotification.class,
-                "WHERE \"RelatedUserId\"=? AND \"NotificationType\"='AccessRequest'",
-                user.id))
-        .isEmpty();
-    String token = verificationToken(user.id);
-    assertThat(
-            db.jdbc()
-                .queryForObject(
-                    "SELECT \"TokenHash\" FROM \"GsoEmailVerifications\" WHERE \"UserId\"=?",
-                    String.class,
-                    user.id))
-        .hasSize(64)
-        .isNotEqualTo(token);
-    mvc.perform(
-            post("/account/login")
-                .with(csrf())
-                .param("identifier", email)
-                .param("password", "StrongPassword123!"))
-        .andExpect(redirectedUrl("/login?error=true"));
-    mvc.perform(get("/account/verify-email").param("token", token))
-        .andExpect(status().isOk())
-        .andExpect(header().string("Referrer-Policy", "no-referrer"));
-    assertThat(db.find(ApplicationUser.class, user.id).orElseThrow().accessStatus)
-        .isEqualTo("Pending");
-    mvc.perform(post("/account/verify-email").param("token", token))
-        .andExpect(status().isForbidden());
-    mvc.perform(post("/account/verify-email").with(csrf()).param("token", token))
-        .andExpect(status().isOk())
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Email verified")));
-    var verified = db.find(ApplicationUser.class, user.id).orElseThrow();
-    assertThat(verified.emailConfirmed).isTrue();
-    assertThat(verified.accessStatus).isEqualTo("Approved");
-    assertThat(verified.securityStamp).isNotEqualTo(user.securityStamp);
-    mvc.perform(
-            post("/account/login")
-                .with(csrf())
-                .param("identifier", email)
-                .param("password", "StrongPassword123!"))
-        .andExpect(redirectedUrl("/"));
-    assertThat(emailVerification.verify(token)).isFalse();
-    mvc.perform(get("/register"))
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("Admin review"))));
+    assertThat(db.list(UserAccessNotification.class,
+        "WHERE \"UserId\"=? AND \"NotificationType\"='EmailVerification'", user.id)).isEmpty();
+    mvc.perform(post("/account/register").with(csrf()).param("email", name.toUpperCase(Locale.ROOT))
+        .param("password", "StrongPassword123!")).andExpect(status().isBadRequest());
+    mvc.perform(post("/account/login").with(csrf()).param("identifier", name)
+        .param("password", "CHANGEME")).andExpect(redirectedUrl("/account/first-password"));
   }
-
   private String verificationToken(String userId) {
     var note =
         db.list(
@@ -1710,3 +1700,6 @@ class ApplicationIntegrationTests {
         .send(eq(List.of("recipient@gmail.com")), eq("Scheduled report"), anyString(), any());
   }
 }
+
+
+

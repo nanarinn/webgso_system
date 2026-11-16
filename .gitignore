@@ -30,3 +30,15 @@ target/
 .reports/
 .java-runtime/
 *.pid
+.build-demo/
+.demo-build.pom.xml
+.build-aws/
+.aws-build.pom.xml
+*.before-*
+*.credential.xml
+*.pem
+*.pfx
+*.p12
+*.jks
+*.dump
+.aws/

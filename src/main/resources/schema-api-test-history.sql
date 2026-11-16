@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS "ApiTestHistory" (
  "Message" text NOT NULL
 );
 CREATE INDEX IF NOT EXISTS "IX_ApiTestHistory_Plant_Dataset_Id" ON "ApiTestHistory" ("PlantId","Dataset","Id");
+ALTER TABLE "ApiTestHistory" ADD COLUMN IF NOT EXISTS "ResponsePreview" text;
+ALTER TABLE "ApiTestHistory" ADD COLUMN IF NOT EXISTS "ResponseContentType" text;
+ALTER TABLE "ApiTestHistory" ADD COLUMN IF NOT EXISTS "ResponseBytes" bigint;
+ALTER TABLE "ApiTestHistory" ADD COLUMN IF NOT EXISTS "PreviewTruncated" boolean;
 CREATE TABLE IF NOT EXISTS "ApiTestClaims" (
  "PlantId" integer NOT NULL,
  "Dataset" text NOT NULL,

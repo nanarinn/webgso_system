@@ -24,6 +24,8 @@ Stop the running JAR before rebuilding it on Windows. The Windows launcher defau
 
 ## Configuration
 
+The AWS prototype now uses the fixed Elastic IP `56.69.46.237`. The local profile explicitly permits HTTP to that host; production HTTPS and private-host restrictions are unchanged. Current API URLs and SSH instructions are listed in `../sae-docker/AWS_ENDPOINTS.txt`; `../sae-docker/WebGSO_Elastic_IP.postman_collection.json` provides importable requests with a single `baseUrl` variable.
+
 Set environment variables before starting the service. [.env.example](.env.example) lists the supported keys; it is a reference file and is not automatically loaded. For the VS Code PostgreSQL debugger, supply an ignored `.env.local` with environment values.
 
 | Variable | Purpose |
@@ -56,6 +58,7 @@ This explicit profile uses synthetic data in an in-memory H2 database, separate 
 - DDQ/MMF analytics with timestamp, submission, plant, state, region and parameter filters; chart and paged readings.
 - Manual and bounded concurrent batch collection, retained raw responses, validation anomalies, retries and explicitly requested DDQ replacement.
 - Plant configuration, dataset-specific API links and connection tests.
+- The plant editor separates plant details from optional API connections. Save a plant with no APIs, expand Add APIs to configure only the available datasets, and use each card's Test & Save API button to test and save that URL independently. A failed connection, unsuccessful HTTP response or unreadable payload cannot create or replace an API link; existing links and other in-progress form fields are retained. Save plant also tests every new/changed URL before saving. Clear an endpoint and save to remove that plant's link. Rolling, day-ahead, week-ahead, the complete four-month forecast, each of its four monthly parts, and MMF have independent URLs. Dataset-specific links take priority over the optional general DDQ/MMF URLs. Monthly parts retain their dataset identity in collection, analytics and reports. Connection tests do not import readings.
 - Collection schedules using timezone, interval/day/month or Spring cron controls.
 - On-demand Excel/CSV reports, anomaly/substitution exports, previous-day fallback, capacity capping and zero fallback. Downloads enforce ownership. Legacy report selections can be regenerated.
 - Report schedules, recipients and delivery monitoring through SMTP or Microsoft Graph.

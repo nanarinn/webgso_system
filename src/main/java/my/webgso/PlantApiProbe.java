@@ -20,7 +20,9 @@ public class PlantApiProbe {
   }
 
   public record ProbeResult(
-      PlantApiClient.Response response, int readings, String freshnessWarning) {}
+      PlantApiClient.Response response, int readings, String freshnessWarning,
+      java.util.List<my.webgso.Models.SolarApiReading> previewReadings,
+      ApiDataFreshness.Status freshness) {}
 
   public ProbeResult inspect(String url, String apiType, String dataType, int plantId) {
     client.validate(url);
@@ -40,10 +42,13 @@ public class PlantApiProbe {
       if (parsed.readings().isEmpty())
         throw new IllegalArgumentException(
             ApiFailureGuide.noMeasurements(response) + " The URL was not saved.");
+      var checkedAt = LocalDateTime.now(Policies.LOCAL);
       return new ProbeResult(
           response,
           parsed.readings().size(),
-          ApiDataFreshness.warning(parsed.readings(), dataType, now));
+          ApiDataFreshness.warning(parsed.readings(), dataType, checkedAt),
+          java.util.List.copyOf(parsed.readings().stream().limit(200).toList()),
+          "MMF".equals(dataType) ? ApiDataFreshness.mmfStatus(parsed.readings(), checkedAt) : null);
     } catch (IllegalArgumentException e) {
       throw new PlantApiClient.Failure(e.getMessage(), response);
     }

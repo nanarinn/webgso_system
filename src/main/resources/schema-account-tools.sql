@@ -1,3 +1,21 @@
+CREATE TABLE IF NOT EXISTS "GsoDeletedAccounts" (
+ "IdentifierHash" varchar(64) PRIMARY KEY,
+ "DeletedAt" timestamp with time zone NOT NULL
+);
+CREATE TABLE IF NOT EXISTS "GsoNameChangeHistory" (
+ "Id" varchar(36) PRIMARY KEY,
+ "UserId" varchar(450) NOT NULL REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE,
+ "OldName" varchar(160) NOT NULL, "NewName" varchar(160) NOT NULL,
+ "ChangedAt" timestamp with time zone NOT NULL
+);
+CREATE INDEX IF NOT EXISTS "IX_GsoNameChangeHistory_User" ON "GsoNameChangeHistory" ("UserId", "ChangedAt");
+CREATE TABLE IF NOT EXISTS "GsoEmailChangeHistory" (
+ "Id" varchar(36) PRIMARY KEY,
+ "UserId" varchar(450) NOT NULL REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE,
+ "OldEmail" varchar(256) NOT NULL, "NewEmail" varchar(256) NOT NULL,
+ "ChangedAt" timestamp with time zone NOT NULL
+);
+CREATE INDEX IF NOT EXISTS "IX_GsoEmailChangeHistory_User" ON "GsoEmailChangeHistory" ("UserId", "ChangedAt");
 CREATE TABLE IF NOT EXISTS "GsoPasswordResets" (
  "UserId" varchar(450) PRIMARY KEY REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE,
  "TokenHash" varchar(64) NOT NULL UNIQUE, "Email" varchar(256) NOT NULL,
@@ -23,4 +41,9 @@ CREATE TABLE IF NOT EXISTS "GsoPasswordChanges" (
  "SecurityStamp" varchar(256) NOT NULL, "RequestedAt" timestamp with time zone NOT NULL,
  "ExpiresAt" timestamp with time zone NOT NULL, "Attempts" integer NOT NULL DEFAULT 0,
  "VerifiedAt" timestamp with time zone
+);
+
+CREATE TABLE IF NOT EXISTS "GsoInitialPasswords" (
+ "UserId" varchar(450) PRIMARY KEY REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE,
+ "CreatedAt" timestamp with time zone NOT NULL
 );

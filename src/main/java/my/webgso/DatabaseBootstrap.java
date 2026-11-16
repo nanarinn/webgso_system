@@ -29,6 +29,7 @@ public class DatabaseBootstrap implements ApplicationRunner {
 
   @Override
   public void run(ApplicationArguments args) {
+    if (env.getProperty("webgso.database.shared", Boolean.class, false)) return;
     boolean demo = Arrays.asList(env.getActiveProfiles()).contains("demo");
     if (env.getProperty("webgso.schema.initialize", Boolean.class, false))
       new ResourceDatabasePopulator(new ClassPathResource("schema-java.sql")).execute(dataSource);

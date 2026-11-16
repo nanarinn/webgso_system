@@ -116,12 +116,16 @@ public class ApiEmailAlerts {
   @Scheduled(fixedDelay = 10000, initialDelay = 10000)
   public void deliver() {
     if (!env.getProperty("webgso.mail.enabled", Boolean.class, false)) return;
+    if (!env.getProperty("webgso.mail.dispatch-enabled", Boolean.class, true)) return;
     for (var note :
         db.list(
             UserAccessNotification.class,
             "WHERE \"NotificationType\" IN"
                 + " ('ApiIssueMessage','ApiTestAlert','ApiTestFailed','ApiTestRecovered','StaleDataAlert','ApiDailySummary','EmailVerification','PasswordReset','AccessDecision','EmailChangeCode','EmailChangeNotice','PasswordChangeCode')"
-                + " AND \"DeliveryStatus\"='Pending' ORDER BY \"Id\" LIMIT 10")) {
+                + " AND \"DeliveryStatus\"='Pending'"
+                + (env.getProperty("webgso.mail.verification-only", Boolean.class, false)
+                    ? " AND \"NotificationType\"='EmailVerification' ORDER BY \"Id\" LIMIT 1"
+                    : " ORDER BY \"Id\" LIMIT 10"))) {
       if (db.jdbc()
               .update(
                   "UPDATE \"UserAccessNotifications\" SET \"DeliveryStatus\"='Sending' WHERE"
@@ -141,7 +145,7 @@ public class ApiEmailAlerts {
             .contains(note.notificationType)) note.body = "Verification code sent.";
       } catch (RuntimeException e) {
         note.deliveryStatus = "Failed";
-        note.errorMessage = "Email delivery failed. Check Gmail settings and SMTP connectivity.";
+        note.errorMessage = "Email delivery failed. Check the email provider, sending permissions and recipient verification.";
         LOG.warn("API alert {} could not be sent ({})", note.id, e.getClass().getSimpleName());
       }
       db.update(note);

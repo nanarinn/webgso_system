@@ -9,6 +9,21 @@ import my.webgso.ui.Html.Element;
 final class AccountToolsPages {
   private AccountToolsPages() {}
 
+  static String firstPassword(PageContext c) {
+    var card = el("main",
+      el("img").attr("src", Branding.LOGO).attr("alt", Branding.LOGO_DESCRIPTION).cls("account-tools-logo"),
+      el("p", "ACCOUNT SECURITY").cls("section-label"), el("h1", "Set your password"),
+      el("p", "Replace your temporary password before using GSO Web Services. After saving, sign in again with your new password."));
+    if (!c.text("resetError").isBlank()) card.add(el("p", c.text("resetError")).cls("profile-error").attr("role", "alert"));
+    card.add(c.post("/account/first-password", "account-tools-form",
+      field("New password", input("password", "password", null).attr("autocomplete", "new-password").attr("minlength", 12).attr("maxlength", 72).flag("required", true)),
+      field("Confirm new password", input("confirmPassword", "password", null).attr("autocomplete", "new-password").attr("minlength", 12).attr("maxlength", 72).flag("required", true)),
+      el("small", "Use 12–72 characters including uppercase, lowercase, a number and a symbol."),
+      button("Save password and sign out", true)),
+      c.post("/account/logout", "account-tools-form", button("Sign out", false)));
+    return JavaPages.document("Set your password", "", card.cls("registration-shell account-tools-auth"), false, false);
+  }
+
   static String password(PageContext c, boolean reset) {
     var card =
         el(
@@ -18,21 +33,12 @@ final class AccountToolsPages {
                 .attr("alt", Branding.LOGO_DESCRIPTION)
                 .cls("account-tools-logo"),
             el("p", "ACCOUNT SECURITY").cls("section-label"),
-            el("h1", reset ? "Choose a new password" : "Forgot your password?"),
+            el("h1", reset ? "Choose a new password" : "Forgot password?"),
             el(
                 "p",
                 reset
                     ? "Use a unique password to protect your GSO account."
-                    : "Enter your Gmail address and we will email you a password reset link."));
-    if (c.parameter("sent"))
-      card.add(
-          el(
-                  "p",
-                  "If this Gmail address has an active local account, a reset link will be sent."
-                      + " Check your inbox and spam folder. Wait one minute before requesting"
-                      + " another link.")
-              .cls("account-tools-notice")
-              .attr("role", "status"));
+                    : "Confirm your current password, then choose and confirm your new password. No email or verification code is required."));
     if (!c.text("resetError").isBlank())
       card.add(el("p", c.text("resetError")).cls("profile-error").attr("role", "alert"));
     if (reset) {
@@ -68,14 +74,20 @@ final class AccountToolsPages {
               "/account/forgot-password",
               "account-tools-form",
               field(
-                  "Gmail address",
-                  input("email", "email", null)
-                      .attr("placeholder", "you@gmail.com")
-                      .attr("autocomplete", "email")
+                  "Account ID",
+                  input("identifier", "text", null)
+                      .attr("placeholder", "Enter your sign-in account ID")
+                      .attr("autocomplete", "username")
                       .attr("maxlength", 256)
-                      .attr("pattern", "[^@ ]+@[gG][mM][aA][iI][lL][.][cC][oO][mM]")
                       .flag("required", true)),
-              button("Send reset link", true)));
+              field("Current password", input("currentPassword", "password", null)
+                  .attr("autocomplete", "current-password").attr("maxlength", 256).flag("required", true)),
+              field("New password", input("password", "password", null)
+                  .attr("autocomplete", "new-password").attr("minlength", 12).attr("maxlength", 72).flag("required", true)),
+              field("Confirm new password", input("confirmPassword", "password", null)
+                  .attr("autocomplete", "new-password").attr("minlength", 12).attr("maxlength", 72).flag("required", true)),
+              el("small", "Use 12–72 characters including uppercase, lowercase, a number and a symbol."),
+              button("Change password", true)));
     card.add(link("Back to sign in", "/login"));
     return JavaPages.document(
         reset ? "Reset password" : "Forgot password",

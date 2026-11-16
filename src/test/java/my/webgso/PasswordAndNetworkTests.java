@@ -51,11 +51,11 @@ class PasswordAndNetworkTests {
   void localHttpApiHostsAreAllowedAndMissingUrlsHaveClearMessage() {
     var client =
         new PlantApiClient(
-            "localhost,127.0.0.1,::1", "localhost,127.0.0.1,::1,43.216.231.199", 1024);
+            "localhost,127.0.0.1,::1", "localhost,127.0.0.1,::1,56.69.46.237", 1024);
     assertThat(client.validate("http://localhost:8000/BDNS/live/mmf").getScheme())
         .isEqualTo("http");
-    assertThat(client.validate("http://43.216.231.199/kmpr/data").getHost())
-        .isEqualTo("43.216.231.199");
+    assertThat(client.validate("http://56.69.46.237/kmpr/data").getHost())
+        .isEqualTo("56.69.46.237");
     assertThatThrownBy(() -> client.validate("http://169.254.169.254/metadata"))
         .isInstanceOf(IllegalArgumentException.class);
     for (String missing : Arrays.asList(null, "", " "))

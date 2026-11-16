@@ -11,6 +11,24 @@ import org.springframework.mock.env.MockEnvironment;
 
 class ApiEmailAlertsTests {
   @Test
+  void localDispatcherCanBeDisabledWithSharedDatabase() {
+    var db = mock(Store.class);
+    var mail = mock(MailDelivery.class);
+    var env = new MockEnvironment().withProperty("webgso.mail.enabled", "true")
+        .withProperty("webgso.mail.dispatch-enabled", "false");
+    new ApiEmailAlerts(db, mail, env).deliver();
+    verifyNoInteractions(db, mail);
+  }
+
+  @Test
+  void verificationOnlyDispatcherDoesNotSelectOldApiNotifications() {
+    var db = mock(Store.class);
+    var env = new MockEnvironment().withProperty("webgso.mail.enabled", "true")
+        .withProperty("webgso.mail.verification-only", "true");
+    new ApiEmailAlerts(db, mock(MailDelivery.class), env).deliver();
+    verify(db).list(eq(UserAccessNotification.class), contains("AND \"NotificationType\"='EmailVerification' ORDER BY \"Id\" LIMIT 1"));
+  }
+  @Test
   void alertsOnlyOnFirstFailureAndChanges() {
     assertThat(ApiEmailAlerts.changed(null, false)).isTrue();
     assertThat(ApiEmailAlerts.changed("Success", false)).isTrue();

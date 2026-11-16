@@ -249,10 +249,11 @@ public class CollectionService {
       int readings,
       int issues,
       int rules,
-      String freshnessWarning) {
+      String freshnessWarning,
+      ApiDataFreshness.Status freshness) {
     public ApiTestResult(
         PlantApiClient.Response response, long reportId, int readings, int issues, int rules) {
-      this(response, reportId, readings, issues, rules, "");
+      this(response, reportId, readings, issues, rules, "", null);
     }
   }
 
@@ -329,8 +330,9 @@ public class CollectionService {
             (int) validation.rules().stream().filter(rule -> rule.dataType.equals(apiType)).count();
         long reportId =
             anomalyReports.save(plant, type, parsed.readings().size(), ruleCount, issues);
+        var freshnessCheckedAt = LocalDateTime.now(Policies.LOCAL);
         String freshnessWarning =
-            ApiDataFreshness.warning(parsed.readings(), type, LocalDateTime.now(Policies.LOCAL));
+            ApiDataFreshness.warning(parsed.readings(), type, freshnessCheckedAt);
         plant.apiConnectionStatus = "Connected";
         plant.lastApiTestMessage =
             parsed.readings().size()
@@ -350,7 +352,8 @@ public class CollectionService {
             parsed.readings().size(),
             issues.size(),
             ruleCount,
-            freshnessWarning);
+            freshnessWarning,
+            "MMF".equals(type) ? ApiDataFreshness.mmfStatus(parsed.readings(), freshnessCheckedAt) : null);
       } catch (RuntimeException e) {
         testHistory.save(
             id,

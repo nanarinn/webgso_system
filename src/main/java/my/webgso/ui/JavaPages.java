@@ -13,6 +13,7 @@ public final class JavaPages {
   private JavaPages() {}
 
   public static String render(String name, PageContext c) {
+    if (name.equals("first-password")) return AccountToolsPages.firstPassword(c);
     if (name.equals("login")) return AuthPages.login(c);
     if (name.equals("forgot-password")) return AccountToolsPages.password(c, false);
     if (name.equals("reset-password")) return AccountToolsPages.password(c, true);
@@ -23,6 +24,10 @@ public final class JavaPages {
       return document("Batch progress", "", OperationsPages.batchProgress(c), false, refresh(c));
     Element content =
         switch (name) {
+          case "registered-users" -> AdminConsolePage.users(c);
+          case "audit-log" -> AuditLogPage.render(c);
+          case "user-overview" -> OverviewPages.user(c);
+          case "user-plant-config" -> UserPlantConfigPage.render(c);
           case "dashboard" -> OverviewPages.dashboard(c);
           case "admin-overview" -> OverviewPages.admin(c);
           case "analytics" -> OperationsPages.analytics(c);
@@ -37,8 +42,10 @@ public final class JavaPages {
           case "user-guide" -> AccountToolsPages.guide(c);
           case "profile" -> ProfilePages.profile(c);
           case "api-history" -> ApiHistoryPage.render(c);
+          case "api-raw-response" -> ApiHistoryPage.response(c);
           case "api-retest-progress" -> ApiRetestPage.render(c);
           case "api-quick-test" -> QuickApiTestPage.render(c);
+          case "lss-directory" -> LssDirectoryPage.render(c);
           default -> throw new IllegalArgumentException("Unknown page");
         };
     return document(
@@ -69,7 +76,7 @@ public final class JavaPages {
             el("link").attr("rel", "icon").attr("type", "image/png").attr("href", Branding.LOGO));
     List<String> styles =
         login
-            ? List.of("/styles/login.css?v=8", "/styles/responsive-finish.css?v=1")
+            ? List.of("/styles/login.css?v=8", "/styles/responsive-finish.css?v=1", "/styles/product-finish.css?v=1")
             : List.of(
                 "/bootstrap/bootstrap.min.css",
                 "/styles/app.css",
@@ -83,10 +90,11 @@ public final class JavaPages {
                 "/styles/signup.css?v=3",
                 "/styles/plant-filters.css?v=4",
                 "/styles/account-tools.css?v=3",
-                "/styles/responsive-finish.css?v=1");
+                "/styles/responsive-finish.css?v=1",
+                "/styles/product-finish.css?v=1");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
-      head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));
+      head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=4").flag("defer", true));
     if (!login)
       head.add(
           el("script").attr("src", "/scripts/plant-location-filters.js?v=2").flag("defer", true));
@@ -156,14 +164,24 @@ public final class JavaPages {
     var nav =
         el("div", el("p", "Workspace").cls("nav-section-title"), workspaceNav).cls("nav-body");
     if (c.yes("isAdmin")) {
+      workspaceNav.add(navigation(c, "LSS Plants", "/admin/lss"));
+      workspaceNav.add(navigation(c, "DDQ API testing", "/admin/ddq-test"));
+      workspaceNav.add(navigation(c, "MMF API testing", "/admin/mmf-test"));
       for (Resources.Definition item : c.<Resources.Definition>list("navigation")) {
-        if (Set.of("/admin/report-automation", "/admin/collection-schedules").contains(item.path()))
+        if (Set.of("/admin/report-automation", "/admin/collection-schedules", "/admin/data-quality")
+            .contains(item.path()))
           continue;
         workspaceNav.add(navigation(c, item.title(), item.path()));
       }
-      workspaceNav.add(navigation(c, "API email alerts", "/admin/api-email"));
-      workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
+    } else {
+      workspaceNav.add(navigation(c, "LSS Plants", "/user/lss"));
+      workspaceNav.add(navigation(c, "DDQ API testing", "/user/ddq-test"));
+      workspaceNav.add(navigation(c, "MMF API testing", "/user/mmf-test"));
+      workspaceNav.add(navigation(c, "Plant Config", "/user/plant-config"));
     }
+    if (c.yes("isAdmin")) workspaceNav.add(navigation(c, "User Management", "/admin/registered-users"));
+    if (c.yes("isAdmin")) workspaceNav.add(navigation(c, "Audit Log", "/admin/audit-log"));
+    workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
     nav.add(
         el("div").cls("nav-spacer"),
         el(
@@ -246,7 +264,7 @@ public final class JavaPages {
                                 el(
                                     "span",
                                     el("strong", account.displayName()),
-                                    el("small", "Administrator")))
+                                    el("small", c.yes("isAdmin") ? "Admin" : "User")))
                             .attr("href", "/account/profile")
                             .cls("workspace-profile")
                             .attr("aria-label", "My profile: " + account.displayName()),

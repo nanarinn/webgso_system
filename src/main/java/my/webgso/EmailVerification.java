@@ -45,8 +45,18 @@ public class EmailVerification {
   }
 
   @Transactional
+  public ApplicationUser registerSaeEmail(String email, String password) {
+    var user = accounts.registerSaeEmail(email, password);
+    // Retain verification semantics for the legacy explicit verification flow.
+    user.accessStatus = "Pending";
+    db.update(user);
+    send(user);
+    return user;
+  }
+
+  @Transactional
   public void resend(String email) {
-    if (!GmailAccounts.allowed(email == null ? null : email.trim())) return;
+    if (!allowed(email == null ? null : email.trim())) return;
     var users =
         db.list(
             ApplicationUser.class,
@@ -116,7 +126,7 @@ public class EmailVerification {
     var users = db.list(ApplicationUser.class, "WHERE \"Id\"=? FOR UPDATE", ids.getFirst());
     if (users.size() != 1) return false;
     var user = users.getFirst();
-    if (!"Pending".equals(user.accessStatus) || !GmailAccounts.allowed(user.email)) return false;
+    if (!"Pending".equals(user.accessStatus) || !allowed(user.email)) return false;
     var now = OffsetDateTime.now(ZoneOffset.UTC);
     int changed =
         db.jdbc()
@@ -145,6 +155,10 @@ public class EmailVerification {
         "Success",
         "Account activated by email verification");
     return true;
+  }
+
+  private static boolean allowed(String email) {
+    return SaeAccounts.allowed(email) || GmailAccounts.allowed(email);
   }
 
   private static String digest(String value) {

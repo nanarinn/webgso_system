@@ -137,7 +137,7 @@ class PasswordChangeTests {
   }
 
   @Test
-  void mvcEnforcesStagesCsrfAndHidesCodeFromNotifications() throws Exception {
+  void mvcRequiresCsrfAndKeepsLegacyCodesHidden() throws Exception {
     var auth = accounts.token(user);
     mvc.perform(
             post("/account/profile/password/send-code")
@@ -148,11 +148,10 @@ class PasswordChangeTests {
         .andExpect(
             content()
                 .string(
-                    org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("name=\"confirmPassword\""))));
+                    org.hamcrest.Matchers.containsString("name=\"currentPassword\"")));
     String code = send();
     mvc.perform(get("/account/profile/password").with(authentication(auth)))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Verify code")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("/account/profile/password/update")))
         .andExpect(
             content()
                 .string(

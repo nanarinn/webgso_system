@@ -66,6 +66,46 @@ class ConfiguredApiTests {
   }
 
   @Test
+  void savedRawResponseIsRedactedEscapedAndRequiresLogin() throws Exception {
+    testHistory.save(plant.id, "Day Ahead", "configured.admin", false,
+        new PlantApiClient.Response(401, "application/json",
+            "{\"token\":\"private-value\",\"message\":\"<script>alert(1)</script>\"}", 35),
+        System.nanoTime(), "Unauthorized");
+    long id = testHistory.history(plant.id, "Day Ahead", 0).getFirst().id();
+    var saved = testHistory.response(id);
+    assertThat(saved.preview()).contains("[redacted]").doesNotContain("private-value");
+    mvc.perform(get("/admin/api-test-history/" + id + "/response"))
+        .andExpect(status().is3xxRedirection());
+    String html = mvc.perform(get("/admin/api-test-history/" + id + "/response")
+            .with(authentication(auth)))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    assertThat(html).contains("HTTP status: 401", "35 ms", "Unauthorized", "[redacted]", "&lt;script&gt;")
+        .doesNotContain("private-value", "<script>alert(1)</script>");
+    jdbc.update("UPDATE \"ApiTestHistory\" SET \"ResponsePreview\"=NULL WHERE \"Id\"=?", id);
+    mvc.perform(get("/admin/api-test-history/" + id + "/response").with(authentication(auth)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("No response body was saved")));
+  }
+
+  @Test
+  void testerNamesResolveRenamedAccountsWithoutChangingStoredHistory() {
+    var user = WebController.principal(auth);
+    String original = user.username();
+    testHistory.save(plant.id, "Day Ahead", original, true, null, System.nanoTime(), "OK");
+    jdbc.update("UPDATE \"AspNetUsers\" SET \"UserName\"=? WHERE \"Id\"=?",
+        "renamed.tester", user.id());
+    assertThat(testHistory.history(plant.id, "Day Ahead", 0).getFirst().actor())
+        .isEqualTo("renamed.tester");
+    assertThat(testHistory.latest().get(ApiTestHistoryService.key(plant.id, "Day Ahead")).actor())
+        .isEqualTo("renamed.tester");
+    assertThat(jdbc.queryForObject("SELECT \"Actor\" FROM \"ApiTestHistory\" WHERE \"PlantId\"=?",
+        String.class, plant.id)).isEqualTo(original);
+    testHistory.save(plant.id, "MMF", "unrelated.tester", true, null, System.nanoTime(), "OK");
+    assertThat(testHistory.history(plant.id, "MMF", 0).getFirst().actor())
+        .isEqualTo("unrelated.tester");
+  }
+
+  @Test
   void locationFiltersApplyOneGroupAndKeepSelectionsAcrossPages() throws Exception {
     plant.state = "PERAK";
     plant.zone = "West";
@@ -75,27 +115,30 @@ class ConfiguredApiTests {
         mvc.perform(
                 get("/admin/lss-plants")
                     .param("q", plant.plantId)
-                    .param("locationMode", "zone")
+                    .param("locationMode", "state")
                     .param("locationZones", "West")
-                    .param("locationStates", "Johor")
+                    .param("locationStates", "PERAK")
+                    .param("locationRegions", "Southern")
                     .with(authentication(auth)))
             .andExpect(status().isOk())
             .andReturn();
     assertThat(response.getModelAndView().getModel().get("total")).isEqualTo(1L);
-    assertThat(response.getModelAndView().getModel().get("locationStates")).isEqualTo("");
+    assertThat(response.getModelAndView().getModel().get("locationStates")).isEqualTo("PERAK");
+    assertThat(response.getModelAndView().getModel().get("locationRegions")).isEqualTo("");
     assertThat(response.getResponse().getContentAsString())
-        .contains("Filter plants", "location-mode-region", "location-mode-zone")
-        .contains("name=\"locationZones\" type=\"checkbox\" value=\"West\" checked=\"checked\"");
+        .contains("Filter plants", "location-mode-region")
+        .doesNotContain("location-mode-zone", "name=\"locationZones\"")
+        .contains("name=\"locationStates\" type=\"checkbox\" value=\"PERAK\" checked=\"checked\"");
     String lockedHtml = response.getResponse().getContentAsString();
-    for (String group : java.util.List.of("plant", "state", "region", "all")) {
+    for (String group : java.util.List.of("plant", "region", "all")) {
       assertThat(lockedHtml)
           .containsPattern("id=\"location-mode-" + group + "\"[^>]*disabled=\"disabled\"");
     }
     assertThat(lockedHtml)
         .doesNotContain(">Locked</span>")
-        .contains("Remove Zone filter", "/scripts/plant-location-filters.js?v=2")
+        .contains("Remove State filter", "/scripts/plant-location-filters.js?v=2")
         .contains(
-            "class=\"location-values\" disabled=\"disabled\" hidden=\"hidden\" aria-label=\"State"
+            "class=\"location-values\" disabled=\"disabled\" hidden=\"hidden\" aria-label=\"Region"
                 + " selections\"");
     var unlocked =
         mvc.perform(
@@ -197,7 +240,7 @@ class ConfiguredApiTests {
     assertThat(testHistory.countAll()).isEqualTo(tests);
     assertThat(db.count(UserAccessNotification.class)).isEqualTo(notifications);
     when(client.fetch("https://example.test/quick"))
-        .thenThrow(new IllegalArgumentException("API request timed out."));
+        .thenThrow(new IllegalArgumentException("API request timed out.", new java.net.SocketTimeoutException()));
     mvc.perform(
             post("/admin/api-quick-test")
                 .with(authentication(auth))
@@ -206,9 +249,28 @@ class ConfiguredApiTests {
                 .param("dataType", "MMF"))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("API test failed")))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("timed out")));
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("timed out")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("What to check:")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("VPN")));
     assertThat(testHistory.countAll()).isEqualTo(tests);
     assertThat(db.count(UserAccessNotification.class)).isEqualTo(notifications);
+  }
+
+  @Test
+  void mmfQuickPreviewShowsSourceFreshnessAndWarnsWithoutSaving() throws Exception {
+    long history = testHistory.countAll(), readings = db.count(SolarApiReading.class);
+    when(client.fetch("https://example.test/mmf-freshness"))
+        .thenReturn(new PlantApiClient.Response(200, "application/json",
+            "{\"timestamp\":\"2020-01-01T08:00:00\",\"parameter\":\"WindSpeed\",\"value\":2,\"unit\":\"m/s\"}"));
+    mvc.perform(post("/admin/mmf-test").with(authentication(auth)).with(csrf())
+        .param("apiUrl", "https://example.test/mmf-freshness").param("dataType", "MMF"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("MMF data freshness")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("01 Jan 2020, 08:00:00 MYT")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("older than 5 minutes")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Data age at time of test")));
+    assertThat(testHistory.countAll()).isEqualTo(history);
+    assertThat(db.count(SolarApiReading.class)).isEqualTo(readings);
   }
 
   @Test
@@ -218,7 +280,7 @@ class ConfiguredApiTests {
                 .with(authentication(auth))
                 .param("apiUrl", "https://example.test/quick")
                 .param("dataType", "MMF"))
-        .andExpect(status().isForbidden());
+        .andExpect(redirectedUrl("/login?reason=request-expired"));
     mvc.perform(
             post("/admin/api-quick-test")
                 .with(csrf())
@@ -413,7 +475,7 @@ class ConfiguredApiTests {
             .getResponse()
             .getContentAsString();
     assertThat(html)
-        .contains("HTTP status", "125 ms", "Preview response", "[redacted]", "&lt;script&gt;")
+        .contains("HTTP status", "125 ms", "View raw response", "[redacted]", "&lt;script&gt;")
         .doesNotContain("private-token", "<script>alert(1)</script>");
   }
 

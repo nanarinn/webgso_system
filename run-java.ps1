@@ -3,11 +3,21 @@ param(
     [switch]$Production,
     [int]$Port = 5186,
     [string]$PublicBaseUrl,
-    [switch]$Build
+    [switch]$Build,
+    [ValidateSet('Local', 'SharedAws')][string]$DatabaseMode
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
+$databaseModeFile = Join-Path (Split-Path $projectRoot -Parent) '.tools/local-database-mode.txt'
+if ($Demo) {
+    if ($PSBoundParameters.ContainsKey('DatabaseMode') -and $DatabaseMode -eq 'SharedAws') { throw 'Demo must use its isolated database.' }
+    $DatabaseMode = 'Local'
+} elseif (-not $DatabaseMode) {
+    $DatabaseMode = if (Test-Path -LiteralPath $databaseModeFile) { ([IO.File]::ReadAllText($databaseModeFile)).Trim() } else { 'Local' }
+}
+$sharedDatabase = -not $Demo -and $DatabaseMode -eq 'SharedAws'
+if ($sharedDatabase) { & (Join-Path $projectRoot 'scripts/use-shared-aws-database.ps1') }
 
 # Explicit trusted origin for temporary HTTPS phone-verification tests.
 if ($PublicBaseUrl) {
@@ -26,7 +36,7 @@ $env:GOOGLE_LOGIN_ENABLED = 'false'
 
 # Windows DPAPI-encrypted credential, entered locally and never stored in Git.
 $gmailCredentialPath = Join-Path $env:LOCALAPPDATA 'GSO Web Services\gmail.credential.xml'
-if (-not $Demo -and -not $env:SMTP_PASSWORD -and (Test-Path -LiteralPath $gmailCredentialPath)) {
+if (-not $Demo -and -not $sharedDatabase -and -not $env:SMTP_PASSWORD -and (Test-Path -LiteralPath $gmailCredentialPath)) {
     $gmailCredential = Import-Clixml -LiteralPath $gmailCredentialPath
     if ($gmailCredential -isnot [System.Management.Automation.PSCredential]) { throw 'Invalid local Gmail credential file.' }
     $env:SMTP_HOST = 'smtp.gmail.com'
@@ -78,6 +88,18 @@ if ($Build -or -not (Test-Path -LiteralPath $jar)) {
     if ($LASTEXITCODE -ne 0) { throw 'Java build or verification failed.' }
 }
 $arguments = @('-jar', $jar, "--server.port=$Port")
+if ($sharedDatabase) {
+    $arguments += @(
+        '--server.address=127.0.0.1', '--server.servlet.session.cookie.secure=false',
+        "--webgso.public-base-url=http://localhost:$Port", '--webgso.database.shared=true',
+        '--webgso.schema.initialize=false', '--spring.sql.init.mode=never',
+        '--spring.datasource.hikari.maximum-pool-size=3',
+        '--webgso.workers.enabled=false', '--webgso.backup.enabled=false',
+        '--webgso.mail.enabled=false', '--webgso.mail.dispatch-enabled=false',
+        '--webgso.api-alerts.enabled=false', '--webgso.api-digest.enabled=false',
+        '--webgso.demo.replace-affiqah=false', '--webgso.bootstrap.username='
+    )
+}
 # Some packaged Windows environments cannot connect Java's AF_UNIX wakeup pipe.
 # A deliberately absent socket directory makes the JDK use its TCP fallback.
 if ($env:WEBGSO_WINDOWS_TCP_FALLBACK -ne 'false') {

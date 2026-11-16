@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 @Component
 @Order(100)
 public class AccountToolsSchema implements ApplicationRunner {
+  @org.springframework.beans.factory.annotation.Value("${webgso.database.shared:false}")
+  private boolean sharedDatabase;
   private final DataSource source;
 
   public AccountToolsSchema(DataSource source) {
@@ -19,6 +21,7 @@ public class AccountToolsSchema implements ApplicationRunner {
 
   @Override
   public void run(ApplicationArguments arguments) {
+    if (sharedDatabase) return;
     new ResourceDatabasePopulator(new ClassPathResource("schema-account-tools.sql"))
         .execute(source);
   }

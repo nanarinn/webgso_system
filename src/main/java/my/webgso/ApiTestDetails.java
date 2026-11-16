@@ -27,6 +27,11 @@ public final class ApiTestDetails {
           "setcookie");
 
   public static void add(RedirectAttributes flash, PlantApiClient.Response response) {
+    details(response).forEach(flash::addFlashAttribute);
+  }
+
+  public static Map<String, Object> details(PlantApiClient.Response response) {
+    var flash = new org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap();
     flash.addFlashAttribute("apiTestHttpStatus", response.status());
     flash.addFlashAttribute("apiTestResponseMillis", response.elapsedMillis());
     flash.addFlashAttribute("apiTestContentType", response.contentType());
@@ -46,6 +51,7 @@ public final class ApiTestDetails {
     flash.addFlashAttribute(
         "apiTestPreview", truncated ? preview.substring(0, PREVIEW_LIMIT) : preview);
     flash.addFlashAttribute("apiTestPreviewTruncated", truncated);
+    return new LinkedHashMap<>(flash.getFlashAttributes());
   }
 
   private static void redact(JsonNode node) {

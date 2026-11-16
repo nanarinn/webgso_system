@@ -51,7 +51,8 @@ final class ApiHistoryPage {
               test.httpStatus() == null ? "No response" : test.httpStatus(),
               test.responseMillis() == null ? "—" : test.responseMillis() + " ms",
               test.durationMillis() + " ms",
-              test.message()));
+              test.message(),
+              action("View raw response", "/admin/api-test-history/" + test.id() + "/response", false)));
     }
     return el(
         "section",
@@ -94,7 +95,7 @@ final class ApiHistoryPage {
                         "HTTP",
                         "Response time",
                         "Test duration",
-                        "Message"),
+                        "Message", "Response"),
                     rows,
                     c.number("historyTotal") == 0
                         ? "No tests recorded yet. Press Test in Plant Config to create the first"
@@ -108,6 +109,31 @@ final class ApiHistoryPage {
                     "filterResult",
                     "dateFrom",
                     "dateTo"))
+            .cls("panel"));
+  }
+
+  static Element response(PageContext c) {
+    var saved = c.<my.webgso.ApiTestHistoryService.SavedResponse>value("savedResponse");
+    var test = saved.test();
+    return el("section",
+        heading("API testing", "Raw API response", test.dataset() + " · Tested by " + test.actor(),
+            action("Back to API test history", "/admin/api-test-history", false)),
+        el("article",
+            el("h2", test.outcome()),
+            el("p", test.message()).attr("role", "status"),
+            el("p", "HTTP status: " + (test.httpStatus() == null ? "No response" : test.httpStatus())
+                + " · Response time: " + (test.responseMillis() == null ? "—" : test.responseMillis() + " ms")),
+            el("p", "Tested at: " + date(test.testedAt().atZoneSameInstant(ZoneId.of("Asia/Kuala_Lumpur")), "dd MMM yyyy, HH:mm:ss") + " MYT"),
+            el("p", "Content type: " + Objects.toString(saved.contentType(), "Not recorded")
+                + " · Response size: " + (saved.bytes() == null ? "Not recorded" : saved.bytes() + " bytes")),
+            el("div",
+                el("h3", "Response body"),
+                el("pre", el("code", saved.preview() == null
+                    ? "No response body was saved for this test. For older tests, test the API again to capture a response. Connection failures may not return a body."
+                    : saved.preview().isEmpty() ? "Empty response" : saved.preview())).attr("tabindex", "0"),
+                el("p", "Common JSON credential fields are redacted. "
+                    + (saved.truncated() ? "Preview limited to 12,000 characters; the complete response was used for testing." : "")))
+                .cls("api-test-response"))
             .cls("panel"));
   }
 

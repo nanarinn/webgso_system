@@ -14,6 +14,16 @@ import org.springframework.web.servlet.ModelAndView;
 public class Errors {
   private static final Logger log = LoggerFactory.getLogger(Errors.class);
 
+  @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+  public Object notFound(HttpServletRequest request) {
+    if (request.getRequestURI().startsWith("/api/"))
+      return ResponseEntity.status(404).body(Map.of("error", "Page not found."));
+    var view = new ModelAndView("error-page");
+    view.setStatus(HttpStatus.NOT_FOUND);
+    view.addObject("message", "This page is no longer available.");
+    return view;
+  }
+
   @ExceptionHandler({
     IllegalArgumentException.class,
     NoSuchElementException.class,

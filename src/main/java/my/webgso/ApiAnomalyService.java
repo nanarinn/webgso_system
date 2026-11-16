@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class ApiAnomalyService {
+  @org.springframework.beans.factory.annotation.Value("${webgso.database.shared:false}")
+  private boolean sharedDatabase;
   public record Report(
       long id,
       int plantId,
@@ -40,6 +42,7 @@ public class ApiAnomalyService {
 
   @PostConstruct
   void initialize() {
+    if (sharedDatabase) return;
     // Add only the report table; never initialize or reseed the existing application schema.
     new ResourceDatabasePopulator(new ClassPathResource("schema-api-validation.sql"))
         .execute(source);

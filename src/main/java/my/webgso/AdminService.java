@@ -193,6 +193,7 @@ public class AdminService {
         field.set(record, value);
       }
       if (record instanceof LssPlant p) {
+        p.zone = PlantZone.forState(p.state);
         var original = rawId.isBlank() ? null : db.find(LssPlant.class, p.id).orElseThrow();
         if (original == null
             || !p.plantId.equals(original.plantId)

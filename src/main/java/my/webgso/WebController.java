@@ -140,15 +140,8 @@ public class WebController {
   }
 
   @PostMapping("/account/register")
-  public String register(@RequestParam String email, @RequestParam String password) {
-    String address = email.trim();
-    GmailAccounts.require(address);
-    String displayName = address.substring(0, address.indexOf('@'));
-    emailVerification.register(
-        "account." + UUID.randomUUID(),
-        address,
-        displayName.substring(0, Math.min(displayName.length(), 160)),
-        password);
+  public String register(@RequestParam(defaultValue = "") String email) {
+    accounts.registerInitialSaeEmail(email);
     return "redirect:/login?registered=success";
   }
 
@@ -211,20 +204,11 @@ public class WebController {
       model.addAttribute("apiActivity", activity);
       return "admin-overview";
     }
-    model.addAttribute("plantCount", db.count(LssPlant.class));
-    model.addAttribute("readingCount", db.count(SolarApiReading.class));
-    model.addAttribute("collectionCount", db.count(CollectionJobEntity.class));
-    model.addAttribute(
-        "anomalyCount",
-        db.jdbc()
-            .queryForObject(
-                "SELECT COUNT(*) FROM \"DataAnomalies\" WHERE \"Status\"='Open'", Long.class));
-    model.addAttribute("plants", db.list(LssPlant.class, "ORDER BY \"PlantId\" LIMIT 12"));
-    model.addAttribute(
-        "jobs", db.list(CollectionJobEntity.class, "ORDER BY \"StartedAt\" DESC LIMIT 10"));
-    model.addAttribute(
-        "recentReports", db.list(ReportExecution.class, "ORDER BY \"RequestedAt\" DESC LIMIT 5"));
-    return "dashboard";
+    model.addAttribute("apiActivity", ApiOverview.rows(
+        db.list(LssPlant.class, "ORDER BY \"Name\""),
+        db.list(PlantApiConfiguration.class, ""), testHistory.latest()));
+    return "user-overview";
+
   }
 
   @GetMapping({"/ddq-analytics", "/mmf-analytics"})
@@ -944,6 +928,8 @@ public class WebController {
               : collection.testWithAnomalies(id, dataType, actor);
       ApiTestDetails.add(flash, result.response());
       flash.addFlashAttribute("apiTestFreshnessWarning", result.freshnessWarning());
+      if (result.freshness() != null)
+        flash.addFlashAttribute("apiTestFreshness", result.freshness());
       flash.addFlashAttribute(
           "apiTestTitle",
           result.issues() > 0 ? "Connected — anomalies detected" : "Connection successful");
@@ -966,11 +952,13 @@ public class WebController {
           "apiTestMessage",
           "No plant matches this ID. Check the Plant ID in the table and try again.");
     } catch (PlantApiClient.Failure e) {
+      ApiFailureGuide.details(e).forEach(flash::addFlashAttribute);
       ApiTestDetails.add(flash, e.response());
       flash.addFlashAttribute("apiTestTitle", "Connection test failed");
       flash.addFlashAttribute("apiTestMessage", e.getMessage());
     } catch (IllegalArgumentException e) {
       flash.addFlashAttribute("apiTestTitle", "Connection test failed");
+      ApiFailureGuide.details(e).forEach(flash::addFlashAttribute);
       flash.addFlashAttribute("apiTestMessage", e.getMessage());
     } finally {
       flash.addFlashAttribute("apiTestDurationMillis", (System.nanoTime() - started) / 1_000_000);
@@ -1036,6 +1024,13 @@ public class WebController {
   public String retestAll(Authentication auth) {
     var job = apiRetests.start(principal(auth).id(), principal(auth).username());
     return "redirect:/admin/api-test-history/checks/" + job.id;
+  }
+
+  @GetMapping("/admin/api-test-history/{id}/response")
+  public String apiRawResponse(@PathVariable long id, Model model) {
+    model.addAttribute("title", "Raw API response");
+    model.addAttribute("savedResponse", testHistory.response(id));
+    return "api-raw-response";
   }
 
   @PostMapping("/admin/lss-plants/test-all")
@@ -1115,6 +1110,46 @@ public class WebController {
     return "api-quick-test";
   }
 
+  @GetMapping({"/admin/mmf-test", "/admin/ddq-test", "/user/mmf-test", "/user/ddq-test"})
+  public String dedicatedApiTest(jakarta.servlet.http.HttpServletRequest request, Model model) {
+    String family = request.getRequestURI().endsWith("/mmf-test") ? "MMF" : "DDQ";
+    model.addAttribute("testFamily", family);
+    model.addAttribute("title", family + " API testing");
+    model.addAttribute("dataType", family.equals("MMF") ? "MMF" : "Rolling 24 Hour");
+    return "api-quick-test";
+  }
+
+  @PostMapping({"/admin/mmf-test", "/admin/ddq-test", "/user/mmf-test", "/user/ddq-test"})
+  public String runDedicatedApiTest(
+      jakarta.servlet.http.HttpServletRequest request,
+      @RequestParam String apiUrl, @RequestParam String dataType, Model model) {
+    String family = request.getRequestURI().endsWith("/mmf-test") ? "MMF" : "DDQ";
+    if (family.equals("MMF")) dataType = "MMF";
+    if (family.equals("DDQ") && !Policies.DDQ_TYPES.contains(dataType)) {
+      model.addAttribute("apiTestTitle", "API test failed");
+      model.addAttribute("apiTestMessage", "Choose a DDQ dataset. Use MMF API testing for weather measurements.");
+    } else runQuickApiTest(apiUrl, dataType, model);
+    model.addAttribute("testFamily", family);
+    model.addAttribute("title", family + " API testing");
+    return "api-quick-test";
+  }
+
+  @GetMapping("/user/plant-config")
+  public String userPlantConfig(Model model) {
+    model.addAttribute("title", "Plant Config");
+    model.addAttribute("plants", db.list(LssPlant.class, "ORDER BY \"Name\""));
+    model.addAttribute("apiLinks", db.list(PlantApiConfiguration.class, "ORDER BY \"Id\""));
+    return "user-plant-config";
+  }
+
+  @GetMapping({"/admin/lss", "/user/lss"})
+  public String lssDirectory(Model model) {
+    model.addAttribute("title", "LSS plants");
+    model.addAttribute("plants", db.list(LssPlant.class, "ORDER BY \"Name\""));
+    model.addAttribute("apiLinks", db.list(PlantApiConfiguration.class, "ORDER BY \"Id\""));
+    return "lss-directory";
+  }
+
   @PostMapping("/admin/api-quick-test")
   public String runQuickApiTest(
       @RequestParam String apiUrl, @RequestParam String dataType, Model model) {
@@ -1130,7 +1165,11 @@ public class WebController {
       var result =
           probe.inspect(apiUrl.strip(), dataType.equals("MMF") ? "MMF" : "DDQ", dataType, 0);
       ApiTestDetails.add(details, result.response());
+      model.addAttribute("quickTestReadings", result.previewReadings());
+      model.addAttribute("quickTestReadingCount", result.readings());
       model.addAttribute("apiTestFreshnessWarning", result.freshnessWarning());
+      if (result.freshness() != null)
+        model.addAttribute("apiTestFreshness", result.freshness());
       model.addAttribute("apiTestTitle", "Connection successful");
       model.addAttribute(
           "apiTestMessage",
@@ -1141,6 +1180,7 @@ public class WebController {
       if (e instanceof PlantApiClient.Failure failure && failure.response() != null)
         ApiTestDetails.add(details, failure.response());
       model.addAttribute("apiTestTitle", "API test failed");
+      model.addAllAttributes(ApiFailureGuide.details(e));
       model.addAttribute("apiTestMessage", e.getMessage() + " Nothing was saved.");
       if (!(e instanceof PlantApiClient.Failure)) model.addAttribute("apiTestAlreadyTested", true);
     }
@@ -1226,7 +1266,7 @@ public class WebController {
   @PostMapping("/account/profile")
   public String saveProfile(
       @RequestParam String displayName,
-      @RequestParam String email,
+      @RequestParam(defaultValue = "") String email,
       @RequestParam(defaultValue = "") String phone,
       Authentication auth,
       RedirectAttributes flash) {
@@ -1246,6 +1286,43 @@ public class WebController {
           Map.of("displayName", displayName, "username", username, "email", email, "phone", phone));
     }
     return "redirect:/account/profile";
+  }
+
+  @PostMapping("/account/profile/password/update")
+  public String changeOwnPassword(@RequestParam String currentPassword, @RequestParam String password,
+      @RequestParam String confirmPassword, Authentication auth, HttpServletRequest request,
+      RedirectAttributes flash) {
+    var user = db.find(ApplicationUser.class, principal(auth).id()).orElseThrow();
+    try {
+      accounts.changeWithCurrentPassword(user.email, currentPassword, password, confirmPassword);
+      var session = request.getSession(false);
+      if (session != null) session.invalidate();
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+      return "redirect:/login?passwordReset=true";
+    } catch (org.springframework.security.core.AuthenticationException e) {
+      flash.addFlashAttribute("profileError", "Current password is incorrect or your account is locked. Try again later if locked.");
+    } catch (IllegalArgumentException e) {
+      flash.addFlashAttribute("profileError", e.getMessage());
+    }
+    return "redirect:/account/profile/password";
+  }
+
+  @PostMapping("/account/profile/email/change")
+  public String changeOwnEmail(@RequestParam String newEmail, @RequestParam String currentPassword,
+      Authentication auth, HttpServletRequest request, RedirectAttributes flash) {
+    try {
+      profileService.changeEmail(principal(auth).id(), newEmail, currentPassword);
+      var session = request.getSession(false);
+      if (session != null) session.invalidate();
+      org.springframework.security.core.context.SecurityContextHolder.clearContext();
+      return "redirect:/login?emailChanged=true";
+    } catch (org.springframework.security.core.AuthenticationException e) {
+      flash.addFlashAttribute("profileError", "Current password is incorrect or your account is locked. Try again later if locked.");
+    } catch (IllegalArgumentException | org.springframework.dao.DataIntegrityViolationException e) {
+      flash.addFlashAttribute("profileError", e instanceof IllegalArgumentException
+          ? e.getMessage() : "That email address is already in use.");
+    }
+    return "redirect:/account/profile/email";
   }
 
   @PostMapping("/account/profile/email/send-code")

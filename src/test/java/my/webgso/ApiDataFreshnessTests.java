@@ -21,14 +21,28 @@ class ApiDataFreshnessTests {
 
   @Test
   void oldMmfWarnsButRecentAndExactBoundaryDoNot() {
-    assertThat(ApiDataFreshness.warning(List.of(reading(now.minusMinutes(61))), "MMF", now))
-        .contains("Stale data", "10:59", "60 minutes");
-    assertThat(ApiDataFreshness.warning(List.of(reading(now.minusMinutes(60))), "MMF", now))
+    assertThat(ApiDataFreshness.warning(List.of(reading(now.minusMinutes(6))), "MMF", now))
+        .contains("Stale data", "11:54", "5 minutes");
+    assertThat(ApiDataFreshness.warning(List.of(reading(now.minusMinutes(5))), "MMF", now))
         .isEmpty();
     assertThat(
             ApiDataFreshness.warning(
                 List.of(reading(now.minusDays(1)), reading(now.minusMinutes(5))), "MMF", now))
         .isEmpty();
+  }
+
+  @Test
+  void displaysSourceTimeAndAgeAndChecksSecondsAtBoundary() {
+    var fresh = ApiDataFreshness.mmfStatus(List.of(reading(now.minusSeconds(299))), now);
+    assertThat(fresh.label()).isEqualTo("Fresh");
+    assertThat(fresh.age()).isEqualTo("4 min 59 sec");
+    assertThat(fresh.latest()).contains("02 Nov 2026, 11:55:01 MYT");
+    assertThat(ApiDataFreshness.mmfStatus(List.of(reading(now.minusSeconds(301))), now).label())
+        .isEqualTo("Stale");
+    var future = ApiDataFreshness.mmfStatus(List.of(reading(now.plusMinutes(1))), now);
+    assertThat(future.label()).isEqualTo("Check timestamp");
+    assertThat(future.warning()).contains("publisher clock");
+    assertThat(ApiDataFreshness.mmfStatus(List.of(), now).label()).isEqualTo("Unknown");
   }
 
   @Test

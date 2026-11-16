@@ -53,11 +53,11 @@ class EmailChangeTests {
   }
 
   @Test
-  void profileShowsSeparateCodeFormsAndVerifiesThroughAuthenticatedPost() throws Exception {
+  void profileShowsCurrentPasswordFormAndKeepsLegacyCodesHidden() throws Exception {
     var auth = accounts.token(user);
     mvc.perform(get("/account/profile/email").with(authentication(auth)))
         .andExpect(status().isOk())
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Send code")));
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"currentPassword\"")));
     String code = send();
     mvc.perform(get("/account/profile/email").with(authentication(auth)))
         .andExpect(
@@ -67,7 +67,7 @@ class EmailChangeTests {
                         org.hamcrest.Matchers.containsString(
                             "Your email change verification code is:"))))
         .andExpect(
-            content().string(org.hamcrest.Matchers.containsString("Verify &amp; change email")));
+            content().string(org.hamcrest.Matchers.containsString("/account/profile/email/change")));
     mvc.perform(
             post("/account/profile/email/verify")
                 .with(authentication(auth))
@@ -149,7 +149,7 @@ class EmailChangeTests {
     assertThatThrownBy(
             () -> profiles.update(user.id, "Name", user.userName, "new.email@gmail.com", ""))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("Send code");
+        .hasMessageContaining("Change email");
     assertThatThrownBy(() -> changes.request(user.id, "new.email@gmail.com", "wrong"))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> changes.request(user.id, "other@example.com", PASS))

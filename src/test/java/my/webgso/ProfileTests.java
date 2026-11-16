@@ -49,7 +49,7 @@ class ProfileTests {
     mvc.perform(get("/account/profile").with(authentication(auth)).param("id", other.id))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("My Profile")))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString(own.email)))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString(own.userName)))
         .andExpect(
             content()
                 .string(
@@ -126,3 +126,4 @@ class ProfileTests {
         .andExpect(status().isForbidden());
   }
 }
+

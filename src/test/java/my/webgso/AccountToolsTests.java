@@ -156,10 +156,49 @@ class AccountToolsTests {
         .andExpect(status().isForbidden());
     for (String email : List.of(user.email, "unknown@gmail.com", "notgmail@example.com"))
       mvc.perform(post("/account/forgot-password").param("email", email).with(csrf()))
-          .andExpect(redirectedUrl("/account/forgot-password?sent=true"));
+          .andExpect(status().isOk())
+          .andExpect(content().string(org.hamcrest.Matchers.containsString("Check your account ID")));
     assertThatThrownBy(() -> resets.reset(token, "short"))
         .isInstanceOf(IllegalArgumentException.class);
     assertThat(resets.reset(token, "Replacement123!Password")).isTrue();
+  }
+
+  @Test
+  void currentPasswordChangeNeedsProofAndConfirmationAndSendsNoEmail() throws Exception {
+    String stamp = user.securityStamp;
+    mvc.perform(post("/account/forgot-password").with(csrf())
+        .param("identifier", user.email).param("currentPassword", "WrongPassword123!")
+        .param("password", "Replacement123!Password").param("confirmPassword", "Replacement123!Password"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Check your account ID")));
+    assertThat(db.find(ApplicationUser.class, user.id).orElseThrow().securityStamp).isEqualTo(stamp);
+    assertThat(db.find(ApplicationUser.class, user.id).orElseThrow().accessFailedCount).isEqualTo(1);
+    mvc.perform(post("/account/forgot-password").with(csrf())
+        .param("identifier", user.email).param("currentPassword", "OriginalPass123!")
+        .param("password", "Replacement123!Password").param("confirmPassword", "DifferentPassword123!"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Passwords do not match")));
+    mvc.perform(post("/account/forgot-password").with(csrf())
+        .param("identifier", user.email).param("currentPassword", "OriginalPass123!")
+        .param("password", "Replacement123!Password").param("confirmPassword", "Replacement123!Password"))
+        .andExpect(redirectedUrl("/login?passwordReset=true"));
+    var updated = db.find(ApplicationUser.class, user.id).orElseThrow();
+    assertThat(new IdentityPasswordEncoder().matches("Replacement123!Password", updated.passwordHash)).isTrue();
+    assertThat(updated.securityStamp).isNotEqualTo(stamp);
+    assertThat(db.list(UserAccessNotification.class,
+        "WHERE \"UserId\"=? AND \"NotificationType\" IN ('PasswordReset','PasswordChangeCode')", user.id)).isEmpty();
+  }
+
+  @Test
+  void usernameAccountCanViewEditProfileAndChangePasswordWithoutEmail() throws Exception {
+    var local = accounts.registerUsername("no.mail.user", "OriginalPass123!");
+    var auth = accounts.token(local);
+    mvc.perform(get("/account/profile").with(authentication(auth))).andExpect(status().isOk());
+    mvc.perform(post("/account/profile").with(authentication(auth)).with(csrf())
+        .param("displayName", "Local User").param("email", "").param("phone", ""))
+        .andExpect(status().is3xxRedirection());
+    accounts.changeWithCurrentPassword(local.userName, "OriginalPass123!", "NewPassword123!", "NewPassword123!");
+    assertThat(db.list(UserAccessNotification.class, "WHERE \"UserId\"=?", local.id)).isEmpty();
   }
 
   @Test

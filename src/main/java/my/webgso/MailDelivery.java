@@ -2,6 +2,7 @@ package my.webgso;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.mail.internet.InternetAddress;
+import java.io.ByteArrayOutputStream;
 import java.net.*;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
@@ -11,6 +12,10 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.javamail.*;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.sesv2.SesV2Client;
+import software.amazon.awssdk.services.sesv2.model.*;
 
 @Service
 public class MailDelivery {
@@ -28,12 +33,13 @@ public class MailDelivery {
       List<String> recipients, String subject, String body, ReportService.Download attachment) {
     if (!env.getProperty("webgso.mail.enabled", Boolean.class, false))
       throw new IllegalArgumentException(
-          "Email delivery is disabled. Configure SMTP or Microsoft Graph before enabling it.");
+          "Email delivery is disabled. Configure the email service before enabling it.");
     if (recipients.isEmpty()) throw new IllegalArgumentException("No email recipients configured");
     try {
       for (String recipient : recipients) new InternetAddress(recipient, true).validate();
+      boolean ses = "ses".equalsIgnoreCase(env.getProperty("webgso.mail.provider", "smtp"));
       String tenant = env.getProperty("WEBGSO_GRAPH_TENANT_ID", "");
-      if (!tenant.isBlank()) {
+      if (!ses && !tenant.isBlank()) {
         graph(tenant, recipients, subject, body, attachment);
         return;
       }
@@ -48,7 +54,18 @@ public class MailDelivery {
             attachment.filename(),
             new ByteArrayResource(attachment.data()),
             attachment.contentType());
-      sender.send(message);
+      if (ses) {
+        message.saveChanges();
+        var bytes = new ByteArrayOutputStream();
+        message.writeTo(bytes);
+        try (var client = sesClient()) {
+          client.sendEmail(SendEmailRequest.builder()
+              .fromEmailAddress(env.getRequiredProperty("webgso.mail.from"))
+              .destination(Destination.builder().toAddresses(recipients).build())
+              .content(EmailContent.builder().raw(RawMessage.builder()
+                  .data(SdkBytes.fromByteArray(bytes.toByteArray())).build()).build()).build());
+        }
+      } else sender.send(message);
     } catch (Exception e) {
       throw new IllegalArgumentException(
           "Email delivery failed ("
@@ -56,6 +73,14 @@ public class MailDelivery {
               + "). Check the configured email service.",
           e);
     }
+  }
+
+  SesV2Client sesClient() {
+    return SesV2Client.builder()
+        .region(Region.of(env.getProperty("webgso.mail.ses-region", "ap-southeast-5")))
+        .overrideConfiguration(c -> c.apiCallTimeout(Duration.ofSeconds(45))
+            .apiCallAttemptTimeout(Duration.ofSeconds(15)))
+        .build();
   }
 
   private static String form(String value) {
