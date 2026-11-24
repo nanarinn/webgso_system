@@ -72,6 +72,7 @@ values = {
     "WEBGSO_SCHEMA_INITIALIZE": "true",
     "WEBGSO_BACKUP_ENABLED": "false",
     "WEBGSO_WORKERS_ENABLED": "false",
+    "WEBGSO_COLLECTION_WORKERS_ENABLED": "true",
     "VIEW_DATA_ADMIN_EMAIL": admin_email,
     "VIEW_DATA_ADMIN_PASSWORD": admin_password,
     "VIEW_DATA_ADMIN_NAME": "Admin",

@@ -898,6 +898,13 @@ public class WebController {
       model.addAttribute("latestApiTests", testHistory.latest());
       model.addAttribute("nextApiTests", testTiming.nextTests());
     }
+    if (resource.type() == CollectionSchedule.class) {
+      model.addAttribute("schedules", records);
+      model.addAttribute("schedulePlants", db.list(LssPlant.class, "ORDER BY \"PlantId\""));
+      model.addAttribute("scheduleTotal", total);
+      model.addAttribute("scheduleActive", db.jdbc().queryForObject(
+          "SELECT COUNT(*) FROM \"CollectionSchedules\" WHERE \"IsActive\"=true", Long.class));
+    }
     model.addAttribute("q", q);
     model.addAttribute("page", safePage);
     model.addAttribute("total", total);
@@ -976,6 +983,10 @@ public class WebController {
                 .orElse(""));
       model.addAttribute("plantApiEndpoints", endpoints);
       model.addAttribute("savedPlantApiEndpoints", new LinkedHashMap<>(endpoints));
+    }
+    if (record instanceof CollectionSchedule schedule) {
+      model.addAttribute("schedule", schedule);
+      model.addAttribute("schedulePlants", db.list(LssPlant.class, "WHERE \"IsActive\"=true ORDER BY \"PlantId\""));
     }
     return "edit";
   }

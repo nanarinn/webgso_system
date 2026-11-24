@@ -161,7 +161,11 @@ public final class JavaPages {
 
   private static Element shell(PageContext c, Element content) {
     Accounts.Principal account = c.value("account");
-    var workspaceNav = el("nav", navigation(c, "◫ Data viewer", "/"));
+    var workspaceNav =
+        el(
+            "nav",
+            navigation(c, "◫ Data viewer", "/"),
+            navigation(c, "Collection schedules", "/admin/collection-schedules"));
     var nav =
         el(
                 "div",

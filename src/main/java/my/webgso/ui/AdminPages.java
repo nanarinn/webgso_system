@@ -14,6 +14,7 @@ final class AdminPages {
 
   static Element resource(PageContext c) {
     Resources.Definition resource = c.value("resource");
+    if (resource.type() == CollectionSchedule.class) return scheduleResource(c);
     boolean plants = resource.type() == LssPlant.class;
     boolean editable = !resource.editable().isEmpty();
     var columns = c.<Map<String, String>>list("columns");
@@ -610,6 +611,7 @@ final class AdminPages {
   static Element edit(PageContext c) {
     Resources.Definition resource = c.value("resource");
     if (resource.type() == LssPlant.class) return plantEdit(c);
+    if (resource.type() == CollectionSchedule.class) return scheduleEdit(c);
     var form =
         c.post(
             resource.path() + "/save",
@@ -645,6 +647,79 @@ final class AdminPages {
             null,
             action("Back to list", resource.path(), false)),
         el("article", form).cls("panel"));
+  }
+
+  private static Element scheduleResource(PageContext c) {
+    List<CollectionSchedule> schedules = c.list("schedules");
+    List<LssPlant> plants = c.list("schedulePlants");
+    Map<Integer, LssPlant> plantById = new HashMap<>();
+    plants.forEach(p -> plantById.put(p.id, p));
+    long total = ((Number) c.model().getOrDefault("scheduleTotal", 0)).longValue();
+    long active = ((Number) c.model().getOrDefault("scheduleActive", 0)).longValue();
+    var rows = new ArrayList<Element>();
+    for (var s : schedules) {
+      var plant = plantById.get(s.plantId);
+      String plantName = plant == null ? "Plant " + s.plantId : plant.plantId + " · " + plant.name;
+      var actionRecord = AdminService.values(s, List.of("name", "scheduleCode"));
+      actionRecord.put("id", s.id);
+      rows.add(row(
+          el("strong", s.name),
+          plantName,
+          el("span", s.apiType).cls("schedule-api " + s.apiType.toLowerCase(Locale.ROOT)),
+          s.dataType,
+          s.runTime + " MYT",
+          s.retryCount + " retries",
+          el("span", Boolean.TRUE.equals(s.isActive) ? "Active" : "Inactive")
+              .cls("status-pill " + (Boolean.TRUE.equals(s.isActive) ? "success" : "muted")),
+          scheduleActions(c, actionRecord,
+              link("Edit", url("/admin/collection-schedules/edit", Map.of("id", s.id))))));
+    }
+    return el("section",
+        heading("Automation", "Collection Schedules",
+            "Configure when DDQ forecasts and MMF measurements are collected for each plant.",
+            action("+ New schedule", "/admin/collection-schedules/edit", true)),
+        el("div",
+            metric("Total schedules", total),
+            metric("Active", active),
+            metric("Inactive", Math.max(0, total - active))).cls("schedule-metrics"),
+        el("article",
+            el("header", el("h2", "API collection timetable"),
+                el("p", "Timezone: Asia/Kuala_Lumpur · Worker checks every 30 seconds")),
+            table(List.of("Schedule", "Plant", "API", "Dataset", "Time", "Retry", "Status", "Action"),
+                rows, "No collection schedules yet."))
+            .cls("panel schedule-table"));
+  }
+
+  private static Element metric(String label, long value) {
+    return el("div", el("small", label), el("strong", String.valueOf(value))).cls("schedule-metric");
+  }
+
+  private static Element scheduleEdit(PageContext c) {
+    CollectionSchedule s = c.value("schedule");
+    List<LssPlant> plants = c.list("schedulePlants");
+    var plant = el("select").attr("name", "plantId").flag("required", true);
+    plant.add(el("option", "Select a plant").attr("value", ""));
+    for (var p : plants) plant.add(el("option", p.plantId + " · " + p.name)
+        .attr("value", p.id).flag("selected", p.id.equals(s.plantId)));
+    var form = c.post("/admin/collection-schedules/save", "schedule-form",
+        input("id", "hidden", s.id),
+        field("Plant", plant),
+        field("Schedule name", input("name", "text", s.name).attr("maxlength", 160).flag("required", true)),
+        field("Schedule code", input("scheduleCode", "text", s.scheduleCode).attr("maxlength", 80).flag("required", true)),
+        field("API type", select("apiType", List.of("DDQ", "MMF"), s.apiType)),
+        field("Dataset", select("dataType", List.of("Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month", "MMF"), s.dataType)),
+        field("Collection time (MYT)", input("runTime", "time", s.runTime).flag("required", true)),
+        field("Data interval", select("interval", List.of("15 minutes", "30 minutes", "1 hour"), s.interval)),
+        field("Schedule day", input("scheduleDay", "text", s.scheduleDay).attr("placeholder", "Monday, or 25 for 4 Month")),
+        field("Months", input("scheduleMonths", "text", s.scheduleMonths).attr("placeholder", "1,2,3,4,5,6,7,8,9,10,11,12")),
+        field("Retry attempts", input("retryCount", "number", s.retryCount).attr("min", 0).attr("max", 5)),
+        input("cronExpression", "hidden", s.cronExpression),
+        input("timeZoneId", "hidden", "Asia/Kuala_Lumpur"),
+        field("Active", input("isActive", "checkbox", "true").flag("checked", Boolean.TRUE.equals(s.isActive))),
+        el("p", "DDQ follows its dataset schedule. MMF repeats according to the selected interval. Failed pulls retry up to the selected limit.").cls("page-subtitle"),
+        el("div", button("Save schedule", true), action("Cancel", "/admin/collection-schedules", false)).cls("java-actions"));
+    return el("section", heading("Collection automation", s.id == 0 ? "Add schedule" : "Edit schedule", null,
+        action("Back to schedules", "/admin/collection-schedules", false)), el("article", form).cls("panel schedule-editor"));
   }
 
   private static Element plantState(String current) {
