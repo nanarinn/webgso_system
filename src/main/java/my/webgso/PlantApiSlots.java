@@ -12,16 +12,26 @@ public final class PlantApiSlots {
               "apiRolling",
               "DDQ",
               "Rolling 24 Hour",
-              "Rolling 24-hour forecast",
-              "A continuous 24-hour forecast."),
-          new Slot("apiDayAhead", "DDQ", "Day Ahead", "Day-ahead forecast", "Five days ahead."),
-          new Slot("apiWeekAhead", "DDQ", "Week Ahead", "Week-ahead forecast", "Nine days ahead."),
+              "24-Hour Rolling Forecast",
+              "96 × 15-minute values · update all data every 30 minutes."),
+          new Slot(
+              "apiDayAhead",
+              "DDQ",
+              "Day Ahead",
+              "Day-Ahead Forecast",
+              "96 × 15-minute values · submit by 10:00 a.m. on the previous day."),
+          new Slot(
+              "apiWeekAhead",
+              "DDQ",
+              "Week Ahead",
+              "9-Day Ahead Forecast",
+              "864 × 15-minute values · submit by 12:30 p.m. every Wednesday."),
           new Slot(
               "apiFourMonths",
               "DDQ",
               "4 Month Ahead",
-              "Four months — complete",
-              "The complete four-month forecast."),
+              "4-Month Ahead Forecast",
+              "11,520 × 15-minute values · submit by the 25th of each month."),
           new Slot(
               "apiMonth1",
               "DDQ",
@@ -47,7 +57,11 @@ public final class PlantApiSlots {
               "Four months — month 4",
               "Fourth month of the forecast."),
           new Slot(
-              "apiMmf", "MMF", "MMF", "Live weather measurements", "MMF readings for this plant."));
+              "apiMmf",
+              "MMF",
+              "MMF",
+              "Live Weather Measurements",
+              "Current MMF sensor measurements collected at the interval supplied by the source API."));
 
   /** Compact endpoint set used by the dedicated data-viewer clone. */
   public static final List<Slot> VIEWER =

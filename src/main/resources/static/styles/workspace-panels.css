@@ -544,3 +544,45 @@
   .lss-plant-api-badges { justify-content: flex-start; }
   .lss-plant-actions { justify-items: start; }
 }
+.lss-api-format-group {
+  border: 1px solid #d9e5d7;
+  border-radius: 18px;
+  margin-top: 18px;
+  overflow: hidden;
+}
+
+.lss-api-format-group > header {
+  align-items: center;
+  background: #eaf4e3;
+  display: flex;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.lss-api-format-group.mmf > header { background: #eee4f5; }
+.lss-api-format-group > header > span {
+  background: #155f48;
+  border-radius: 999px;
+  color: #fff;
+  font-size: .76rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  padding: 7px 10px;
+}
+.lss-api-format-group.mmf > header > span { background: #6d4b83; }
+.lss-api-format-group header strong,
+.lss-api-format-group header small { display: block; }
+.lss-api-format-group header small { color: #61766c; margin-top: 3px; }
+.lss-api-format-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 18px;
+}
+.lss-api-format-field { display: grid; gap: 7px; }
+.lss-api-format-field > strong { color: #123f34; }
+.lss-api-format-field > small { color: #6b7e75; line-height: 1.45; min-height: 2.9em; }
+@media (max-width: 850px) {
+  .lss-api-format-grid { grid-template-columns: 1fr; }
+  .lss-api-format-field > small { min-height: 0; }
+}

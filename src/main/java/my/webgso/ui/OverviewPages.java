@@ -32,7 +32,7 @@ final class OverviewPages {
                 option("all", "All API types", c.text("selectedDataType")),
                 option("Rolling 24 Hour", "Rolling 24 Hour", c.text("selectedDataType")),
                 option("Day Ahead", "Day Ahead", c.text("selectedDataType")),
-                option("Week Ahead", "Week Ahead", c.text("selectedDataType")),
+                option("Week Ahead", "9-Day Ahead", c.text("selectedDataType")),
                 option("4 Month Ahead", "4 Month Ahead", c.text("selectedDataType")),
                 option("MMF", "MMF", c.text("selectedDataType")))
             .attr("name", "dataType");
@@ -68,16 +68,22 @@ final class OverviewPages {
               plant.id,
               plant.name + " — " + plantLocation(plant) + " (" + plant.plantId + ")",
               ""));
-    var apiEndpointFields = new ArrayList<Element>();
-    for (var slot : my.webgso.PlantApiSlots.VIEWER)
-      apiEndpointFields.add(
-          field(
-              slot.label(),
-              input(slot.field(), "url", "")
-                  .attr(
-                      "placeholder",
-                      "https://example.com/"
-                          + slot.dataType().toLowerCase(Locale.ROOT).replace(" ", "-"))));
+    var ddqEndpointFields = new ArrayList<Element>();
+    var mmfEndpointFields = new ArrayList<Element>();
+    for (var slot : my.webgso.PlantApiSlots.VIEWER) {
+      var endpoint =
+          el(
+                  "label",
+                  el("strong", slot.label()),
+                  el("small", slot.hint()),
+                  input(slot.field(), "url", "")
+                      .attr(
+                          "placeholder",
+                          "https://example.com/"
+                              + slot.dataType().toLowerCase(Locale.ROOT).replace(" ", "-")))
+              .cls("lss-api-format-field");
+      (slot.apiType().equals("MMF") ? mmfEndpointFields : ddqEndpointFields).add(endpoint);
+    }
     var addApiForm =
         c.post(
                 "/lss-api",
@@ -96,7 +102,22 @@ final class OverviewPages {
                 el(
                         "fieldset",
                         el("legend", "2. Add one or more APIs for this plant"),
-                        apiEndpointFields)
+                        el(
+                                "section",
+                                el(
+                                    "header",
+                                    el("span", "DDQ"),
+                                    el("div", el("strong", "Declared Daily Quantity"), el("small", "Forecast values in 15-minute intervals"))),
+                                el("div", ddqEndpointFields).cls("lss-api-format-grid"))
+                            .cls("lss-api-format-group ddq"),
+                        el(
+                                "section",
+                                el(
+                                    "header",
+                                    el("span", "MMF"),
+                                    el("div", el("strong", "Meteorological Measurements"), el("small", "Live readings from the plant weather sensors"))),
+                                el("div", mmfEndpointFields).cls("lss-api-format-grid"))
+                            .cls("lss-api-format-group mmf"))
                     .cls("lss-api-endpoint-fields"),
                 el("div", button("Save plant APIs", true)).cls("lss-api-form-actions"))
             .attr("autocomplete", "off")
@@ -125,7 +146,7 @@ final class OverviewPages {
         displayedCount++;
         rows.add(
             row(
-                reading.dataType,
+                displayDataType(reading.dataType),
                 date(reading.submissionDateTime, "dd MMM yyyy, HH:mm"),
                 date(reading.intervalStart, "dd MMM yyyy, HH:mm"),
                 reading.parameter,
@@ -142,14 +163,14 @@ final class OverviewPages {
                     "/lss-api/" + plant.id + "/collect",
                     "lss-refresh-form lss-dataset-refresh-form",
                     input("dataType", "hidden", api.dataType),
-                    button("↻", false)
-                        .attr("title", "Refresh " + api.dataType)
-                        .attr("aria-label", "Refresh " + api.dataType))
-                .attr("data-loading-title", "Refreshing " + api.dataType + "…")
+                        button("↻", false)
+                        .attr("title", "Refresh " + displayDataType(api.dataType))
+                        .attr("aria-label", "Refresh " + displayDataType(api.dataType)))
+                .attr("data-loading-title", "Refreshing " + displayDataType(api.dataType) + "…")
                 .attr(
                     "data-loading-message",
                     "Please wait while the latest "
-                        + api.dataType
+                        + displayDataType(api.dataType)
                         + " readings are requested and saved for "
                         + plant.name
                         + ".");
@@ -159,7 +180,7 @@ final class OverviewPages {
                     el(
                             "a",
                             el("i").attr("aria-hidden", "true"),
-                            api.dataType)
+                            displayDataType(api.dataType))
                         .attr(
                             "href",
                             "/?plantId=" + plant.id + "&dataType=" + encode(api.dataType))
@@ -319,6 +340,10 @@ final class OverviewPages {
 
   private static Element dataMetric(Object value, String label) {
     return el("article", el("strong", value), el("span", label)).cls("lss-data-metric");
+  }
+
+  private static String displayDataType(String value) {
+    return "Week Ahead".equals(value) ? "9-Day Ahead" : value;
   }
 
   private static String plantLocation(LssPlant plant) {
