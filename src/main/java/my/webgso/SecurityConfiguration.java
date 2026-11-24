@@ -36,7 +36,13 @@ public class SecurityConfiguration {
                         "/error")
                     .permitAll();
               if (accounts.environmentMode()) {
-                auth.requestMatchers("/", "/lss-api", "/lss-api/**", "/account/logout")
+                auth.requestMatchers(
+                        "/",
+                        "/lss-api",
+                        "/lss-api/**",
+                        "/admin/collection-schedules",
+                        "/admin/collection-schedules/**",
+                        "/account/logout")
                     .hasRole("Admin")
                     .anyRequest()
                     .denyAll();
