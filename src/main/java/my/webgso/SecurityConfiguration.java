@@ -18,19 +18,14 @@ public class SecurityConfiguration {
   SecurityFilterChain security(HttpSecurity http, Accounts accounts, Store db) throws Exception {
     http.authenticationProvider(accounts)
         .authorizeHttpRequests(
-            auth ->
-                auth.requestMatchers(
+            auth -> {
+              auth.requestMatchers(
                         "/oauth2/**", "/login/oauth2/**", "/account/profile/google/link")
                     .denyAll()
                     .requestMatchers(
                         "/login",
-                        "/register",
-                        "/account/register",
+                        "/account/login",
                         "/account/google",
-                        "/account/verify-email",
-                        "/account/resend-verification",
-                        "/account/forgot-password",
-                        "/account/reset-password",
                         "/styles/**",
                         "/bootstrap/**",
                         "/scripts/**",
@@ -39,13 +34,29 @@ public class SecurityConfiguration {
                         "/health",
                         "/api/test-data/mmf/**",
                         "/error")
+                    .permitAll();
+              if (accounts.environmentMode()) {
+                auth.requestMatchers("/", "/lss-api", "/lss-api/**", "/account/logout")
+                    .hasRole("Admin")
+                    .anyRequest()
+                    .denyAll();
+              } else {
+                auth.requestMatchers(
+                        "/register",
+                        "/account/register",
+                        "/account/verify-email",
+                        "/account/resend-verification",
+                        "/account/forgot-password",
+                        "/account/reset-password")
                     .permitAll()
                     .requestMatchers("/admin/users", "/admin/users/**")
                     .denyAll()
                     .requestMatchers("/admin/**", "/api/admin/**")
                     .hasRole("Admin")
                     .anyRequest()
-                    .hasRole("Admin"))
+                    .hasRole("Admin");
+              }
+            })
         .formLogin(
             form ->
                 form.loginPage("/login")
@@ -99,6 +110,10 @@ public class SecurityConfiguration {
                   throws ServletException, IOException {
                 var auth = SecurityContextHolder.getContext().getAuthentication();
                 if (auth != null && auth.getPrincipal() instanceof Accounts.Principal principal) {
+                  if (Accounts.environmentPrincipal(principal)) {
+                    chain.doFilter(request, response);
+                    return;
+                  }
                   var user = db.find(Models.ApplicationUser.class, principal.id());
                   if (user.isEmpty()
                       || !"Approved".equals(user.get().accessStatus)

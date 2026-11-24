@@ -759,7 +759,7 @@ class ApplicationIntegrationTests {
 
   @Test
   @org.springframework.transaction.annotation.Transactional
-  void adminOverviewUsesSavedTestResultsForEveryAdmin() throws Exception {
+  void adminLssDataViewerIsAvailableToEveryAdmin() throws Exception {
     var passed = new LssPlant();
     passed.plantId = "OVERVIEW-PASS";
     passed.name = "Overview passed API";
@@ -780,8 +780,9 @@ class ApplicationIntegrationTests {
     mvc.perform(get("/").with(authentication(adminAuth)))
         .andExpect(status().isOk())
         .andExpect(view().name("admin-overview"))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Total APIs")))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("Not tested")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("LSS Data Viewer")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Add LSS API")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("lss-plant-groups")))
         .andExpect(
             content()
                 .string(

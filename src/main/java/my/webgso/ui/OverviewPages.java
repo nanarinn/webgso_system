@@ -12,106 +12,255 @@ final class OverviewPages {
   private OverviewPages() {}
 
   static Element admin(PageContext c) {
-    var cards =
+    List<LssPlant> plants = c.list("lssPlants");
+    List<SolarApiReading> readings = c.list("lssReadings");
+    List<PlantApiConfiguration> configuredApis = c.list("configuredLssApis");
+    Map<Integer, String> plantNames = c.value("lssPlantNames");
+    var plantSelect = el("select").attr("name", "plantId");
+    plantSelect.add(option("0", "All plants", c.value("selectedPlantId")));
+    for (LssPlant plant : plants)
+      plantSelect.add(
+          option(plant.id, plant.name + " (" + plant.plantId + ")", c.value("selectedPlantId")));
+    var typeSelect =
         el(
-                "div",
-                apiCard(
-                    "Total APIs",
-                    c.number("apiCount"),
-                    "Total registered plant API connections",
-                    "/admin/lss-plants"),
-                apiCard(
-                    "Successful",
-                    c.number("apiSuccessCount"),
-                    "Last test passed",
-                    "/?apiStatus=success#latest-api-activity"),
-                apiCard(
-                    "Failed",
-                    c.number("apiFailedCount"),
-                    "Last test failed",
-                    "/?apiStatus=failed#latest-api-activity"),
-                apiCard(
-                    "Not tested",
-                    c.number("apiUntestedCount"),
-                    "No saved test result yet",
-                    "/?apiStatus=untested#latest-api-activity"))
-            .cls("admin-api-metrics");
-    var rows = new ArrayList<Element>();
-    for (Map<String, Object> api : c.<Map<String, Object>>list("apiActivity")) {
-      var tested =
-          api.get("testedAt") == null
-              ? "Not tested"
-              : date(
-                      (java.time.temporal.TemporalAccessor) api.get("testedAt"),
-                      "dd MMM yyyy, HH:mm")
-                  + " MYT";
-      String dataUrl = Objects.toString(api.get("dataUrl"), "");
-      rows.add(
-          row(
-              el("strong", api.get("name")).add(el("small", api.get("plantCode"))),
-              api.get("owner"),
-              api.get("category"),
-              el("span", api.get("status")).cls("admin-api-status " + api.get("tone")),
-              tested,
-              dataUrl.isBlank()
-                  ? el("span", "No saved data").cls("admin-no-data")
-                  : action("View history", dataUrl, false)));
+                "select",
+                option("all", "All API types", c.text("selectedDataType")),
+                option("Rolling 24 Hour", "Rolling 24 Hour", c.text("selectedDataType")),
+                option("Day Ahead", "Day Ahead", c.text("selectedDataType")),
+                option("Week Ahead", "Week Ahead", c.text("selectedDataType")),
+                option("4 Month Ahead", "4 Month Ahead", c.text("selectedDataType")),
+                option("MMF", "MMF", c.text("selectedDataType")))
+            .attr("name", "dataType");
+    var filters =
+        el(
+                "form",
+                field("Plant", plantSelect),
+                field("API type", typeSelect),
+                field(
+                    "Parameter",
+                    input("parameter", "search", c.text("selectedParameter"))
+                        .attr("placeholder", "e.g. ForecastValue")),
+                el(
+                        "div",
+                        button("Apply filters", true),
+                        action("Clear", "/", false))
+                    .cls("lss-data-filter-actions"))
+            .attr("method", "get")
+            .attr("action", "/")
+            .cls("lss-data-filters");
+    var latest = readings.isEmpty() ? null : readings.getFirst().submissionDateTime;
+    var addPlantSelect = el("select").attr("name", "plantId");
+    addPlantSelect.add(option("0", "Register a new plant", ""));
+    for (LssPlant plant : plants)
+      addPlantSelect.add(option(plant.id, plant.name + " (" + plant.plantId + ")", ""));
+    var apiEndpointFields = new ArrayList<Element>();
+    for (var slot : my.webgso.PlantApiSlots.VIEWER)
+      apiEndpointFields.add(
+          field(
+              slot.label(),
+              input(slot.field(), "url", "")
+                  .attr(
+                      "placeholder",
+                      "https://example.com/"
+                          + slot.dataType().toLowerCase(Locale.ROOT).replace(" ", "-"))));
+    var addApiForm =
+        c.post(
+                "/lss-api",
+                "lss-api-form",
+                el(
+                        "fieldset",
+                        el("legend", "1. Select one plant"),
+                        field("Existing plant", addPlantSelect),
+                        field(
+                            "New plant ID",
+                            input("newPlantCode", "text", "").attr("placeholder", "e.g. 05")),
+                        field(
+                            "New plant name",
+                            input("newPlantName", "text", "").attr("placeholder", "e.g. BDWS")))
+                    .cls("lss-api-plant-fields"),
+                el(
+                        "fieldset",
+                        el("legend", "2. Add one or more APIs for this plant"),
+                        apiEndpointFields)
+                    .cls("lss-api-endpoint-fields"),
+                el("div", button("Save plant APIs", true)).cls("lss-api-form-actions"))
+            .attr("autocomplete", "off")
+            .attr("data-loading-title", "Saving plant APIs…")
+            .attr(
+                "data-loading-message",
+                "Please wait while the endpoint configuration is saved. No readings are being collected yet.");
+    var plantTables = el("div").cls("lss-plant-groups");
+    int visiblePlantGroups = 0;
+    for (LssPlant plant : plants) {
+      var plantReadings = readings.stream().filter(item -> Objects.equals(item.plantId, plant.id)).toList();
+      var plantApis = configuredApis.stream().filter(item -> Objects.equals(item.plantId, plant.id)).toList();
+      if (plantReadings.isEmpty() && plantApis.isEmpty() && c.number("selectedPlantId") == 0) continue;
+      visiblePlantGroups++;
+      var rows = new ArrayList<Element>();
+      for (SolarApiReading reading : plantReadings)
+        rows.add(
+            row(
+                reading.dataType,
+                date(reading.submissionDateTime, "dd MMM yyyy, HH:mm"),
+                date(reading.intervalStart, "dd MMM yyyy, HH:mm"),
+                reading.parameter,
+                reading.value,
+                reading.unit));
+      var apiBadges = el("div").cls("lss-plant-api-badges");
+      for (PlantApiConfiguration api : plantApis) {
+        var datasetRefresh =
+            c.post(
+                    "/lss-api/" + plant.id + "/collect",
+                    "lss-refresh-form lss-dataset-refresh-form",
+                    input("dataType", "hidden", api.dataType),
+                    button("↻", false)
+                        .attr("title", "Refresh " + api.dataType)
+                        .attr("aria-label", "Refresh " + api.dataType))
+                .attr("data-loading-title", "Refreshing " + api.dataType + "…")
+                .attr(
+                    "data-loading-message",
+                    "Please wait while the latest "
+                        + api.dataType
+                        + " readings are requested and saved for "
+                        + plant.name
+                        + ".");
+        apiBadges.add(
+            el(
+                    "div",
+                    el(
+                            "a",
+                            el("i").attr("aria-hidden", "true"),
+                            api.dataType)
+                        .attr(
+                            "href",
+                            "/?plantId=" + plant.id + "&dataType=" + encode(api.dataType))
+                        .attr("title", "Show " + api.dataType + " readings"),
+                    datasetRefresh)
+                .cls("lss-dataset-chip"));
+      }
+      if (plantApis.isEmpty()) apiBadges.add(el("span", "No API configured").cls("muted"));
+      Element refreshButton =
+          plantApis.isEmpty()
+              ? null
+              : c.post(
+                      "/lss-api/" + plant.id + "/collect",
+                      "lss-refresh-form",
+                      button("Refresh all APIs", false))
+                  .attr("data-loading-title", "Refreshing all API data…")
+                  .attr(
+                      "data-loading-message",
+                      "Please wait while the latest readings are requested and saved for "
+                          + plant.name
+                          + ".")
+                  .attr("aria-label", "Collect the latest API data for " + plant.name);
+      Element deleteButton =
+          c.post(
+                  "/lss-api/" + plant.id + "/delete",
+                  "lss-delete-form",
+                  input("confirmation", "hidden", "delete"),
+                  button("Delete plant", false).cls("danger-action"))
+              .attr(
+                  "data-confirm",
+                  "Delete plant "
+                      + plant.name
+                      + "? All configured APIs, collected readings and history for this plant will be permanently deleted.");
+      Element plantData =
+          plantReadings.isEmpty()
+              ? el(
+                      "div",
+                      el("strong", "No readings stored yet"),
+                      el(
+                          "p",
+                          "Run Refresh API data to request and store the latest readings for this plant."))
+                  .cls("lss-plant-empty-data")
+              : table(
+                  List.of(
+                      "API type",
+                      "Submitted (MYT)",
+                      "Data time",
+                      "Parameter",
+                      "Value",
+                      "Unit"),
+                  rows,
+                  "No stored readings are available for this plant yet.");
+      plantTables.add(
+          el(
+                  "article",
+                  el(
+                          "header",
+                          el(
+                              "div",
+                              el("small", "PLANT " + plant.plantId),
+                              el("h2", plant.name),
+                              el(
+                                      "p",
+                                      el("span").cls("lss-live-dot"),
+                                      plantApis.size() + " connected API(s)",
+                                      el("b", "·"),
+                                      plantReadings.size() + " rows displayed")
+                                  .cls("lss-plant-meta")),
+                          el(
+                                  "div",
+                                  apiBadges,
+                                  el("div", refreshButton, deleteButton).cls("lss-plant-buttons"))
+                              .cls("lss-plant-actions")),
+                  plantData)
+              .cls("lss-data-table-panel lss-plant-panel"));
     }
+    if (visiblePlantGroups == 0)
+      plantTables.add(
+          el("article", el("h2", "No plant data yet"), el("p", "Add an LSS API to register the first plant and endpoint."))
+              .cls("lss-data-table-panel lss-empty-panel"));
     return el(
             "section",
             el(
                     "div",
-                    el("p", el("span", "Workspace /"), " Admin overview"),
-                    el("span", "Malaysia Standard Time · UTC+8"))
-                .cls("admin-overview-context"),
+                    heading(
+                        "LIVE OPERATIONS · LSS API MONITOR",
+                        "Solar Plant Data Viewer",
+                        "View the latest DDQ forecasts and MMF measurements collected from every configured LSS endpoint."),
+                    el("a", "＋ Add LSS API").attr("href", "#add-lss-api").cls("primary-action"))
+                .cls("lss-data-page-heading"),
+            c.text("lssApiMessage").isBlank()
+                ? null
+                : el("div", c.text("lssApiMessage"))
+                    .cls(c.yes("lssApiSuccess") ? "lss-api-notice success" : "lss-api-notice error"),
             el(
-                    "header",
-                    el(
-                        "div",
-                        el("p", "Admin console").cls("section-label"),
-                        el("h1", "API overview"),
-                        el("p", "Review the latest test result for each configured plant API.")),
-                    el("div", action("View all APIs →", "/admin/lss-plants", true))
-                        .cls("java-actions"))
-                .cls("admin-overview-heading"),
-            cards,
+                    "div",
+                    dataMetric(String.format(Locale.ROOT, "%,d", c.number("totalReadingCount")), "Stored readings"),
+                    dataMetric(plants.size(), "Registered plants"),
+                    dataMetric(configuredApis.size(), "Connected APIs"),
+                    dataMetric(
+                        latest == null ? "No data" : date(latest, "dd MMM yyyy, HH:mm"),
+                        "Last data received (MYT)"))
+                .cls("lss-data-metrics"),
             el(
                     "article",
                     el(
                         "header",
-                        el(
-                            "div",
-                            el("h2", "Latest API activity"),
-                            el("p", "Latest saved connection tests for registered plants.")),
-                        action("API test history", "/admin/api-test-history", false)),
-                    table(
-                        List.of("Plant", "Tested by", "API", "Result", "Last tested", "History"),
-                        rows,
-                        "No registered plant API connections yet."),
+                        el("div", el("span", "DATA EXPLORER"), el("h2", "Live API readings")),
+                        el("p", "Filter by plant, dataset or measurement parameter.")),
+                    filters)
+                .cls("lss-data-filter-panel"),
+            el(
+                    "details",
                     el(
-                        "footer",
-                        el(
-                            "p",
-                            "Counts use the latest saved result per configured API. They do not"
-                                + " represent continuous monitoring."),
-                        el(
-                            "p",
-                            c.number("apiUntestedCount")
-                                + " APIs have not been tested yet. Only APIs with saved URLs are"
-                                + " included.")))
-                .cls("admin-api-activity")
-                .attr("id", "latest-api-activity"))
-        .cls("admin-overview");
+                        "summary",
+                        el("div", el("span", "+"), el("strong", "Add or update LSS API")),
+                        el("small", "Connect multiple datasets to one solar plant")),
+                    el(
+                        "div",
+                        addApiForm,
+                        el("p", "The endpoint is validated and its latest readings are collected immediately after saving.").cls("lss-api-help"))
+                    .cls("lss-api-details-body"))
+                .attr("id", "add-lss-api")
+                .cls("lss-data-filter-panel lss-api-panel"),
+            plantTables)
+        .cls("lss-data-viewer");
   }
 
-  private static Element apiCard(String title, long count, String detail, String url) {
-    return el(
-            "article",
-            el("h2", title),
-            el("strong", count),
-            el("p", detail),
-            link("View APIs →", url))
-        .cls("admin-api-card");
+  private static Element dataMetric(Object value, String label) {
+    return el("article", el("strong", value), el("span", label)).cls("lss-data-metric");
   }
 
   static Element dashboard(PageContext c) {

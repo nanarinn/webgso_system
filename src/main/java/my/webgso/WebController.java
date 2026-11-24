@@ -33,6 +33,7 @@ public class WebController {
   private final ApiBatchReports apiBatchReports;
   private final PlantApiProbe probe;
   private final EmailVerification emailVerification;
+  private final PlantDeletionService plantDeletion;
 
   public WebController(
       Store db,
@@ -51,7 +52,9 @@ public class WebController {
       DatabaseConnectionStatus databaseConnection,
       ApiBatchReports apiBatchReports,
       PlantApiProbe probe,
-      EmailVerification emailVerification) {
+      EmailVerification emailVerification,
+      PlantDeletionService plantDeletion) {
+    this.plantDeletion = plantDeletion;
     this.emailVerification = emailVerification;
     this.probe = probe;
     this.apiBatchReports = apiBatchReports;
@@ -81,6 +84,8 @@ public class WebController {
 
   @ModelAttribute
   public void common(Model model, Authentication auth) {
+    model.addAttribute("viewDataMode", accounts.environmentMode());
+    model.addAttribute("viewDataAdminEmail", accounts.environmentEmail());
     model.addAttribute(
         "navigation",
         Resources.ALL.stream()
@@ -102,12 +107,14 @@ public class WebController {
       model.addAttribute("databaseConnection", databaseConnection.check());
       model.addAttribute(
           "notifications",
-          db.list(
-              UserAccessNotification.class,
-              "WHERE \"UserId\"=? AND \"NotificationType\" NOT IN"
-                  + " ('EmailChangeCode','PasswordChangeCode','PasswordReset','EmailVerification')"
-                  + " ORDER BY \"CreatedAt\" DESC LIMIT 15",
-              p.id()));
+          Accounts.environmentPrincipal(p)
+              ? List.of()
+              : db.list(
+                  UserAccessNotification.class,
+                  "WHERE \"UserId\"=? AND \"NotificationType\" NOT IN"
+                      + " ('EmailChangeCode','PasswordChangeCode','PasswordReset','EmailVerification')"
+                      + " ORDER BY \"CreatedAt\" DESC LIMIT 15",
+                  p.id()));
     }
     model.addAttribute("title", "LSS Repository");
     model.addAttribute("today", LocalDate.now(Policies.LOCAL));
@@ -182,11 +189,16 @@ public class WebController {
 
   @GetMapping("/")
   public String dashboard(
-      Model model, Authentication auth, @RequestParam(defaultValue = "all") String apiStatus) {
-    model.addAttribute("title", "Overview");
+      Model model,
+      Authentication auth,
+      @RequestParam(defaultValue = "all") String apiStatus,
+      @RequestParam(defaultValue = "0") int plantId,
+      @RequestParam(defaultValue = "all") String dataType,
+      @RequestParam(defaultValue = "") String parameter) {
+    model.addAttribute("title", "LSS Data Viewer");
     if (auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_Admin"))) {
       var apiPlants =
-          db.list(LssPlant.class, "ORDER BY \"LastApiTestAt\" DESC NULLS LAST, \"Name\"");
+          db.list(LssPlant.class, "ORDER BY \"PlantId\", \"Name\"");
       var apiRows =
           ApiOverview.rows(
               apiPlants, db.list(PlantApiConfiguration.class, ""), testHistory.latest());
@@ -209,6 +221,45 @@ public class WebController {
               .limit(10)
               .toList();
       model.addAttribute("apiActivity", activity);
+      var filters = new ArrayList<Object>();
+      var where = new StringBuilder("WHERE 1=1");
+      if (plantId > 0) {
+        where.append(" AND \"PlantId\"=?");
+        filters.add(plantId);
+      }
+      String selectedType = dataType.trim();
+      if (!selectedType.equalsIgnoreCase("all")) {
+        selectedType = Policies.canonical(selectedType);
+        where.append(" AND \"DataType\"=?");
+        filters.add(selectedType);
+      } else selectedType = "all";
+      String selectedParameter = parameter.trim();
+      if (!selectedParameter.isBlank()) {
+        where.append(" AND UPPER(\"Parameter\") LIKE UPPER(?)");
+        filters.add("%" + selectedParameter + "%");
+      }
+      where.append(
+          " AND \"Id\" IN (SELECT ranked.\"Id\" FROM (SELECT \"Id\", ROW_NUMBER() OVER"
+              + " (PARTITION BY \"PlantId\", \"DataType\" ORDER BY \"SubmissionDateTime\" DESC,"
+              + " \"IntervalStart\" DESC) AS row_number FROM \"SolarApiReadings\") ranked WHERE"
+              + " ranked.row_number<=100) ORDER BY \"SubmissionDateTime\" DESC,"
+              + " \"IntervalStart\" DESC LIMIT 500");
+      var lssReadings =
+          db.list(SolarApiReading.class, where.toString(), filters.toArray());
+      model.addAttribute("lssPlants", apiPlants);
+      model.addAttribute("lssReadings", lssReadings);
+      model.addAttribute(
+          "configuredLssApis",
+          db.list(
+              PlantApiConfiguration.class,
+              "ORDER BY \"PlantId\", \"ApiType\", \"DataType\""));
+      model.addAttribute(
+          "lssPlantNames",
+          apiPlants.stream().collect(java.util.stream.Collectors.toMap(p -> p.id, p -> p.name)));
+      model.addAttribute("selectedPlantId", plantId);
+      model.addAttribute("selectedDataType", selectedType);
+      model.addAttribute("selectedParameter", selectedParameter);
+      model.addAttribute("totalReadingCount", db.count(SolarApiReading.class));
       return "admin-overview";
     }
     model.addAttribute("plantCount", db.count(LssPlant.class));
@@ -225,6 +276,148 @@ public class WebController {
     model.addAttribute(
         "recentReports", db.list(ReportExecution.class, "ORDER BY \"RequestedAt\" DESC LIMIT 5"));
     return "dashboard";
+  }
+
+  @PostMapping("/lss-api")
+  public String addLssApi(
+      @RequestParam Map<String, String> form,
+      Authentication auth,
+      RedirectAttributes flash) {
+    try {
+      var suppliedApis = new LinkedHashMap<PlantApiSlots.Slot, String>();
+      for (var slot : PlantApiSlots.ALL) {
+        String url = form.getOrDefault(slot.field(), "").trim();
+        if (url.isBlank()) continue;
+        if (!url.startsWith("https://"))
+          throw new IllegalArgumentException(slot.label() + " URL must begin with https://");
+        if (url.length() > 1000)
+          throw new IllegalArgumentException(slot.label() + " URL is too long.");
+        suppliedApis.put(slot, url);
+      }
+      if (suppliedApis.isEmpty())
+        throw new IllegalArgumentException("Enter at least one LSS API endpoint URL.");
+
+      int selectedPlantId = Integer.parseInt(form.getOrDefault("plantId", "0"));
+      if (selectedPlantId <= 0) {
+        String code = form.getOrDefault("newPlantCode", "").trim();
+        String name = form.getOrDefault("newPlantName", "").trim();
+        if (code.isBlank() || name.isBlank())
+          throw new IllegalArgumentException(
+              "Choose an existing plant, or enter both the new plant ID and plant name.");
+        if (!db.list(LssPlant.class, "WHERE UPPER(\"PlantId\")=UPPER(?)", code).isEmpty())
+          throw new IllegalArgumentException("That plant ID already exists.");
+        var plant = new LssPlant();
+        plant.plantId = code;
+        plant.name = name;
+        plant.isActive = true;
+        selectedPlantId = db.insert(plant).id;
+      } else if (db.find(LssPlant.class, selectedPlantId).isEmpty()) {
+        throw new IllegalArgumentException("The selected plant no longer exists.");
+      }
+
+      for (var entry : suppliedApis.entrySet()) {
+        var slot = entry.getKey();
+        var existing =
+            db.list(
+                PlantApiConfiguration.class,
+                "WHERE \"PlantId\"=? AND \"ApiType\"=? AND \"DataType\"=?",
+                selectedPlantId,
+                slot.apiType(),
+                slot.dataType());
+        var configuration = existing.isEmpty() ? new PlantApiConfiguration() : existing.getFirst();
+        configuration.plantId = selectedPlantId;
+        configuration.apiType = slot.apiType();
+        configuration.dataType = slot.dataType();
+        configuration.apiLink = entry.getValue();
+        if (existing.isEmpty()) db.insert(configuration);
+        else db.update(configuration);
+      }
+      flash.addFlashAttribute(
+          "lssApiMessage",
+          suppliedApis.size()
+              + " API endpoint(s) saved. Use the refresh button beside a dataset to collect its"
+              + " latest readings.");
+      flash.addFlashAttribute("lssApiSuccess", true);
+    } catch (IllegalArgumentException error) {
+      flash.addFlashAttribute("lssApiMessage", error.getMessage());
+      flash.addFlashAttribute("lssApiSuccess", false);
+      flash.addFlashAttribute("showAddLssApi", true);
+    }
+    return "redirect:/";
+  }
+
+  @PostMapping("/lss-api/{plantId}/collect")
+  public String collectLssApiData(
+      @PathVariable int plantId,
+      @RequestParam(defaultValue = "") String dataType,
+      Authentication auth,
+      RedirectAttributes flash) {
+    try {
+      String result = collectPlantApis(plantId, principal(auth).username(), dataType);
+      flash.addFlashAttribute("lssApiMessage", result);
+      flash.addFlashAttribute("lssApiSuccess", !result.startsWith("Collection failed"));
+    } catch (IllegalArgumentException error) {
+      flash.addFlashAttribute("lssApiMessage", error.getMessage());
+      flash.addFlashAttribute("lssApiSuccess", false);
+    }
+    return "redirect:/?plantId=" + plantId;
+  }
+
+  @PostMapping("/lss-api/{plantId}/delete")
+  public String deleteViewerPlant(
+      @PathVariable int plantId,
+      @RequestParam(defaultValue = "") String confirmation,
+      Authentication auth,
+      RedirectAttributes flash) {
+    if (!accounts.environmentMode()) throw new IllegalArgumentException("Viewer mode is disabled.");
+    if (!confirmation.equals("delete"))
+      throw new IllegalArgumentException("Confirm plant deletion first.");
+    try {
+      String name = plantDeletion.deleteViewerPlant(plantId, principal(auth).username());
+      flash.addFlashAttribute("lssApiMessage", "Plant deleted: " + name + ".");
+      flash.addFlashAttribute("lssApiSuccess", true);
+    } catch (IllegalArgumentException error) {
+      flash.addFlashAttribute("lssApiMessage", error.getMessage());
+      flash.addFlashAttribute("lssApiSuccess", false);
+    }
+    return "redirect:/";
+  }
+
+  private String collectPlantApis(int plantId, String actor) {
+    return collectPlantApis(plantId, actor, "");
+  }
+
+  private String collectPlantApis(int plantId, String actor, String requestedDataType) {
+    var configurations =
+        db.list(
+            PlantApiConfiguration.class,
+            "WHERE \"PlantId\"=? ORDER BY \"ApiType\", \"DataType\"",
+            plantId);
+    if (configurations.isEmpty())
+      throw new IllegalArgumentException("No API endpoints are configured for this plant.");
+    int completed = 0;
+    var failures = new ArrayList<String>();
+    var submission = LocalDateTime.now(Policies.LOCAL).withNano(0);
+    for (String dataType :
+        configurations.stream()
+            .map(api -> api.dataType)
+            .filter(type -> requestedDataType.isBlank() || type.equalsIgnoreCase(requestedDataType))
+            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new))) {
+      var job =
+          collection.collect(plantId, dataType, submission, true, actor, null, null, 0);
+      if ("Completed".equals(job.status)) completed++;
+      else failures.add(dataType + ": " + Objects.toString(job.errorMessage, "API request failed"));
+    }
+    if (completed == 0 && failures.isEmpty())
+      throw new IllegalArgumentException("The selected API dataset is not configured for this plant.");
+    if (!failures.isEmpty())
+      return "Collection failed for "
+          + failures.size()
+          + " API(s). "
+          + completed
+          + " API(s) completed. "
+          + String.join(" | ", failures);
+    return completed + " API dataset(s) collected and displayed below.";
   }
 
   @GetMapping({"/ddq-analytics", "/mmf-analytics"})

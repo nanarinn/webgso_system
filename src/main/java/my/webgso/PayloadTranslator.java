@@ -195,9 +195,10 @@ public class PayloadTranslator {
                       "irradiance")
                   .contains(name)
               || Policies.MMF_UNITS.keySet().stream().anyMatch(p -> key(p).equals(name));
-      if (measurement && number(item.getValue()) == null)
-        throw new StructureFailure(
-            "A measurement or sensor field contains a missing or non-numeric value.");
+      // Some live MMF feeds return the literal string "NaN" for an unavailable sensor while
+      // other sensors in the same payload remain valid. Ignore only that unavailable value so a
+      // single sensor cannot prevent every valid reading from being displayed.
+      if (measurement && number(item.getValue()) == null) continue;
     }
     if (first(
                 fields,
@@ -318,6 +319,76 @@ public class PayloadTranslator {
     }
   }
 
+  /**
+   * Some live MMF endpoints return one object per physical sensor without a timestamp, for
+   * example {"MMF1":{"amb_temp":31,"ws":2.1},"MMF2":{...}}. Preserve the sensor name in
+   * the displayed parameter and use the trusted server-side receipt/submission time.
+   */
+  private boolean mmfSnapshot(
+      JsonNode root, LocalDateTime receivedAt, List<Candidate> result, List<Issue> issues) {
+    if (!root.isObject()) return false;
+    boolean matched = false;
+    var sensors = root.fields();
+    while (sensors.hasNext()) {
+      var sensor = sensors.next();
+      if (!sensor.getKey().matches("(?i)MMF[1-9][0-9]*") || !sensor.getValue().isObject())
+        continue;
+      matched = true;
+      var measurements = sensor.getValue().fields();
+      while (measurements.hasNext()) {
+        var measurement = measurements.next();
+        if (!measurement.getValue().isValueNode()) continue;
+        BigDecimal value = number(measurement.getValue().asText());
+        if (value == null) continue;
+        String raw = key(measurement.getKey());
+        String label =
+            switch (raw) {
+              case "ambtemp" -> "Ambient Temperature";
+              case "ws" -> "Wind Speed";
+              case "wd" -> "Wind Direction";
+              case "humid" -> "Humidity";
+              case "precip" -> "Precipitation";
+              case "barom" -> "Barometric Pressure";
+              case "atm" -> "Atmospheric Pressure";
+              case "pvtemp" -> "PV Temperature";
+              case "mwa" -> "MW per Area";
+              case "tgi" -> "TGI";
+              case "tghi" -> "TGHI";
+              case "poa" -> "POA Irradiance";
+              default -> measurement.getKey();
+            };
+        String unit =
+            switch (raw) {
+              case "ambtemp", "pvtemp" -> "C";
+              case "ws" -> "m/s";
+              case "wd" -> "°";
+              case "humid" -> "%";
+              case "precip" -> "mm/h";
+              case "barom" -> "hPa";
+              case "atm" -> "atm";
+              case "mwa" -> "MW";
+              case "tgi", "tghi", "poa" -> "W/m2";
+              default -> "";
+            };
+        result.add(
+            new Candidate(
+                receivedAt,
+                null,
+                sensor.getKey().toUpperCase(Locale.ROOT) + " · " + label,
+                value,
+                unit));
+      }
+    }
+    if (matched)
+      issues.add(
+          new Issue(
+              "MMF-002",
+              "Timestamp",
+              receivedAt.toString(),
+              "The API supplied no measurement timestamp; the server receipt time was used."));
+    return matched;
+  }
+
   private void xml(Element root, LocalDateTime inherited, int interval, List<Candidate> result) {
     var scalars = new LinkedHashMap<String, String>();
     var nested = new ArrayList<Element>();
@@ -367,7 +438,8 @@ public class PayloadTranslator {
                   + " data, but the selected API type is "
                   + apiType
                   + ". Check the URL and dataset.");
-        json(root, null, null, interval, candidates);
+        if (!apiType.equals("MMF") || !mmfSnapshot(root, submission, candidates, issues))
+          json(root, null, null, interval, candidates);
       } else if (text.startsWith("<")) {
         format = "XML";
         var factory = DocumentBuilderFactory.newInstance();
@@ -411,10 +483,20 @@ public class PayloadTranslator {
               + " syntax and field layout.",
           e);
     }
-    if (candidates.stream().anyMatch(c -> c.time == null))
-      throw new StructureFailure(
-          "A measurement is missing its timestamp. Supply timestamp/date-time, a dated parent"
-              + " object, or year/month/day/period fields.");
+    long missingTimes = candidates.stream().filter(c -> c.time == null).count();
+    if (missingTimes > 0) {
+      if (!apiType.equals("MMF"))
+        throw new StructureFailure(
+            "A measurement is missing its timestamp. Supply timestamp/date-time, a dated parent"
+                + " object, or year/month/day/period fields.");
+      candidates.removeIf(c -> c.time == null);
+      issues.add(
+          new Issue(
+              "MMF-001",
+              "Timestamp",
+              Long.toString(missingTimes),
+              "MMF measurements without a valid timestamp were ignored."));
+    }
     if (candidates.size() > 250_000)
       throw new IllegalArgumentException("The payload contains too many readings.");
     var times = candidates.stream().map(Candidate::time).distinct().sorted().toList();

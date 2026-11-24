@@ -49,6 +49,12 @@ public final class PlantApiSlots {
           new Slot(
               "apiMmf", "MMF", "MMF", "Live weather measurements", "MMF readings for this plant."));
 
+  /** Compact endpoint set used by the dedicated data-viewer clone. */
+  public static final List<Slot> VIEWER =
+      ALL.stream()
+          .filter(slot -> !slot.dataType().matches("4 Month Ahead [1-4]"))
+          .toList();
+
   private PlantApiSlots() {}
 
   public static String datasetWarning(String url, String selectedDataset) {

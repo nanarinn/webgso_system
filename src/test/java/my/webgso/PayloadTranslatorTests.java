@@ -35,12 +35,12 @@ class PayloadTranslatorTests {
         .hasSize(2);
     assertThat(parse("{\"timestamp\":\"2026-10-22T08:00\",\"power\":[2,3]}", "DDQ").readings())
         .hasSize(2);
-    assertThatThrownBy(
-            () ->
-                parse(
-                    "{\"timestamp\":\"2026-10-22T08:00\",\"parameter\":\"AmbientTemp\",\"value1\":20,\"value2\":null}",
-                    "MMF"))
-        .isInstanceOf(PayloadTranslator.StructureFailure.class);
+    var partialMmf =
+        parse(
+            "{\"timestamp\":\"2026-10-22T08:00\",\"parameter\":\"AmbientTemp\",\"value1\":20,\"value2\":\"NaN\"}",
+            "MMF");
+    assertThat(partialMmf.readings()).hasSize(1);
+    assertThat(partialMmf.readings().getFirst().value).isEqualByComparingTo("20");
     assertThatThrownBy(
             () ->
                 parse(
@@ -76,6 +76,38 @@ class PayloadTranslatorTests {
     assertThat(result.readings()).hasSize(1);
     assertThat(result.readings().getFirst().value).isEqualByComparingTo("16.666667");
     assertThat(result.readings().getFirst().submissionDateTime).isEqualTo(submission);
+  }
+
+  @Test
+  void mmfKeepsValidRowsWhenAnotherMeasurementHasNoTimestamp() {
+    var result =
+        parse(
+            "[{\"timestamp\":\"2026-10-22T08:00\",\"parameter\":\"Humidity\",\"value1\":70},"
+                + "{\"parameter\":\"Humidity\",\"value1\":71}]",
+            "MMF");
+    assertThat(result.readings()).hasSize(1);
+    assertThat(result.issues()).extracting(PayloadTranslator.Issue::code).contains("MMF-001");
+  }
+
+  @Test
+  void acceptsLiveMmfSensorSnapshotAndUsesReceiptTimeWhenTimestampIsMissing() {
+    var result =
+        parse(
+            "{\"MMF1\":{\"tgi\":393,\"amb_temp\":31.5,\"ws\":2,\"unused\":\"NaN\"},"
+                + "\"MMF2\":{\"humid\":72,\"poa\":735}}",
+            "MMF");
+
+    assertThat(result.readings()).hasSize(5);
+    assertThat(result.readings()).allMatch(reading -> reading.intervalStart.equals(submission));
+    assertThat(result.readings())
+        .extracting(reading -> reading.parameter)
+        .containsExactlyInAnyOrder(
+            "MMF1 · TGI",
+            "MMF1 · Ambient Temperature",
+            "MMF1 · Wind Speed",
+            "MMF2 · Humidity",
+            "MMF2 · POA Irradiance");
+    assertThat(result.issues()).extracting(PayloadTranslator.Issue::code).contains("MMF-002");
   }
 
   @Test

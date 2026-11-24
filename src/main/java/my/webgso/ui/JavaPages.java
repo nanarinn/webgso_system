@@ -76,7 +76,7 @@ public final class JavaPages {
                 "/styles/interface.css",
                 "/styles/java.css?v=2",
                 "/styles/workspace-theme.css?v=4",
-                "/styles/workspace-panels.css?v=29",
+                "/styles/workspace-panels.css?v=33",
                 "/styles/plant-editor.css?v=4",
                 "/styles/workspace-polish.css?v=2",
                 "/styles/workspace-finish.css?v=1",
@@ -86,7 +86,7 @@ public final class JavaPages {
                 "/styles/responsive-finish.css?v=1");
     styles.forEach(path -> head.add(el("link").attr("rel", "stylesheet").attr("href", path)));
     if (!login)
-      head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=1").flag("defer", true));
+      head.add(el("script").attr("src", "/scripts/plant-api-loading.js?v=3").flag("defer", true));
     if (!login)
       head.add(
           el("script").attr("src", "/scripts/plant-location-filters.js?v=2").flag("defer", true));
@@ -152,18 +152,9 @@ public final class JavaPages {
 
   private static Element shell(PageContext c, Element content) {
     Accounts.Principal account = c.value("account");
-    var workspaceNav = el("nav", navigation(c, "◫ Overview", "/"));
+    var workspaceNav = el("nav", navigation(c, "◫ LSS Data", "/"));
     var nav =
         el("div", el("p", "Workspace").cls("nav-section-title"), workspaceNav).cls("nav-body");
-    if (c.yes("isAdmin")) {
-      for (Resources.Definition item : c.<Resources.Definition>list("navigation")) {
-        if (Set.of("/admin/report-automation", "/admin/collection-schedules").contains(item.path()))
-          continue;
-        workspaceNav.add(navigation(c, item.title(), item.path()));
-      }
-      workspaceNav.add(navigation(c, "API email alerts", "/admin/api-email"));
-      workspaceNav.add(navigation(c, "My Profile", "/account/profile"));
-    }
     nav.add(
         el("div").cls("nav-spacer"),
         el(
@@ -232,7 +223,7 @@ public final class JavaPages {
                                 notifications)
                             .cls("notification-menu"),
                         el(
-                                "a",
+                                "div",
                                 el(
                                         "span",
                                         account.displayName().isBlank()
@@ -247,7 +238,6 @@ public final class JavaPages {
                                     "span",
                                     el("strong", account.displayName()),
                                     el("small", "Administrator")))
-                            .attr("href", "/account/profile")
                             .cls("workspace-profile")
                             .attr("aria-label", "My profile: " + account.displayName()),
                         c.post("/account/logout", "", button("Sign out", false)))

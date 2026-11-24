@@ -38,4 +38,30 @@ public class PlantDeletionService {
     accounts.audit(actor, "Delete plant", "LssPlant", plant.plantId, "Success", plant.name);
     return plant.name;
   }
+
+  /** Deletes a plant and its collected data for the isolated single-page viewer database. */
+  @Transactional
+  public String deleteViewerPlant(int id, String actor) {
+    var locked =
+        db.jdbc().queryForList("SELECT \"Id\" FROM \"LssPlants\" WHERE \"Id\"=? FOR UPDATE", id);
+    if (locked.isEmpty()) throw new IllegalArgumentException("Plant not found.");
+    LssPlant plant = db.find(LssPlant.class, id).orElseThrow();
+    db.jdbc()
+        .update(
+            "DELETE FROM \"DataAnomalies\" WHERE \"CollectionJobId\" IN (SELECT \"Id\" FROM"
+                + " \"CollectionJobs\" WHERE \"PlantId\"=?)",
+            id);
+    db.jdbc()
+        .update(
+            "DELETE FROM \"RawApiResponses\" WHERE \"CollectionJobId\" IN (SELECT \"Id\" FROM"
+                + " \"CollectionJobs\" WHERE \"PlantId\"=?)",
+            id);
+    db.jdbc().update("DELETE FROM \"SolarApiReadings\" WHERE \"PlantId\"=?", id);
+    db.jdbc().update("DELETE FROM \"CollectionJobs\" WHERE \"PlantId\"=?", id);
+    db.jdbc().update("DELETE FROM \"CollectionSchedules\" WHERE \"PlantId\"=?", id);
+    db.jdbc().update("DELETE FROM \"PlantApiConfigurations\" WHERE \"PlantId\"=?", id);
+    db.jdbc().update("DELETE FROM \"LssPlants\" WHERE \"Id\"=?", id);
+    accounts.audit(actor, "Delete viewer plant", "LssPlant", plant.plantId, "Success", plant.name);
+    return plant.name;
+  }
 }

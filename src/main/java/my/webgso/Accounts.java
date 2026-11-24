@@ -1,6 +1,8 @@
 package my.webgso;
 
 import java.time.*;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import my.webgso.Models.*;
 import org.springframework.security.access.AccessDeniedException;
@@ -10,10 +12,12 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.core.env.Environment;
 
 @Service
 public class Accounts implements AuthenticationProvider {
   public static final String ADMIN = "Admin";
+  public static final String VIEW_DATA_ADMIN_ID = "view-data-environment-admin";
   // Read former assignments for existing accounts without rewriting the shared database.
   private static final Set<String> COMPATIBLE_ADMIN_ROLES =
       Set.of(ADMIN, "Staff", "Administrator", "SuperAdministrator");
@@ -22,10 +26,25 @@ public class Accounts implements AuthenticationProvider {
       implements java.io.Serializable {}
 
   private final Store db;
+  private final Environment env;
   private final IdentityPasswordEncoder passwords = new IdentityPasswordEncoder();
 
-  public Accounts(Store db) {
+  public Accounts(Store db, Environment env) {
     this.db = db;
+    this.env = env;
+  }
+
+  public boolean environmentMode() {
+    return !env.getProperty("viewdata.admin.email", "").isBlank()
+        && !env.getProperty("viewdata.admin.password", "").isBlank();
+  }
+
+  public String environmentEmail() {
+    return environmentMode() ? env.getProperty("viewdata.admin.email", "").trim() : "";
+  }
+
+  public static boolean environmentPrincipal(Principal principal) {
+    return principal != null && VIEW_DATA_ADMIN_ID.equals(principal.id());
   }
 
   public boolean canReview(Authentication auth) {
@@ -76,6 +95,7 @@ public class Accounts implements AuthenticationProvider {
   @Override
   @Transactional(noRollbackFor = AuthenticationException.class)
   public Authentication authenticate(Authentication request) throws AuthenticationException {
+    if (environmentMode()) return authenticateEnvironment(request);
     String login = request.getName().trim().toUpperCase(Locale.ROOT);
     if (!GmailAccounts.allowed(login)) {
       passwords.matches(request.getCredentials().toString(), DUMMY);
@@ -109,6 +129,24 @@ public class Accounts implements AuthenticationProvider {
     db.update(user);
     audit(user.userName, "Sign in", "User", user.id, "Success", "Local authentication");
     return token(user);
+  }
+
+  private Authentication authenticateEnvironment(Authentication request) {
+    String configuredEmail = env.getProperty("viewdata.admin.email", "").trim();
+    String configuredPassword = env.getProperty("viewdata.admin.password", "");
+    String login = request.getName().trim();
+    String suppliedPassword = Objects.toString(request.getCredentials(), "");
+    boolean emailMatches = configuredEmail.equalsIgnoreCase(login);
+    boolean passwordMatches =
+        MessageDigest.isEqual(
+            configuredPassword.getBytes(StandardCharsets.UTF_8),
+            suppliedPassword.getBytes(StandardCharsets.UTF_8));
+    if (!emailMatches || !passwordMatches) throw new BadCredentialsException("Invalid credentials");
+    String displayName = env.getProperty("viewdata.admin.name", "View Data Admin").trim();
+    var principal =
+        new Principal(VIEW_DATA_ADMIN_ID, configuredEmail, displayName, "environment-session");
+    return UsernamePasswordAuthenticationToken.authenticated(
+        principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + ADMIN)));
   }
 
   private static final String DUMMY =

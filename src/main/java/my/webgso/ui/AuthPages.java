@@ -41,6 +41,7 @@ final class AuthPages {
   }
 
   static String login(PageContext c) {
+    boolean viewDataMode = c.yes("viewDataMode");
     var brand =
         el(
                 "a",
@@ -87,19 +88,32 @@ final class AuthPages {
     var access =
         el(
                 "div",
-                el("p", "ACCOUNT ACCESS").cls("auth-access-eyebrow"),
-                el(
-                        "nav",
-                        link("Login", "/login").attr("aria-current", "page"),
-                        link("Sign up", "/register"))
-                    .cls("auth-tabs")
-                    .attr("aria-label", "Account access"),
+                viewDataMode
+                    ? el(
+                            "div",
+                            el("span", "●").attr("aria-hidden", "true"),
+                            "SECURE LSS DATA VIEWER")
+                        .cls("viewer-access-label")
+                    : el("p", "ACCOUNT ACCESS").cls("auth-access-eyebrow"),
+                viewDataMode
+                    ? null
+                    : el(
+                            "nav",
+                            link("Login", "/login").attr("aria-current", "page"),
+                            link("Sign up", "/register"))
+                        .cls("auth-tabs")
+                        .attr("aria-label", "Account access"),
                 el(
                         "header",
-                        el("h2", "Sign in to your workspace").attr("id", "login-title"),
-                        el("p", "Access your registered services, forecasts and API validations."))
+                        el("h2", viewDataMode ? "Welcome back, Admin" : "Sign in to your workspace")
+                            .attr("id", "login-title"),
+                        el(
+                            "p",
+                            viewDataMode
+                                ? "Enter your password to open the solar plant API data workspace."
+                                : "Access your registered services, forecasts and API validations."))
                     .cls("auth-form-heading"))
-            .cls("auth-access-content");
+            .cls(viewDataMode ? "auth-access-content viewer-login" : "auth-access-content");
     if (c.parameter("error"))
       access.add(
           alert(
@@ -133,20 +147,47 @@ final class AuthPages {
               "success"));
     if (c.parameter("passwordReset"))
       access.add(alert("Your password has been reset. Sign in with your new password.", "success"));
-    var identifier = authField("Gmail address", "identifier", "email", "username");
+    var identifier =
+        viewDataMode
+            ? el(
+                    "div",
+                    input("identifier", "hidden", c.text("viewDataAdminEmail")),
+                    el("span", "A").attr("aria-hidden", "true"),
+                    el(
+                        "div",
+                        el("small", "SIGNED IN AS"),
+                        el("strong", "Administrator"),
+                        el("p", c.text("viewDataAdminEmail"))))
+                .cls("viewer-admin-identity")
+            : authField("Gmail address", "identifier", "email", "username");
     // Controls retain their native browser validation, password-manager support and keyboard
     // behavior.
     access.add(
-        el("div", el("span", "Account credentials")).cls("auth-divider"),
+        viewDataMode
+            ? null
+            : el("div", el("span", "Account credentials")).cls("auth-divider"),
         c.post(
             "/account/login",
-            "auth-form",
+            viewDataMode ? "auth-form viewer-auth-form" : "auth-form",
             identifier,
-            authField("Password", "password", "password", "current-password"),
-            el("button", "Login").cls("auth-submit").attr("type", "submit")),
-        el("p", link("Forgot password?", "/account/forgot-password")).cls("auth-signup"),
-        el("p", "Don't have an account? ", link("Sign up", "/register")).cls("auth-signup"),
-        el(
+            authField(
+                viewDataMode ? "Administrator password" : "Password",
+                "password",
+                "password",
+                "current-password"),
+            el("button", viewDataMode ? "Open data viewer" : "Login")
+                .cls("auth-submit")
+                .attr("type", "submit")),
+        viewDataMode
+            ? null
+            : el("p", link("Forgot password?", "/account/forgot-password")).cls("auth-signup"),
+        viewDataMode
+            ? null
+            : el("p", "Don't have an account? ", link("Sign up", "/register"))
+                .cls("auth-signup"),
+        viewDataMode
+            ? null
+            : el(
                 "details",
                 el("summary", "Resend verification email"),
                 c.post(
