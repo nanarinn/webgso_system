@@ -702,22 +702,45 @@ final class AdminPages {
     for (var p : plants) plant.add(el("option", p.plantId + " · " + p.name)
         .attr("value", p.id).flag("selected", p.id.equals(s.plantId)));
     var form = c.post("/admin/collection-schedules/save", "schedule-form",
+        el("header",
+            el("div", el("small", s.id == 0 ? "NEW AUTOMATION" : "SCHEDULE CONFIGURATION"),
+                el("h2", s.id == 0 ? "Create collection schedule" : "Update collection schedule"),
+                el("p", "Set when this plant API is collected and how failed requests are retried.")),
+            el("span", "MYT · UTC+8").cls("schedule-timezone")).cls("schedule-form-header"),
         input("id", "hidden", s.id),
-        field("Plant", plant),
-        field("Schedule name", input("name", "text", s.name).attr("maxlength", 160).flag("required", true)),
-        field("Schedule code", input("scheduleCode", "text", s.scheduleCode).attr("maxlength", 80).flag("required", true)),
-        field("API type", select("apiType", List.of("DDQ", "MMF"), s.apiType)),
-        field("Dataset", select("dataType", List.of("Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month", "MMF"), s.dataType)),
-        field("Collection time (MYT)", input("runTime", "time", s.runTime).flag("required", true)),
-        field("Data interval", select("interval", List.of("15 minutes", "30 minutes", "1 hour"), s.interval)),
-        field("Schedule day", input("scheduleDay", "text", s.scheduleDay).attr("placeholder", "Monday, or 25 for 4 Month")),
-        field("Months", input("scheduleMonths", "text", s.scheduleMonths).attr("placeholder", "1,2,3,4,5,6,7,8,9,10,11,12")),
-        field("Retry attempts", input("retryCount", "number", s.retryCount).attr("min", 0).attr("max", 5)),
+        el("fieldset",
+            el("legend", el("span", "01"), "Schedule identity"),
+            el("p", "Choose the plant and give this automation an identifiable name and code."),
+            el("div",
+                field("Plant", plant),
+                field("Schedule name", input("name", "text", s.name).attr("maxlength", 160).flag("required", true)
+                    .attr("placeholder", "e.g. BKHS rolling forecast")),
+                field("Schedule code", input("scheduleCode", "text", s.scheduleCode).attr("maxlength", 80).flag("required", true)
+                    .attr("placeholder", "e.g. SCH-BKHS-R24"))).cls("schedule-field-grid")).cls("schedule-form-section"),
+        el("fieldset",
+            el("legend", el("span", "02"), "Collection timing"),
+            el("p", "Select the dataset and the Malaysia time at which it should be requested."),
+            el("div",
+                field("API type", select("apiType", List.of("DDQ", "MMF"), s.apiType)),
+                field("Dataset", select("dataType", List.of("Rolling 24 Hour", "Day Ahead", "Week Ahead", "4 Month", "MMF"), s.dataType)),
+                field("Collection time (MYT)", input("runTime", "time", s.runTime).flag("required", true)),
+                field("Data interval", select("interval", List.of("15 minutes", "30 minutes", "1 hour"), s.interval)),
+                field("Schedule day", input("scheduleDay", "text", s.scheduleDay).attr("placeholder", "Monday, or 25 for 4 Month")),
+                field("Months", input("scheduleMonths", "text", s.scheduleMonths).attr("placeholder", "1,2,3,...,12"))).cls("schedule-field-grid")).cls("schedule-form-section"),
+        el("fieldset",
+            el("legend", el("span", "03"), "Reliability & status"),
+            el("p", "Control retry behaviour and pause collection without deleting the schedule."),
+            el("div",
+                field("Retry attempts", input("retryCount", "number", s.retryCount).attr("min", 0).attr("max", 5)),
+                el("label", input("isActive", "checkbox", "true").flag("checked", Boolean.TRUE.equals(s.isActive)),
+                    el("span", el("strong", "Schedule active"), el("small", "The collector will run this schedule automatically.")))
+                    .cls("schedule-active-toggle")).cls("schedule-field-grid schedule-reliability")).cls("schedule-form-section"),
         input("cronExpression", "hidden", s.cronExpression),
         input("timeZoneId", "hidden", "Asia/Kuala_Lumpur"),
-        field("Active", input("isActive", "checkbox", "true").flag("checked", Boolean.TRUE.equals(s.isActive))),
-        el("p", "DDQ follows its dataset schedule. MMF repeats according to the selected interval. Failed pulls retry up to the selected limit.").cls("page-subtitle"),
-        el("div", button("Save schedule", true), action("Cancel", "/admin/collection-schedules", false)).cls("java-actions"));
+        el("footer",
+            el("p", el("strong", "How collection works"), el("span", "DDQ follows the selected forecast schedule. MMF repeats at the chosen interval.")),
+            el("div", action("Cancel", "/admin/collection-schedules", false), button("Save schedule", true)).cls("java-actions"))
+            .cls("schedule-form-footer"));
     return el("section", heading("Collection automation", s.id == 0 ? "Add schedule" : "Edit schedule", null,
         action("Back to schedules", "/admin/collection-schedules", false)), el("article", form).cls("panel schedule-editor"));
   }
