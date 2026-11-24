@@ -75,6 +75,7 @@ values = {
     "VIEW_DATA_ADMIN_EMAIL": admin_email,
     "VIEW_DATA_ADMIN_PASSWORD": admin_password,
     "VIEW_DATA_ADMIN_NAME": "Admin",
+    "SERVER_FORWARD_HEADERS_STRATEGY": "framework",
 }
 with open("/etc/gso-view-data/clone.env", "w", encoding="utf-8") as handle:
     for key, value in values.items():
