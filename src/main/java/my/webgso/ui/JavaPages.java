@@ -79,7 +79,7 @@ public final class JavaPages {
                 "/styles/workspace-panels.css?v=33",
                 "/styles/plant-editor.css?v=4",
                 "/styles/workspace-polish.css?v=2",
-                "/styles/workspace-finish.css?v=1",
+                "/styles/workspace-finish.css?v=2",
                 "/styles/signup.css?v=3",
                 "/styles/plant-filters.css?v=4",
                 "/styles/account-tools.css?v=3",
@@ -111,8 +111,17 @@ public final class JavaPages {
   }
 
   private static Element navigation(PageContext c, String title, String href) {
+    String label = title.replaceFirst("^[◫↗☀▤⇣]\\s*", "");
     var link =
-        el("a", navigationIcon(href), el("span", title.replaceFirst("^[◫↗☀▤⇣]\\s*", "")))
+        el(
+                "a",
+                navigationIcon(href),
+                el(
+                        "span",
+                        el("strong", label),
+                        href.equals("/") ? el("small", "Plants, APIs & data quality") : null)
+                    .cls("nav-link-copy"),
+                el("span", "›").cls("nav-link-arrow").attr("aria-hidden", "true"))
             .attr("href", href)
             .cls("nav-link");
     String current = c.request().getRequestURI();
@@ -152,15 +161,23 @@ public final class JavaPages {
 
   private static Element shell(PageContext c, Element content) {
     Accounts.Principal account = c.value("account");
-    var workspaceNav = el("nav", navigation(c, "◫ LSS Data", "/"));
+    var workspaceNav = el("nav", navigation(c, "◫ Data viewer", "/"));
     var nav =
-        el("div", el("p", "Workspace").cls("nav-section-title"), workspaceNav).cls("nav-body");
+        el(
+                "div",
+                el(
+                        "div",
+                        el("p", "Workspace"),
+                        el("small", "Operations console"))
+                    .cls("nav-section-heading"),
+                workspaceNav)
+            .cls("nav-body");
     nav.add(
         el("div").cls("nav-spacer"),
         el(
                 "div",
                 el("span").cls("status-light"),
-                el("span", el("strong", Branding.NAME), el("small", "Web Services")))
+                el("span", el("strong", "Viewer online"), el("small", "GSO Web Services")))
             .cls("sidebar-status"),
         DatabaseStatusCard.render(c),
         el(
@@ -183,7 +200,10 @@ public final class JavaPages {
                             .cls("brand-logo")
                             .attr("src", Branding.LOGO)
                             .attr("alt", Branding.LOGO_DESCRIPTION),
-                        el("span", el("small", "GSO Web Services")))
+                        el(
+                            "span",
+                            el("strong", "GSO WEB SERVICES"),
+                            el("small", "LSS DATA VIEWER")))
                     .cls("brand-lockup sidebar-brand"),
                 input("navigation", "checkbox", "on")
                     .attr("id", "mobile-nav")

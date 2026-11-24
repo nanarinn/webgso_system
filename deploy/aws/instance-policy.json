@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadCloneArtifact",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::gso-view-data-clone-artifacts-441798856671-ap-southeast-5/*"
+    },
+    {
+      "Sid": "ReadCloneParameters",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Resource": "arn:aws:ssm:ap-southeast-5:441798856671:parameter/gso/view-data-clone/*"
+    }
+  ]
+}

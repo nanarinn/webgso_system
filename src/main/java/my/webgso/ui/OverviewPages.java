@@ -3,8 +3,10 @@ package my.webgso.ui;
 import static my.webgso.ui.Html.el;
 import static my.webgso.ui.PageContext.*;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import my.webgso.Models.*;
+import my.webgso.ReadingQuality;
 import my.webgso.ui.Html.Element;
 
 /** Repository dashboard and Admin console, composed in Java. */
@@ -20,7 +22,10 @@ final class OverviewPages {
     plantSelect.add(option("0", "All plants", c.value("selectedPlantId")));
     for (LssPlant plant : plants)
       plantSelect.add(
-          option(plant.id, plant.name + " (" + plant.plantId + ")", c.value("selectedPlantId")));
+          option(
+              plant.id,
+              plant.name + " — " + plantLocation(plant) + " (" + plant.plantId + ")",
+              c.value("selectedPlantId")));
     var typeSelect =
         el(
                 "select",
@@ -41,6 +46,12 @@ final class OverviewPages {
                     input("parameter", "search", c.text("selectedParameter"))
                         .attr("placeholder", "e.g. ForecastValue")),
                 el(
+                        "label",
+                        input("issuesOnly", "checkbox", "true")
+                            .flag("checked", c.parameter("issuesOnly")),
+                        el("span", "Show warnings and errors only"))
+                    .cls("lss-quality-filter"),
+                el(
                         "div",
                         button("Apply filters", true),
                         action("Clear", "/", false))
@@ -52,7 +63,11 @@ final class OverviewPages {
     var addPlantSelect = el("select").attr("name", "plantId");
     addPlantSelect.add(option("0", "Register a new plant", ""));
     for (LssPlant plant : plants)
-      addPlantSelect.add(option(plant.id, plant.name + " (" + plant.plantId + ")", ""));
+      addPlantSelect.add(
+          option(
+              plant.id,
+              plant.name + " — " + plantLocation(plant) + " (" + plant.plantId + ")",
+              ""));
     var apiEndpointFields = new ArrayList<Element>();
     for (var slot : my.webgso.PlantApiSlots.VIEWER)
       apiEndpointFields.add(
@@ -91,13 +106,23 @@ final class OverviewPages {
                 "Please wait while the endpoint configuration is saved. No readings are being collected yet.");
     var plantTables = el("div").cls("lss-plant-groups");
     int visiblePlantGroups = 0;
+    boolean issuesOnly = c.parameter("issuesOnly");
+    LocalDateTime qualityNow = LocalDateTime.now(my.webgso.Policies.LOCAL);
     for (LssPlant plant : plants) {
       var plantReadings = readings.stream().filter(item -> Objects.equals(item.plantId, plant.id)).toList();
       var plantApis = configuredApis.stream().filter(item -> Objects.equals(item.plantId, plant.id)).toList();
       if (plantReadings.isEmpty() && plantApis.isEmpty() && c.number("selectedPlantId") == 0) continue;
       visiblePlantGroups++;
       var rows = new ArrayList<Element>();
-      for (SolarApiReading reading : plantReadings)
+      int warningCount = 0;
+      int errorCount = 0;
+      int displayedCount = 0;
+      for (SolarApiReading reading : plantReadings) {
+        var quality = ReadingQuality.inspect(reading, plant, qualityNow);
+        if ("warning".equals(quality.tone())) warningCount++;
+        if ("error".equals(quality.tone())) errorCount++;
+        if (issuesOnly && !quality.issue()) continue;
+        displayedCount++;
         rows.add(
             row(
                 reading.dataType,
@@ -105,7 +130,11 @@ final class OverviewPages {
                 date(reading.intervalStart, "dd MMM yyyy, HH:mm"),
                 reading.parameter,
                 reading.value,
-                reading.unit));
+                reading.unit,
+                el("span", quality.label()).cls("lss-quality-status " + quality.tone()),
+                el("span", quality.reason()).cls("lss-quality-reason"))
+                .cls("lss-quality-row " + quality.tone()));
+      }
       var apiBadges = el("div").cls("lss-plant-api-badges");
       for (PlantApiConfiguration api : plantApis) {
         var datasetRefresh =
@@ -173,6 +202,12 @@ final class OverviewPages {
                           "p",
                           "Run Refresh API data to request and store the latest readings for this plant."))
                   .cls("lss-plant-empty-data")
+              : rows.isEmpty() && issuesOnly
+                  ? el(
+                          "div",
+                          el("strong", "No warnings or errors detected"),
+                          el("p", "All displayed readings passed the current data-quality checks."))
+                      .cls("lss-plant-empty-data lss-quality-clear")
               : table(
                   List.of(
                       "API type",
@@ -180,7 +215,9 @@ final class OverviewPages {
                       "Data time",
                       "Parameter",
                       "Value",
-                      "Unit"),
+                      "Unit",
+                      "Quality",
+                      "Why flagged"),
                   rows,
                   "No stored readings are available for this plant yet.");
       plantTables.add(
@@ -190,14 +227,27 @@ final class OverviewPages {
                           "header",
                           el(
                               "div",
-                              el("small", "PLANT " + plant.plantId),
-                              el("h2", plant.name),
+                              el("small", "PLANT ID · " + plant.plantId),
+                              el(
+                                      "div",
+                                      el("h2", plant.name),
+                                      el("span", plantLocation(plant)).cls("lss-location-pill"))
+                                  .cls("lss-plant-title"),
                               el(
                                       "p",
                                       el("span").cls("lss-live-dot"),
                                       plantApis.size() + " connected API(s)",
                                       el("b", "·"),
-                                      plantReadings.size() + " rows displayed")
+                                      displayedCount + " rows displayed",
+                                      el("b", "·"),
+                                      el("span", errorCount + " error")
+                                          .cls(errorCount > 0 ? "quality-count error" : "quality-count"),
+                                      el("b", "·"),
+                                      el("span", warningCount + " warning")
+                                          .cls(
+                                              warningCount > 0
+                                                  ? "quality-count warning"
+                                                  : "quality-count"))
                                   .cls("lss-plant-meta")),
                           el(
                                   "div",
@@ -215,10 +265,18 @@ final class OverviewPages {
             "section",
             el(
                     "div",
-                    heading(
-                        "LIVE OPERATIONS · LSS API MONITOR",
-                        "Solar Plant Data Viewer",
-                        "View the latest DDQ forecasts and MMF measurements collected from every configured LSS endpoint."),
+                    el(
+                            "div",
+                            heading(
+                                "LIVE OPERATIONS · LSS API MONITOR",
+                                "Solar Plant Data Viewer",
+                                "View, verify and monitor DDQ forecasts and MMF measurements from every configured LSS endpoint."),
+                            el(
+                                    "div",
+                                    el("span", "● System operational"),
+                                    el("span", "Data quality checks enabled"))
+                                .cls("lss-hero-status"))
+                        .cls("lss-hero-copy"),
                     el("a", "＋ Add LSS API").attr("href", "#add-lss-api").cls("primary-action"))
                 .cls("lss-data-page-heading"),
             c.text("lssApiMessage").isBlank()
@@ -261,6 +319,21 @@ final class OverviewPages {
 
   private static Element dataMetric(Object value, String label) {
     return el("article", el("strong", value), el("span", label)).cls("lss-data-metric");
+  }
+
+  private static String plantLocation(LssPlant plant) {
+    if (plant == null || plant.name == null) return "Location not set";
+    return switch (plant.name.trim().toUpperCase(Locale.ROOT)) {
+      case "BKHS" -> "Pulau Pinang";
+      case "SKNS" -> "Perlis";
+      case "SIDS" -> "Perak";
+      case "BDWS", "LMMS" -> "Pahang";
+      case "KALS" -> "Kedah";
+      case "MALS" -> "Melaka";
+      case "KMLS" -> "Johor";
+      default ->
+          plant.state == null || plant.state.isBlank() ? "Location not set" : plant.state.trim();
+    };
   }
 
   static Element dashboard(PageContext c) {
