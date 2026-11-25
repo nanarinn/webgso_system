@@ -12,6 +12,7 @@ final class ApiRetestPage {
 
   static Element render(PageContext c) {
     Job job = c.value("apiRetestJob");
+    boolean viewer = c.yes("viewDataMode");
     var items = job.items;
     long done =
         items.stream().filter(item -> Set.of("Success", "Failed").contains(item.status())).count();
@@ -51,9 +52,13 @@ final class ApiRetestPage {
                     "div",
                     job.complete
                         ? action(
-                            "Download CSV", "/admin/lss-plants/checks/" + job.id + "/export", false)
+                            viewer ? "Download Excel" : "Download CSV",
+                            viewer
+                                ? "/lss-api/tests/" + job.id + "/excel"
+                                : "/admin/lss-plants/checks/" + job.id + "/export",
+                            false)
                         : null,
-                    job.complete
+                    job.complete && !viewer
                         ? c.post(
                             "/admin/lss-plants/checks/" + job.id + "/email",
                             "api-retest-form",
@@ -63,13 +68,15 @@ final class ApiRetestPage {
                                     job.reportStatus.equals("Sent")
                                         || job.reportStatus.equals("Sending")))
                         : null,
-                    job.configured
+                    viewer
+                        ? action("Back to Data viewer", "/", false)
+                        : job.configured
                         ? action("Back to Plant Config", "/admin/lss-plants", false)
                         : action("Back to API test history", "/admin/api-test-history", false))
                 .cls("java-actions")),
         el(
                 "article",
-                job.complete
+                job.complete && !viewer
                     ? el(
                             "p",
                             "Excel email: "

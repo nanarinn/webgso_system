@@ -1383,6 +1383,25 @@ public class WebController {
         .body(ApiBatchReports.csv(job));
   }
 
+  @GetMapping("/lss-api/tests/{id}/excel")
+  public ResponseEntity<byte[]> downloadViewerApiCheckExcel(
+      @PathVariable String id, Authentication auth) {
+    var job = apiRetests.get(id, principal(auth).id());
+    if (!job.complete)
+      throw new IllegalArgumentException(
+          "Wait until all API tests finish before downloading Excel.");
+    return ResponseEntity.ok()
+        .contentType(MediaType.parseMediaType(ApiResultsExcel.CONTENT_TYPE))
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            ContentDisposition.attachment()
+                .filename("gso-api-test-results-" + id.substring(0, 8) + ".xlsx")
+                .build()
+                .toString())
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .body(ApiResultsExcel.create(job));
+  }
+
   @PostMapping("/admin/lss-plants/checks/{id}/email")
   public String emailApiCheck(@PathVariable String id, Authentication auth) {
     var job = apiRetests.get(id, principal(auth).id());
