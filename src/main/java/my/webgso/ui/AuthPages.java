@@ -49,7 +49,7 @@ final class AuthPages {
                     .attr("src", Branding.LOGO)
                     .attr("alt", Branding.LOGO_DESCRIPTION)
                     .cls("auth-brand-logo"),
-                el("small", "SOLAR DATA MANAGEMENT"))
+                el("small", viewDataMode ? "DDQ & MMF DATA VIEWER" : "SOLAR DATA MANAGEMENT"))
             .cls("auth-brand")
             .attr("href", "/login")
             .attr("aria-label", "GSO home");
@@ -59,20 +59,32 @@ final class AuthPages {
                 brand,
                 el(
                         "div",
-                        el("p", "FORECAST. CONNECT. MONITOR.").cls("auth-eyebrow"),
-                        el("h1", "Clear visibility.", el("br"), el("span", "Across every horizon."))
+                        el("p", viewDataMode ? "COLLECT. REVIEW. VERIFY." : "FORECAST. CONNECT. MONITOR.")
+                            .cls("auth-eyebrow"),
+                        el("h1",
+                                viewDataMode ? "DDQ forecasts." : "Clear visibility.",
+                                el("br"),
+                                el("span", viewDataMode ? "MMF measurements." : "Across every horizon."))
                             .attr("id", "story-title"),
                         el(
                                 "p",
-                                "A connected workspace for solar forecasts, declared capacity",
+                                viewDataMode
+                                    ? "A secure viewer for collected DDQ forecast data"
+                                    : "A connected workspace for solar forecasts, declared capacity",
                                 el("br").cls("auth-desktop-break"),
-                                " and meteorological data services.")
+                                viewDataMode
+                                    ? " and MMF weather measurements from LSS plants."
+                                    : " and meteorological data services.")
                             .cls("auth-description"),
                         el(
                                 "div",
-                                service("Rolling24", "Short-term forecasts"),
-                                service("DDQ", "Capacity declarations"),
-                                service("MMF", "Weather measurements"))
+                                viewDataMode
+                                    ? service("DDQ", "Forecast datasets")
+                                    : service("Rolling24", "Short-term forecasts"),
+                                viewDataMode
+                                    ? service("MMF", "Weather measurements")
+                                    : service("DDQ", "Capacity declarations"),
+                                viewDataMode ? service("API", "Collection status") : service("MMF", "Weather measurements"))
                             .cls("auth-services")
                             .attr("aria-label", "Repository services"))
                     .cls("auth-story-copy"),
@@ -80,7 +92,7 @@ final class AuthPages {
                         "footer",
                         el("span", "GRID SYSTEM OPERATOR"),
                         el("span", "/").attr("aria-hidden", "true"),
-                        el("span", "Solar plant data portal"))
+                        el("span", viewDataMode ? "LSS API data viewer" : "Solar plant data portal"))
                     .cls("auth-story-footer"),
                 el("div").cls("auth-orbits").attr("aria-hidden", "true"))
             .cls("auth-story")
