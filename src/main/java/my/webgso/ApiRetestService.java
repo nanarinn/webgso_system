@@ -57,6 +57,14 @@ public class ApiRetestService {
   }
 
   public synchronized Job startConfigured(String owner, String actor) {
+    return startConfigured(owner, actor, null);
+  }
+
+  public synchronized Job startConfiguredPlant(String owner, String actor, int plantId) {
+    return startConfigured(owner, actor, plantId);
+  }
+
+  private Job startConfigured(String owner, String actor, Integer selectedPlantId) {
     for (var existing : jobs.values()) {
       if (!existing.complete) {
         if (existing.owner.equals(owner)) return existing;
@@ -67,12 +75,15 @@ public class ApiRetestService {
     var links = db.list(PlantApiConfiguration.class, "");
     var items = new ArrayList<Item>();
     for (var plant : db.list(LssPlant.class, "")) {
+      if (selectedPlantId != null && plant.id != selectedPlantId) continue;
       for (String dataset : ConfiguredDatasets.forPlant(plant, links))
         items.add(new Item(plant.id, plant.name, dataset, "Queued", null, null, "Waiting"));
     }
     if (items.isEmpty())
       throw new IllegalArgumentException(
-          "No APIs are configured. Add an API in Plant Config first.");
+          selectedPlantId == null
+              ? "No APIs are configured. Add an API in Plant Config first."
+              : "No APIs are configured for this plant.");
     while (jobs.size() >= 8) jobs.remove(jobs.keySet().iterator().next());
     var job = new Job(owner, items);
     job.configured = true;

@@ -363,6 +363,23 @@ public class WebController {
     return "redirect:/?plantId=" + plantId;
   }
 
+  @PostMapping("/lss-api/{plantId}/test")
+  public String testViewerPlantApis(
+      @PathVariable int plantId, Authentication auth, RedirectAttributes flash) {
+    try {
+      if (db.find(LssPlant.class, plantId).isEmpty())
+        throw new IllegalArgumentException("Plant not found.");
+      var job =
+          apiRetests.startConfiguredPlant(
+              principal(auth).id(), principal(auth).username(), plantId);
+      return "redirect:/lss-api/tests/" + job.id;
+    } catch (IllegalArgumentException error) {
+      flash.addFlashAttribute("lssApiMessage", error.getMessage());
+      flash.addFlashAttribute("lssApiSuccess", false);
+      return "redirect:/?plantId=" + plantId;
+    }
+  }
+
   @PostMapping("/lss-api/{plantId}/delete")
   public String deleteViewerPlant(
       @PathVariable int plantId,
@@ -1301,7 +1318,7 @@ public class WebController {
     return "redirect:" + redirect.build().encode().toUriString();
   }
 
-  @GetMapping({"/admin/api-test-history/checks/{id}", "/admin/lss-plants/checks/{id}"})
+  @GetMapping({"/admin/api-test-history/checks/{id}", "/admin/lss-plants/checks/{id}", "/lss-api/tests/{id}"})
   public String apiRetestProgress(@PathVariable String id, Authentication auth, Model model) {
     model.addAttribute("title", "API check progress");
     model.addAttribute("apiRetestJob", apiRetests.get(id, principal(auth).id()));

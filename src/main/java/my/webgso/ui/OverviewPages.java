@@ -203,6 +203,18 @@ final class OverviewPages {
                           + plant.name
                           + ".")
                   .attr("aria-label", "Collect the latest API data for " + plant.name);
+      Element testButton =
+          plantApis.isEmpty()
+              ? null
+              : c.post(
+                      "/lss-api/" + plant.id + "/test",
+                      "lss-test-form",
+                      button("Test APIs", false).cls("secondary-action"))
+                  .attr("data-loading-title", "Testing plant APIs…")
+                  .attr(
+                      "data-loading-message",
+                      "Please wait while connections and response structures are checked. No readings will be saved.")
+                  .attr("aria-label", "Test configured APIs for " + plant.name);
       Element deleteButton =
           c.post(
                   "/lss-api/" + plant.id + "/delete",
@@ -273,7 +285,7 @@ final class OverviewPages {
                           el(
                                   "div",
                                   apiBadges,
-                                  el("div", refreshButton, deleteButton).cls("lss-plant-buttons"))
+                                  el("div", testButton, refreshButton, deleteButton).cls("lss-plant-buttons"))
                               .cls("lss-plant-actions")),
                   plantData)
               .cls("lss-data-table-panel lss-plant-panel"));
